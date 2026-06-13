@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Trade Assistant</title>
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root { --bg:#0e1117; --panel:#161b22; --border:#30363d; --txt:#e6edf3; --muted:#8b949e;
+          --accent:#2f81f7; --green:#3fb950; --red:#f85149; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,"Noto Sans Thai",sans-serif;
+         background:var(--bg); color:var(--txt); }
+  header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex;
+           align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  .badge { font-size:12px; color:var(--muted); border:1px solid var(--border);
+           padding:2px 8px; border-radius:12px; }
+  .wrap { display:grid; grid-template-columns:1fr 380px; gap:16px; padding:16px; }
+  @media (max-width:980px){ .wrap{ grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  select, input, button { background:#0d1117; color:var(--txt); border:1px solid var(--border);
+           border-radius:8px; padding:8px 10px; font-size:14px; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button.primary:hover { opacity:.9; }
+  #chart { width:100%; height:420px; }
+  .summary { display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:13px; margin-top:12px; }
+  .summary div span { color:var(--muted); }
+  .report { white-space:pre-wrap; font-size:13.5px; line-height:1.6; max-height:520px;
+            overflow:auto; background:#0d1117; border:1px solid var(--border); border-radius:8px;
+            padding:12px; }
+  .disclaimer { font-size:12px; color:var(--muted); margin-top:8px; }
+  h3 { margin:0 0 10px; font-size:15px; }
+  .alert-item { font-size:13px; border-bottom:1px solid var(--border); padding:6px 0; }
+  .triggered { color:var(--green); }
+  .up { color:var(--green); } .down { color:var(--red); }
+  .muted { color:var(--muted); font-size:12px; }
+  label { font-size:12px; color:var(--muted); }
+  .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📈 AI Trade Assistant</h1>
+  <span class="badge" id="providerBadge">provider: …</span>
+  <span class="badge" id="aiBadge">AI: …</span>
+  <span class="badge">วิเคราะห์ + แจ้งเตือนเท่านั้น • ไม่ใช่คำแนะนำลงทุน</span>
+</header>
+
+<div class="wrap">
+  <!-- ซ้าย: กราฟ + อินดิเคเตอร์ -->
+  <div>
+    <div class="panel">
+      <div class="controls">
+        <label>สัญลักษณ์</label>
+        <select id="symbol"></select>
+        <label>Timeframe</label>
+        <select id="timeframe">
+          <option value="15m">15m</option>
+          <option value="1h" selected>1h</option>
+          <option value="4h">4h</option>
+          <option value="1d">1d</option>
+        </select>
+        <button onclick="loadChart()">โหลดกราฟ</button>
+        <button class="primary" onclick="runAnalysis()">🤖 วิเคราะห์ด้วย AI</button>
+        <span id="quote" class="muted"></span>
+      </div>
+      <div id="chart"></div>
+      <div class="summary" id="summary"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <h3>รายงานวิเคราะห์ (AI)</h3>
+      <div id="report" class="report muted">กดปุ่ม “วิเคราะห์ด้วย AI” เพื่อสร้างรายงานตามเทมเพลต 8 หัวข้อ</div>
+      <div class="disclaimer" id="disclaimer"></div>
+    </div>
+  </div>
+
+  <!-- ขวา: แจ้งเตือน -->
+  <div>
+    <div class="panel">
+      <h3>ตั้งการแจ้งเตือน</h3>
+      <div class="row" style="margin-bottom:8px;">
+        <select id="alertKind">
+          <option value="price_above">ราคา ≥</option>
+          <option value="price_below">ราคา ≤</option>
+          <option value="rsi_above">RSI ≥</option>
+          <option value="rsi_below">RSI ≤</option>
+        </select>
+        <input id="alertValue" type="number" placeholder="ค่า" style="width:90px;" />
+        <button onclick="addAlert()">เพิ่ม</button>
+      </div>
+      <div id="alertList"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <h3>แจ้งเตือนที่ทริกเกอร์แล้ว</h3>
+      <div id="triggeredList" class="muted">ยังไม่มี</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "";  // same origin
+let chart, candleSeries, ema20Series, ema50Series;
+
+async function init() {
+  const h = await fetch(API + "/api/health").then(r => r.json());
+  document.getElementById("providerBadge").textContent = "provider: " + h.data_provider;
+  document.getElementById("aiBadge").textContent = "AI: " + (h.ai_enabled ? h.model : "rule-based (ยังไม่ตั้งคีย์)");
+
+  const syms = await fetch(API + "/api/symbols").then(r => r.json());
+  const sel = document.getElementById("symbol");
+  syms.forEach(s => {
+    const o = document.createElement("option");
+    o.value = s.symbol; o.textContent = `${s.symbol} — ${s.name} [${s.market}]`;
+    sel.appendChild(o);
+  });
+
+  chart = LightweightCharts.createChart(document.getElementById("chart"), {
+    layout: { background: { color: "#0d1117" }, textColor: "#e6edf3" },
+    grid: { vertLines: { color: "#21262d" }, horzLines: { color: "#21262d" } },
+    timeScale: { timeVisible: true, borderColor: "#30363d" },
+    rightPriceScale: { borderColor: "#30363d" },
+    height: 420,
+  });
+  candleSeries = chart.addCandlestickSeries({
+    upColor: "#3fb950", downColor: "#f85149", borderVisible: false,
+    wickUpColor: "#3fb950", wickDownColor: "#f85149",
+  });
+  ema20Series = chart.addLineSeries({ color: "#2f81f7", lineWidth: 1, title: "EMA20" });
+  ema50Series = chart.addLineSeries({ color: "#d29922", lineWidth: 1, title: "EMA50" });
+
+  await loadChart();
+  refreshAlerts();
+  setInterval(refreshQuote, 4000);
+  setInterval(refreshTriggered, 8000);
+}
+
+function sym() { return document.getElementById("symbol").value; }
+function tf() { return document.getElementById("timeframe").value; }
+
+async function loadChart() {
+  const url = `${API}/api/candles?symbol=${encodeURIComponent(sym())}&timeframe=${tf()}&limit=300`;
+  const res = await fetch(url);
+  if (!res.ok) { alert("โหลดข้อมูลไม่สำเร็จ"); return; }
+  const data = await res.json();
+  const candles = data.candles.map(c => ({
+    time: c.time, open: c.open, high: c.high, low: c.low, close: c.close,
+  }));
+  candleSeries.setData(candles);
+
+  const ema = (arr) => data.candles
+    .map((c, i) => ({ time: c.time, value: arr[i] }))
+    .filter(p => p.value != null);
+  ema20Series.setData(ema(data.indicators.series.ema20));
+  ema50Series.setData(ema(data.indicators.series.ema50));
+  chart.timeScale().fitContent();
+  renderSummary(data.indicators.summary);
+  refreshQuote();
+}
+
+function renderSummary(s) {
+  const f = (k, v) => `<div><span>${k}:</span> ${v ?? "-"}</div>`;
+  document.getElementById("summary").innerHTML =
+    f("ราคา", s.price) + f("โครงสร้าง", s.structure) +
+    f("EMA20", s.ema20) + f("EMA50", s.ema50) +
+    f("RSI14", s.rsi14) + f("MACD hist", s.macd_hist) +
+    f("แนวรับ~", s.support_recent) + f("แนวต้าน~", s.resistance_recent) +
+    f("ราคา vs EMA20", s.price_vs_ema20) + f("Vol ล่าสุด/เฉลี่ย20", `${s.last_volume}/${s.avg_volume_20}`);
+}
+
+async function refreshQuote() {
+  try {
+    const q = await fetch(`${API}/api/quote?symbol=${encodeURIComponent(sym())}`).then(r => r.json());
+    const cls = q.change >= 0 ? "up" : "down";
+    document.getElementById("quote").innerHTML =
+      `ราคา <b>${q.price}</b> <span class="${cls}">${q.change >= 0 ? "▲" : "▼"} ${q.change} (${q.change_percent}%)</span>`;
+  } catch (e) {}
+}
+
+async function runAnalysis() {
+  const box = document.getElementById("report");
+  box.classList.remove("muted");
+  box.textContent = "⏳ กำลังวิเคราะห์… (อาจใช้เวลาสักครู่)";
+  try {
+    const res = await fetch(`${API}/api/analyze`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol: sym(), timeframe: tf() }),
+    });
+    const data = await res.json();
+    box.textContent = data.report + "\n\n— แหล่งวิเคราะห์: " + data.source;
+    document.getElementById("disclaimer").textContent = data.disclaimer;
+  } catch (e) {
+    box.textContent = "เกิดข้อผิดพลาดในการวิเคราะห์: " + e;
+  }
+}
+
+async function addAlert() {
+  const value = parseFloat(document.getElementById("alertValue").value);
+  if (isNaN(value)) { alert("ใส่ค่าตัวเลข"); return; }
+  await fetch(`${API}/api/alerts`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol: sym(), kind: document.getElementById("alertKind").value,
+                           value, timeframe: tf() }),
+  });
+  document.getElementById("alertValue").value = "";
+  refreshAlerts();
+}
+
+async function refreshAlerts() {
+  const rules = await fetch(`${API}/api/alerts`).then(r => r.json());
+  const el = document.getElementById("alertList");
+  if (!rules.length) { el.innerHTML = '<div class="muted">ยังไม่มีกฎ</div>'; return; }
+  el.innerHTML = rules.map(r =>
+    `<div class="alert-item row" style="justify-content:space-between;">
+       <span>${r.symbol} · ${r.kind} · ${r.value}</span>
+       <button onclick="delAlert('${r.id}')">ลบ</button>
+     </div>`).join("");
+}
+
+async function delAlert(id) {
+  await fetch(`${API}/api/alerts/${id}`, { method: "DELETE" });
+  refreshAlerts();
+}
+
+async function refreshTriggered() {
+  const t = await fetch(`${API}/api/alerts/triggered`).then(r => r.json());
+  const el = document.getElementById("triggeredList");
+  if (!t.length) { el.innerHTML = '<div class="muted">ยังไม่มี</div>'; return; }
+  el.innerHTML = t.map(x =>
+    `<div class="alert-item triggered">✓ ${x.message}</div>`).join("");
+}
+
+init();
+</script>
+</body>
+</html>
