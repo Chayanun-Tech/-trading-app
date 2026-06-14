@@ -1,0 +1,32 @@
+{
+  "school": "chart_patterns",
+  "display_name": "รูปแบบกราฟ (Chart Patterns)",
+  "core_idea": "รูปแบบราคาขนาดใหญ่ที่เกิดซ้ำ สะท้อนพฤติกรรมหมู่ของผู้เล่น แบ่งเป็นกลับตัว (reversal) และไปต่อ (continuation) มักมี 'target' จากการวัดความสูงของรูปแบบ",
+  "psychology": "รูปแบบคือภาพการสะสม/แจกจ่ายของรายใหญ่ และจุด breakout คือจุดที่ความเชื่อหมู่เปลี่ยนข้าง — volume ที่จุดเบรกคือกุญแจยืนยัน",
+  "usage_rules": [
+    "ยืนยัน breakout ด้วยการปิดแท่งพ้นแนว + volume เพิ่ม",
+    "ระวัง fakeout: เบรกแล้วกลับเข้ากรอบ — รอ retest แนวที่เบรกเป็นการยืนยันที่ปลอดภัยกว่า",
+    "วัดเป้าหมาย (measured move) จากความสูงของรูปแบบโปรเจกต์จากจุดเบรก",
+    "รูปแบบใหญ่/ใช้เวลานานก่อตัว = นัยสำคัญมากกว่า"
+  ],
+  "reversal": [
+    {"name": "Head and Shoulders", "thai": "หัวไหล่", "bias": "bearish", "signal": "sell", "structure": "ยอดสามยอด ยอดกลาง(หัว)สูงสุด สองข้าง(ไหล่)เตี้ยกว่า มี neckline", "target": "ระยะจากหัวถึง neckline โปรเจกต์ลงจากจุดเบรก neckline", "reliability": "high"},
+    {"name": "Inverse Head and Shoulders", "thai": "หัวไหล่กลับหัว", "bias": "bullish", "signal": "buy", "structure": "ก้นสามก้น ก้นกลางต่ำสุด", "target": "ระยะหัวถึง neckline โปรเจกต์ขึ้น", "reliability": "high"},
+    {"name": "Double Top", "thai": "สองยอด (M)", "bias": "bearish", "signal": "sell", "structure": "ยอดสองยอดระดับใกล้กัน เบรก neckline ลง", "target": "ความสูงรูปแบบโปรเจกต์ลง", "reliability": "high"},
+    {"name": "Double Bottom", "thai": "สองก้น (W)", "bias": "bullish", "signal": "buy", "structure": "ก้นสองก้นระดับใกล้กัน เบรก neckline ขึ้น", "target": "ความสูงโปรเจกต์ขึ้น", "reliability": "high"},
+    {"name": "Triple Top/Bottom", "thai": "สามยอด/สามก้น", "bias": "reversal", "signal": "reversal", "structure": "ทดสอบระดับเดิมสามครั้งแล้วเบรก", "reliability": "medium-high"},
+    {"name": "Rounding Top/Bottom", "thai": "ก้นโค้ง/ยอดโค้ง (จานรอง)", "bias": "reversal", "signal": "reversal", "structure": "ราคาค่อย ๆ โค้งเปลี่ยนทิศ", "reliability": "medium"}
+  ],
+  "continuation": [
+    {"name": "Bull Flag", "thai": "ธงขาขึ้น", "bias": "bullish", "signal": "buy", "structure": "พุ่งแรง(เสาธง)แล้วพักตัวเอียงลงในกรอบแคบ", "target": "ความยาวเสาธงโปรเจกต์จากจุดเบรก", "reliability": "high"},
+    {"name": "Bear Flag", "thai": "ธงขาลง", "bias": "bearish", "signal": "sell", "structure": "ดิ่งแรงแล้วพักตัวเอียงขึ้นในกรอบแคบ", "reliability": "high"},
+    {"name": "Pennant", "thai": "ธงสามเหลี่ยม", "bias": "continuation", "signal": "continuation", "structure": "พักตัวเป็นสามเหลี่ยมเล็กหลังเคลื่อนแรง", "reliability": "medium-high"},
+    {"name": "Ascending Triangle", "thai": "สามเหลี่ยมขาขึ้น", "bias": "bullish", "signal": "buy", "structure": "แนวต้านแนวนอน + ก้นยกสูงขึ้น", "reliability": "medium-high"},
+    {"name": "Descending Triangle", "thai": "สามเหลี่ยมขาลง", "bias": "bearish", "signal": "sell", "structure": "แนวรับแนวนอน + ยอดกดต่ำลง", "reliability": "medium-high"},
+    {"name": "Symmetrical Triangle", "thai": "สามเหลี่ยมสมมาตร", "bias": "neutral/breakout", "signal": "wait-breakout", "structure": "ยอดกดลง+ก้นยกขึ้นบีบเข้าหากัน เบรกได้สองทาง", "reliability": "medium"},
+    {"name": "Rising Wedge", "thai": "ลิ่มขาขึ้น", "bias": "bearish", "signal": "sell", "structure": "ทั้งยอดและก้นยกขึ้นแต่บีบแคบ — มักเบรกลง", "reliability": "medium"},
+    {"name": "Falling Wedge", "thai": "ลิ่มขาลง", "bias": "bullish", "signal": "buy", "structure": "ทั้งยอดและก้นกดลงแต่บีบแคบ — มักเบรกขึ้น", "reliability": "medium"},
+    {"name": "Rectangle / Range", "thai": "สี่เหลี่ยม/กรอบ", "bias": "neutral", "signal": "range-trade", "structure": "แกว่งระหว่างแนวรับ-แนวต้านแนวนอน", "reliability": "medium"},
+    {"name": "Cup and Handle", "thai": "ถ้วยมีหู", "bias": "bullish", "signal": "buy", "structure": "ก้นโค้งรูปถ้วย + พักตัวสั้น(หู)แล้วเบรกขึ้น", "reliability": "medium-high"}
+  ]
+}

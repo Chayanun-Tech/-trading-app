@@ -1,0 +1,33 @@
+{
+  "school": "wyckoff",
+  "display_name": "Wyckoff Method",
+  "origin": "Richard Wyckoff (ต้นศตวรรษที่ 20)",
+  "core_idea": "ติดตามรอยเท้า 'Composite Man' (รายใหญ่) ผ่านวัฏจักรสะสม → ดันราคา → แจกจ่าย → กดราคา โดยใช้ความสัมพันธ์ราคา-ปริมาณ",
+  "psychology": "รายใหญ่สะสมตอนคนกลัว (ราคาต่ำ เงียบ) และแจกจ่ายตอนคนโลภ (ราคาสูง ข่าวดี) — เราต้องอ่านเจตนาเขา ไม่ใช่ตามฝูงชน",
+  "three_laws": [
+    "Supply & Demand: อุปสงค์>อุปทาน ราคาขึ้น และกลับกัน",
+    "Cause & Effect: ช่วงสะสม/แจกจ่าย (cause) กำหนดขนาดการเคลื่อน (effect)",
+    "Effort vs Result: volume(effort) ควรสอดคล้องกับการเคลื่อนราคา(result) ถ้าขัดกัน = เตือนกลับตัว"
+  ],
+  "accumulation_phases": [
+    {"event": "PS (Preliminary Support)", "detail": "แรงซื้อแรกเริ่มเข้าหลังขาลง"},
+    {"event": "SC (Selling Climax)", "detail": "เทขายตื่นตระหนก volume สูงสุด รายใหญ่เริ่มรับ"},
+    {"event": "AR (Automatic Rally)", "detail": "เด้งกลับเพราะแรงขายหมด กำหนดขอบบน range"},
+    {"event": "ST (Secondary Test)", "detail": "ทดสอบก้นซ้ำด้วย volume ต่ำลง"},
+    {"event": "Spring", "detail": "ทะลุก้น range หลอกเพื่อกวาด stop แล้วกลับขึ้น = สัญญาณซื้อสำคัญ"},
+    {"event": "SOS (Sign of Strength)", "detail": "ดีดขึ้นแรง volume เพิ่ม ยืนยันสะสมจบ"},
+    {"event": "LPS (Last Point of Support)", "detail": "ย่อสุดท้ายก่อนเทรนด์ขึ้น — จุดเข้า"}
+  ],
+  "distribution_phases": [
+    {"event": "PSY (Preliminary Supply)", "detail": "แรงขายแรกในขาขึ้น"},
+    {"event": "BC (Buying Climax)", "detail": "ซื้อตื่นตระหนก volume สูงสุด รายใหญ่ทิ้งของ"},
+    {"event": "AR / ST", "detail": "ย่อแล้วทดสอบยอดซ้ำด้วยแรงซื้ออ่อนลง"},
+    {"event": "UTAD (Upthrust After Distribution)", "detail": "ทะลุยอดหลอกเพื่อกวาด stop แล้วกลับลง = สัญญาณขายสำคัญ"},
+    {"event": "SOW (Sign of Weakness)", "detail": "หลุดแรง volume เพิ่ม ยืนยันแจกจ่ายจบ"}
+  ],
+  "signals": {
+    "buy": "พบ Spring/LPS/SOS ในช่วงสะสม",
+    "sell": "พบ UTAD/SOW ในช่วงแจกจ่าย",
+    "wait": "ยังอยู่ในช่วง range ยังไม่ยืนยันทิศ"
+  }
+}

@@ -101,7 +101,9 @@ TradingView **ไม่มี** Public API สำหรับดึงราค�
 | GET | `/api/symbols` | รายชื่อสัญลักษณ์ตัวอย่าง |
 | GET | `/api/candles?symbol=&timeframe=&limit=` | OHLCV + อินดิเคเตอร์ |
 | GET | `/api/quote?symbol=` | ราคาล่าสุด |
-| POST | `/api/analyze` | วิเคราะห์ด้วย AI (body: `{symbol, timeframe}`) |
+| GET | `/api/schools` | รายชื่อศาสตร์ทั้งหมด + น้ำหนัก (จาก knowledge registry) |
+| POST | `/api/analyze` | ประเมินหลายสำนักจากข้อมูล → ตารางความน่าจะเป็น (body: `{symbol, timeframe, note?}`) |
+| POST | `/api/analyze-image` | ประเมินหลายสำนักจาก **ภาพ screenshot** (multipart: `file`, `symbol?`, `timeframe?`, `note?`) |
 | GET/POST/DELETE | `/api/alerts` | จัดการกฎแจ้งเตือน |
 | GET | `/api/alerts/triggered` | รายการที่ถูกทริกเกอร์ |
 | POST | `/webhook/tradingview` | รับ Alert จาก TradingView |
@@ -141,18 +143,27 @@ TradingView **ไม่มี** Public API สำหรับดึงราค�
 │   ├── requirements.txt
 │   ├── .env.example
 │   └── app/
-│       ├── main.py         ← FastAPI + routes + WebSocket
+│       ├── main.py         ← FastAPI + routes (/api/analyze, /api/analyze-image) + WebSocket
 │       ├── config.py       ← ตั้งค่า/เลือก provider
-│       ├── schemas.py      ← Pydantic models
-│       ├── indicators.py   ← EMA/SMA/RSI/MACD/structure/S-R
-│       ├── analysis.py     ← เชื่อม Claude + persona prompt
+│       ├── schemas.py      ← Pydantic models (SchoolVerdict, MultiSchoolReport)
+│       ├── indicators.py   ← EMA/SMA/RSI/MACD/Bollinger/Stochastic/structure/S-R
+│       ├── knowledge_base.py ← โหลดฐานความรู้ + registry
+│       ├── schools.py      ← evaluator เชิงกฎ (Python) ของศาสตร์เชิงตัวเลข
+│       ├── engine.py       ← รวม verdict ทุกศาสตร์ → ตาราง + ถ่วงน้ำหนักขึ้น/ลง
+│       ├── analysis.py     ← Claude ประเมินศาสตร์เชิง pattern (JSON verdicts)
+│       ├── vision.py       ← Claude vision อ่านภาพ screenshot → verdicts ทุกศาสตร์
 │       ├── alerts.py       ← กฎแจ้งเตือน
+│       ├── knowledge/      ← 📚 dataset วิชาเทรดทุกศาสตร์ (JSON, ขยายได้)
+│       │   ├── _index.json (registry + น้ำหนัก) , candlestick_patterns.json, chart_patterns.json
+│       │   ├── price_action.json, elliott_wave.json, fibonacci.json, harmonic_patterns.json
+│       │   ├── indicators.json, support_resistance.json, volume.json, divergence.json
+│       │   └── wyckoff.json, dow_theory.json, smc_ict.json, gann.json, market_psychology.json
 │       └── data/
 │           ├── base.py     ← interface ของ provider
 │           ├── mock.py     ← provider จำลอง (รันได้ไม่ต้องมี key)
 │           └── finnhub.py  ← provider หุ้นสหรัฐ (REST)
 └── frontend/
-    └── index.html          ← กราฟ + ปุ่มวิเคราะห์ + แผง alert
+    └── index.html          ← 2 โหมด (ข้อมูل/ภาพ) + ตารางหลายสำนัก + กราฟ + alert
 ```
 
 ---

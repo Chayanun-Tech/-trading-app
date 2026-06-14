@@ -1,0 +1,27 @@
+{
+  "school": "price_action",
+  "display_name": "Price Action",
+  "core_idea": "อ่านการเคลื่อนไหวของราคาดิบ ๆ โดยไม่พึ่งอินดิเคเตอร์มาก เน้นโครงสร้างตลาด, แนวรับ-แนวต้าน, การปฏิเสธราคา, สภาพคล่อง และพฤติกรรมที่จุดสำคัญ",
+  "psychology": "ราคาเดินไปหาโซนสภาพคล่อง (liquidity) ที่มีคำสั่งซื้อขายกองอยู่ การเบรกแล้วกลับ (fakeout) คือการกวาด stop ของรายย่อยก่อนไปจริง",
+  "usage_rules": [
+    "ดูบริบทก่อนเสมอ: เทรนด์ใหญ่, โซน supply/demand, ระดับสำคัญ",
+    "เข้าเทรดที่ 'จุดได้เปรียบ' (แนวรับในขาขึ้น / แนวต้านในขาลง) ไม่ไล่กลางทาง",
+    "ยืนยันด้วยพฤติกรรมราคา (rejection, break & retest) ไม่ใช่เดา"
+  ],
+  "concepts": [
+    {"name": "Market Structure", "thai": "โครงสร้างตลาด", "detail": "ขาขึ้น = HH/HL (ยอดสูงขึ้น ก้นสูงขึ้น), ขาลง = LH/LL, sideway = range. การเปลี่ยนโครงสร้างคือสัญญาณกลับเทรนด์"},
+    {"name": "Break of Structure (BOS)", "thai": "เบรกโครงสร้าง", "detail": "ราคาทำ HH ใหม่ในขาขึ้น (หรือ LL ใหม่ในขาลง) = เทรนด์ไปต่อ"},
+    {"name": "Change of Character (CHoCH)", "thai": "เปลี่ยนลักษณะ", "detail": "ครั้งแรกที่ราคาฝ่าโครงสร้างสวนเทรนด์ = สัญญาณกลับตัวเริ่มต้น"},
+    {"name": "Supply & Demand Zone", "thai": "โซนอุปสงค์-อุปทาน", "detail": "บริเวณที่เกิดการเคลื่อนแรงออก = มีคำสั่งรายใหญ่ค้าง ราคามักกลับมาตอบสนอง"},
+    {"name": "Liquidity Grab / Stop Hunt", "thai": "กวาดสภาพคล่อง", "detail": "ทะลุ high/low เดิมชั่วครู่เพื่อกิน stop แล้วกลับทิศ — สัญญาณกลับตัวที่ทรงพลัง"}
+  ],
+  "patterns": [
+    {"name": "Pin Bar", "thai": "พินบาร์", "type": "reversal", "signal": "reversal", "structure": "ไส้ยาวด้านเดียว เนื้อเล็ก = ปฏิเสธราคา", "psychology": "ราคาถูกผลักกลับแรงจากโซนสำคัญ", "reliability": "high-at-key-level"},
+    {"name": "Inside Bar", "thai": "อินไซด์บาร์", "type": "continuation/breakout", "signal": "breakout", "structure": "แท่งอยู่ในกรอบ high-low แท่งก่อนหน้า = บีบตัว/พักก่อนเบรก", "reliability": "medium"},
+    {"name": "Outside Bar / Engulfing", "thai": "เอาท์ไซด์บาร์", "type": "reversal", "signal": "reversal", "structure": "แท่งครอบ high-low แท่งก่อน = โมเมนตัมพลิก", "reliability": "medium-high"},
+    {"name": "Fakeout / False Break", "thai": "เบรกหลอก", "type": "reversal", "signal": "fade", "structure": "เบรกแนวแล้วปิดกลับเข้ากรอบ", "psychology": "กวาด stop แล้วกลับ — เข้าสวนทางเบรกหลอก", "reliability": "high"},
+    {"name": "Break and Retest", "thai": "เบรกแล้วย้อนทดสอบ", "type": "continuation", "signal": "trend-follow", "structure": "เบรกแนวแล้วกลับมาทดสอบเป็นแนวใหม่ (role reversal)", "psychology": "แนวต้านเก่ากลายเป็นแนวรับใหม่", "reliability": "high"},
+    {"name": "Order Block", "thai": "ออร์เดอร์บล็อก", "type": "zone", "signal": "reaction-zone", "structure": "แท่งสุดท้ายก่อนการเคลื่อนแรง (โซนรายใหญ่)", "reliability": "medium-high"},
+    {"name": "Fair Value Gap (FVG)", "thai": "ช่องว่างมูลค่า/ความไม่สมดุล", "type": "zone", "signal": "fill-zone", "structure": "ช่องว่างราคา 3 แท่งที่ราคามักกลับมาเติม", "reliability": "medium"}
+  ]
+}

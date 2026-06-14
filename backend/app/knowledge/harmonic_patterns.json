@@ -1,0 +1,22 @@
+{
+  "school": "harmonic",
+  "display_name": "Harmonic Patterns",
+  "origin": "H.M. Gartley; พัฒนาต่อโดย Scott Carney (สัดส่วน Fibonacci)",
+  "core_idea": "รูปแบบราคา 5 จุด (XABCD) ที่จุดกลับตัวสัมพันธ์กันด้วยสัดส่วน Fibonacci อย่างแม่นยำ ใช้คาดโซนกลับตัว (PRZ – Potential Reversal Zone)",
+  "psychology": "สะท้อนจังหวะธรรมชาติของการย่อ-ขยายของอารมณ์ตลาด เมื่อสัดส่วนครบ = โซนที่แรงสวนมีโอกาสสูง",
+  "usage_rules": [
+    "ต้องวัดสัดส่วน Fib ของแต่ละขา (XA, AB, BC, CD) ให้เข้าเกณฑ์",
+    "เข้าเทรดที่จุด D (PRZ) สวนทางขา CD โดยรอแท่งยืนยันกลับตัว",
+    "Stop เลยจุด D เล็กน้อย, เป้าหมายที่ Fib retracement ของ AD"
+  ],
+  "patterns": [
+    {"name": "Gartley", "B": "0.618 ของ XA", "D": "0.786 ของ XA", "signal": "reversal", "reliability": "high"},
+    {"name": "Bat", "B": "0.382-0.5 ของ XA", "D": "0.886 ของ XA", "signal": "reversal", "reliability": "high"},
+    {"name": "Butterfly", "B": "0.786 ของ XA", "D": "1.27-1.618 ของ XA (เกิน X)", "signal": "reversal", "reliability": "medium-high"},
+    {"name": "Crab", "B": "0.382-0.618 ของ XA", "D": "1.618 ของ XA (extension ลึก)", "signal": "reversal", "reliability": "high"},
+    {"name": "Deep Crab", "B": "0.886 ของ XA", "D": "1.618 ของ XA", "signal": "reversal", "reliability": "medium"},
+    {"name": "Cypher", "B": "0.382-0.618 ของ XA", "D": "0.786 ของ XC", "signal": "reversal", "reliability": "medium"},
+    {"name": "Shark", "detail": "5-0 pattern ใช้สัดส่วน 0.886/1.13", "signal": "reversal", "reliability": "medium"},
+    {"name": "AB=CD", "detail": "ขา CD เท่ากับ AB (สมมาตร) สัดส่วนพื้นฐานของ harmonic ทั้งหมด", "signal": "reversal", "reliability": "medium"}
+  ]
+}

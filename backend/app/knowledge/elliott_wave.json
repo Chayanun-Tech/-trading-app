@@ -1,0 +1,34 @@
+{
+  "school": "elliott_wave",
+  "display_name": "Elliott Wave Theory",
+  "origin": "Ralph Nelson Elliott (1930s)",
+  "core_idea": "ตลาดเคลื่อนเป็นคลื่นซ้ำ ๆ ตามจิตวิทยาหมู่: 5 คลื่นไปตามเทรนด์หลัก (impulse) ตามด้วย 3 คลื่นปรับฐาน (corrective) แบบ fractal (ซ้อนในทุก timeframe)",
+  "psychology": "คลื่นสะท้อนวัฏจักรอารมณ์: หวัง → โลภ → กลัว. Wave 3 = ความเชื่อมั่นสูงสุด (แรงสุด), Wave 5 = ความโลภสุดท้าย (มักมี divergence), คลื่น C = ยอมแพ้",
+  "impulse_rules": [
+    "Wave 2 ห้ามย่อเกิน 100% ของ Wave 1 (ห้ามต่ำกว่าจุดเริ่ม Wave 1)",
+    "Wave 3 ห้ามเป็นคลื่นที่สั้นที่สุดในสามคลื่น (1,3,5) และมักยาวที่สุด",
+    "Wave 4 ห้ามทับเขต Wave 1 (ยกเว้น diagonal)"
+  ],
+  "guidelines": [
+    "Wave 3 มักขยาย 1.618–2.618 เท่าของ Wave 1",
+    "Wave 2 มักย่อ 0.5–0.618 ของ Wave 1; Wave 4 มักย่อ 0.382 ของ Wave 3",
+    "Alternation: ถ้า Wave 2 ย่อชัน Wave 4 มักออกข้าง (และกลับกัน)",
+    "Wave 5 มักเท่ากับ Wave 1 หรือ 0.618 ของระยะ Wave 1–3"
+  ],
+  "wave_personalities": [
+    {"wave": "1", "type": "impulse", "note": "เริ่มต้น คนยังไม่เชื่อ มักถูกมองเป็นเด้งใน bear"},
+    {"wave": "2", "type": "corrective", "note": "ย่อแรง คนคิดว่าเทรนด์เก่ายังอยู่ — โอกาสเข้า"},
+    {"wave": "3", "type": "impulse", "signal": "buy/sell strong", "note": "แรงและยาวที่สุด ข่าวดีตาม โมเมนตัมสูงสุด — คลื่นที่ควรเทรดที่สุด"},
+    {"wave": "4", "type": "corrective", "note": "พักตัวออกข้าง ซับซ้อน อย่าเทรดสวนแรง"},
+    {"wave": "5", "type": "impulse", "signal": "caution", "note": "ขึ้นสุดท้ายด้วยความโลภ มักอ่อนแรง เกิด divergence — ระวังกลับตัว"},
+    {"wave": "A", "type": "corrective", "note": "เริ่มปรับฐานใหญ่ คนยังคิดว่าย่อแล้วไปต่อ"},
+    {"wave": "B", "type": "corrective", "signal": "bull/bear trap", "note": "เด้ง/ย่อหลอก กับดัก"},
+    {"wave": "C", "type": "corrective", "signal": "strong reversal", "note": "ลง/ขึ้นแรงเท่า impulse ความกลัว/ยอมแพ้"}
+  ],
+  "corrective_patterns": [
+    {"name": "Zigzag (5-3-5)", "detail": "ปรับฐานชัน A-B-C"},
+    {"name": "Flat (3-3-5)", "detail": "ปรับฐานออกข้าง B กลับเกือบเท่า A"},
+    {"name": "Triangle (3-3-3-3-3)", "detail": "บีบตัวก่อนคลื่นสุดท้าย มักเป็น Wave 4 หรือ B"},
+    {"name": "Combination (WXY)", "detail": "ปรับฐานซับซ้อนหลายรูปแบบต่อกัน"}
+  ]
+}

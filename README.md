@@ -1,16 +1,20 @@
-# AI Trade Assistant (MVP)
+# AI Trade Assistant — วิเคราะห์กราฟหลายสำนัก
 
-แอปช่วยเทรดที่ใช้ **AI วิเคราะห์กราฟ** ตามเทมเพลตนักวิเคราะห์มืออาชีพ + ระบบ **แจ้งเตือน realtime**
-ขอบเขตเวอร์ชันนี้: **วิเคราะห์ + แจ้งเตือนเท่านั้น** (ไม่ส่งคำสั่งเทรดอัตโนมัติ)
+แอปช่วยเทรดที่ประเมินกราฟ **แยกตามทุกศาสตร์การวิเคราะห์** (Price Action, แท่งเทียน, Chart Patterns,
+Elliott Wave, Fibonacci, Harmonic, Wyckoff, SMC/ICT, Gann, อินดิเคเตอร์, แนวรับ-แนวต้าน, Volume, จิตวิทยาตลาด)
+แล้วสรุปเป็น **ตารางความน่าจะเป็น** ว่าแต่ละสำนักมองกราฟจะไปทางไหน + โอกาสขึ้น/ลงรวม โดยยึด **จิตวิทยากราฟ** เป็นแกน
+ขอบเขต: **วิเคราะห์ + ช่วยตัดสินใจเท่านั้น** (ไม่ส่งคำสั่งเทรดอัตโนมัติ)
 
-> 📐 ดูพิมพ์เขียวระบบ ความเป็นไปได้ และ roadmap ทั้งหมดที่ [`BLUEPRINT.md`](./BLUEPRINT.md)
+> 📐 ดูพิมพ์เขียวระบบ ความเป็นไปได้ และ roadmap ที่ [`BLUEPRINT.md`](./BLUEPRINT.md)
 
 ## ✨ คุณสมบัติ
-- ดึง OHLCV → คำนวณอินดิเคเตอร์เอง (EMA, SMA, RSI, MACD, Market Structure, แนวรับ/แนวต้าน)
-- กราฟแท่งเทียน + EMA ด้วย **TradingView Lightweight Charts** (ฟรี)
-- ปุ่ม **วิเคราะห์ด้วย AI** → ให้ Claude (`claude-opus-4-8`) ออกรายงาน 8 หัวข้อตามเทมเพลต
-- ระบบ **แจ้งเตือน** (ราคา/RSI ทะลุระดับ) + endpoint รับ **TradingView Webhook**
-- **รันได้ทันทีโดยไม่ต้องมี API key** (ใช้ provider จำลองข้อมูล)
+- **ฐานความรู้วิชาเทรดทุกศาสตร์** เป็น dataset (`backend/app/knowledge/*.json`) — ปรับ/เพิ่มได้
+- **ประเมินหลายสำนักพร้อมกัน** → ตาราง: ศาสตร์ | มองขึ้น/ลง | สัญญาณ | ความเชื่อมั่น % | เหตุผล
+- **ถ่วงน้ำหนักรวมเป็นโอกาสขึ้น vs ลง** + ระดับความเป็นฉันทามติ + สรุปจิตวิทยากราฟ
+- **2 โหมดอินพุต:** (1) ใส่ symbol+timeframe ดึง OHLCV คำนวณเอง  (2) **อัปโหลดภาพ screenshot กราฟ** ให้ Claude vision อ่าน
+- ศาสตร์เชิงตัวเลข (EMA/RSI/MACD/Bollinger/Stochastic/S-R/Volume/Dow/Divergence) คำนวณด้วย Python; ศาสตร์เชิง pattern ใช้ Claude ground ด้วยฐานความรู้
+- กราฟแท่งเทียน + EMA ด้วย **TradingView Lightweight Charts** + ระบบ **แจ้งเตือน** + รับ **TradingView Webhook**
+- **รันได้ทันทีโดยไม่ต้องมี API key** (provider จำลอง + ศาสตร์เชิงสูตรทำงานได้; ศาสตร์ AI จะแสดงเป็นกลางจนกว่าจะตั้งคีย์)
 
 ## 🚀 วิธีรัน
 
@@ -28,8 +32,8 @@ uvicorn app.main:app --reload --port 8000
 
 | ตัวแปร | ค่า | ผล |
 |---|---|---|
-| `DATA_PROVIDER` | `mock` (ค่าเริ่มต้น) / `finnhub` | แหล่งข้อมูลราคา |
-| `FINNHUB_API_KEY` | คีย์จาก finnhub.io | เปิดข้อมูลหุ้นสหรัฐจริง |
+| `DATA_PROVIDER` | `yahoo` (แนะนำ) / `mock` / `finnhub` | แหล่งข้อมูลราคา |
+| `FINNHUB_API_KEY` | คีย์จาก finnhub.io | เปิดข้อมูลหุ้นสหรัฐจริง (เฉพาะ provider finnhub) |
 | `ANTHROPIC_API_KEY` | คีย์จาก console.anthropic.com | เปิดการวิเคราะห์ด้วย Claude เต็มรูปแบบ |
 | `ANTHROPIC_MODEL` | `claude-opus-4-8` | รุ่นโมเดล |
 | `TRADINGVIEW_WEBHOOK_SECRET` | ค่าสุ่ม | ยืนยัน webhook จาก TradingView |

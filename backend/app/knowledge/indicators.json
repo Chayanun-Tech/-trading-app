@@ -1,0 +1,45 @@
+{
+  "school": "indicators",
+  "display_name": "อินดิเคเตอร์ทางเทคนิค",
+  "core_idea": "เครื่องมือคณิตศาสตร์จากราคา/ปริมาณ ช่วยวัดเทรนด์ โมเมนตัม ความผันผวน และจุดกลับตัว — ใช้ 'ยืนยัน' ไม่ใช่ตัดสินเดี่ยว",
+  "psychology": "อินดิเคเตอร์เป็น lagging (ตามราคา) ส่วนใหญ่ ใช้กรองอารมณ์และยืนยันสิ่งที่ price action บอก ระวัง over-optimize",
+  "indicators": [
+    {"id": "ema_sma", "name": "Moving Averages (EMA/SMA)", "type": "trend", "interpret": [
+      "ราคาเหนือ EMA = ฝั่งซื้อคุม, ใต้ = ฝั่งขายคุม",
+      "EMA เร็วตัดขึ้นเหนือ EMA ช้า (Golden Cross เช่น 50>200) = สัญญาณขาขึ้น",
+      "EMA เร็วตัดลงใต้ EMA ช้า (Death Cross) = สัญญาณขาลง",
+      "EMA20/50/200 ใช้เป็นแนวรับ-ต้านพลวัต"],
+      "common": [9, 20, 50, 100, 200]},
+    {"id": "rsi", "name": "RSI (Relative Strength Index)", "type": "momentum", "period": 14, "interpret": [
+      ">70 overbought (ระวังพักตัว), <30 oversold (ระวังเด้ง)",
+      "RSI>50 โมเมนตัมฝั่งขึ้น, <50 ฝั่งลง",
+      "Divergence ราคา vs RSI = สัญญาณกลับตัวทรงพลัง",
+      "ในเทรนด์แรง RSI อยู่ overbought/oversold ได้นาน — อย่าสวนทันที"]},
+    {"id": "macd", "name": "MACD", "type": "momentum/trend", "params": "12,26,9", "interpret": [
+      "MACD ตัดขึ้นเหนือ signal = สัญญาณซื้อ, ตัดลง = ขาย",
+      "Histogram ขยาย = โมเมนตัมเพิ่ม, หด = โมเมนตัมอ่อน",
+      "MACD เหนือ/ใต้เส้นศูนย์บอกทิศเทรนด์",
+      "Divergence MACD vs ราคา = เตือนกลับตัว"]},
+    {"id": "bollinger", "name": "Bollinger Bands", "type": "volatility", "params": "20, 2SD", "interpret": [
+      "ราคาแตะแบนด์บน = ตึงด้านขึ้น, แบนด์ล่าง = ตึงด้านลง",
+      "Squeeze (แบนด์บีบแคบ) = ความผันผวนต่ำ มักตามด้วยการเคลื่อนแรง",
+      "Walking the band = ราคาเกาะแบนด์ในเทรนด์แรง (ไม่ใช่สัญญาณกลับ)"]},
+    {"id": "stochastic", "name": "Stochastic Oscillator", "type": "momentum", "params": "14,3,3", "interpret": [
+      ">80 overbought, <20 oversold",
+      "%K ตัด %D ในเขต extreme = สัญญาณกลับตัวสั้น",
+      "เหมาะตลาด sideway มากกว่าตลาดเทรนด์แรง"]},
+    {"id": "adx", "name": "ADX (+DI/-DI)", "type": "trend-strength", "interpret": [
+      "ADX>25 = มีเทรนด์ชัด, <20 = ไม่มีเทรนด์ (sideway)",
+      "+DI เหนือ -DI = เทรนด์ขึ้น, กลับกัน = ลง"]},
+    {"id": "atr", "name": "ATR (Average True Range)", "type": "volatility", "interpret": [
+      "วัดความผันผวนเฉลี่ย ใช้ตั้ง Stop Loss/ขนาดไม้ตามความผันผวนจริง"]},
+    {"id": "ichimoku", "name": "Ichimoku Cloud", "type": "trend/system", "interpret": [
+      "ราคาเหนือเมฆ = ขาขึ้น, ใต้เมฆ = ขาลง, ในเมฆ = ไม่ชัด",
+      "Tenkan ตัด Kijun = สัญญาณ, เมฆหนา = แนวรับ-ต้านแข็ง"]},
+    {"id": "vwap", "name": "VWAP", "type": "volume-price", "interpret": [
+      "ราคาเหนือ VWAP = ฝั่งซื้อได้เปรียบระหว่างวัน, ใต้ = ฝั่งขาย",
+      "ใช้เป็นแนวอ้างอิงของรายสถาบัน intraday"]},
+    {"id": "obv", "name": "OBV (On-Balance Volume)", "type": "volume", "interpret": [
+      "OBV ขึ้นตามราคา = ยืนยันเทรนด์, สวนทาง = เตือน divergence"]}
+  ]
+}

@@ -4,234 +4,2700 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>AI Trade Assistant</title>
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
-  :root { --bg:#0e1117; --panel:#161b22; --border:#30363d; --txt:#e6edf3; --muted:#8b949e;
-          --accent:#2f81f7; --green:#3fb950; --red:#f85149; }
+  :root {
+    --bg:#0b0f14; --panel:#111820; --panel2:#0f151d; --border:#26313d;
+    --text:#e8edf2; --muted:#8b98a7; --accent:#3b82f6; --green:#22c55e;
+    --red:#ef4444; --amber:#f59e0b; --cyan:#22d3ee; --violet:#a78bfa;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,"Noto Sans Thai",sans-serif;
-         background:var(--bg); color:var(--txt); }
-  header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex;
-           align-items:center; gap:12px; flex-wrap:wrap; }
-  header h1 { font-size:18px; margin:0; }
-  .badge { font-size:12px; color:var(--muted); border:1px solid var(--border);
-           padding:2px 8px; border-radius:12px; }
-  .wrap { display:grid; grid-template-columns:1fr 380px; gap:16px; padding:16px; }
-  @media (max-width:980px){ .wrap{ grid-template-columns:1fr; } }
-  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; }
-  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
-  select, input, button { background:#0d1117; color:var(--txt); border:1px solid var(--border);
-           border-radius:8px; padding:8px 10px; font-size:14px; }
+  body {
+    margin:0; min-height:100vh; min-height:100dvh; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",Roboto,sans-serif;
+  }
+  button, input, select, textarea {
+    font:inherit; color:var(--text); background:#0a1118; border:1px solid var(--border);
+    border-radius:6px; padding:7px 9px; min-height:34px;
+  }
   button { cursor:pointer; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
-  button.primary:hover { opacity:.9; }
-  #chart { width:100%; height:420px; }
-  .summary { display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:13px; margin-top:12px; }
-  .summary div span { color:var(--muted); }
-  .report { white-space:pre-wrap; font-size:13.5px; line-height:1.6; max-height:520px;
-            overflow:auto; background:#0d1117; border:1px solid var(--border); border-radius:8px;
-            padding:12px; }
-  .disclaimer { font-size:12px; color:var(--muted); margin-top:8px; }
-  h3 { margin:0 0 10px; font-size:15px; }
-  .alert-item { font-size:13px; border-bottom:1px solid var(--border); padding:6px 0; }
-  .triggered { color:var(--green); }
-  .up { color:var(--green); } .down { color:var(--red); }
-  .muted { color:var(--muted); font-size:12px; }
-  label { font-size:12px; color:var(--muted); }
-  .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  button:hover { border-color:#3b4b5f; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:white; font-weight:650; }
+  button.icon { min-width:34px; padding:7px; }
+  label { color:var(--muted); font-size:12px; }
+  header {
+    height:50px; display:flex; align-items:center; gap:12px; padding:0 14px;
+    border-bottom:1px solid var(--border); background:#0d131a;
+  }
+  h1 { font-size:16px; margin:0; letter-spacing:0; white-space:nowrap; }
+  h3 { font-size:14px; margin:0 0 10px; }
+  .badge { color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:3px 8px; font-size:12px; }
+  .app { display:grid; grid-template-columns:minmax(0,1fr) 360px; min-height:calc(100vh - 50px); min-height:calc(100dvh - 50px); }
+  .left { min-width:0; border-right:1px solid var(--border); }
+  .right { min-width:0; background:#0d131a; overflow:auto; max-height:calc(100vh - 50px); max-height:calc(100dvh - 50px); }
+  .toolbar {
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px;
+    border-bottom:1px solid var(--border); background:var(--panel2);
+  }
+  .searchbox { position:relative; display:flex; gap:6px; flex:1 1 340px; min-width:260px; }
+  .searchbox input { width:100%; }
+  .results {
+    position:absolute; left:0; right:64px; top:40px; z-index:50; background:#0b1118;
+    border:1px solid var(--border); border-radius:8px; overflow:hidden; box-shadow:0 16px 42px #0009;
+    display:none; max-height:340px; overflow-y:auto;
+  }
+  .result-row, .watch-row {
+    width:100%; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center;
+    gap:8px; padding:8px 10px; border-bottom:1px solid #1f2935; background:transparent;
+  }
+  .result-row { text-align:left; border-left:0; border-right:0; border-top:0; border-radius:0; }
+  .result-row.active, .result-row:hover { background:#132033; }
+  .symbol { font-weight:700; }
+  .name { color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .market { color:var(--muted); font-size:11px; border:1px solid var(--border); border-radius:999px; padding:1px 6px; }
+  .quick { display:flex; gap:6px; flex-wrap:wrap; padding:8px 12px; border-bottom:1px solid var(--border); }
+  .quick button { font-size:12px; min-height:28px; padding:4px 8px; }
+  .toolstrip { display:flex; align-items:center; gap:6px; padding:8px 12px; border-bottom:1px solid var(--border); background:#0c1219; flex-wrap:wrap; }
+  .toolstrip button.active { border-color:var(--accent); color:#93c5fd; }
+  .toolstrip select { min-height:30px; padding:4px 8px; font-size:12px; flex:0 0 auto; }
+  .toolstrip .live-toggle { min-height:30px; padding:4px 9px; font-size:12px; font-weight:650; }
+  .toolstrip .live-toggle.off { border-color:#4b5563; color:#9ca3af; }
+  .chart-title { margin-left:auto; color:var(--muted); font-size:12px; }
+  .chart-wrap { position:relative; height:clamp(420px, 58vh, 620px); border-bottom:1px solid var(--border); }
+  #chart { width:100%; height:100%; }
+  .chart-live-status {
+    position:absolute; top:12px; left:12px; z-index:5; width:min(330px, calc(100% - 24px));
+    background:rgba(11,17,24,.9); border:1px solid rgba(148,163,184,.35);
+    border-left:3px solid var(--muted); border-radius:8px; padding:9px 10px;
+    box-shadow:0 14px 34px rgba(0,0,0,.35); backdrop-filter:blur(8px);
+    font-size:12px; line-height:1.35; pointer-events:none;
+  }
+  .chart-live-status.active { border-left-color:var(--accent); }
+  .chart-live-status.waiting { border-left-color:var(--amber); }
+  .chart-live-status.entry-long { border-left-color:var(--green); }
+  .chart-live-status.entry-short { border-left-color:var(--red); }
+  .chart-live-status.error { border-left-color:var(--red); }
+  .chart-live-status.backtest { border-left-color:#a78bfa; }
+  .chart-live-status.autobot { border-left-color:var(--cyan); box-shadow:0 14px 34px rgba(0,0,0,.35), 0 0 0 1px rgba(34,211,238,.12); }
+  .chart-live-status .status-dot {
+    display:inline-block; width:7px; height:7px; margin-right:6px; border-radius:999px;
+    background:var(--cyan); box-shadow:0 0 0 0 rgba(34,211,238,.55); animation:statusPulse 1.5s infinite;
+  }
+  @keyframes statusPulse {
+    0% { box-shadow:0 0 0 0 rgba(34,211,238,.55); }
+    70% { box-shadow:0 0 0 7px rgba(34,211,238,0); }
+    100% { box-shadow:0 0 0 0 rgba(34,211,238,0); }
+  }
+  .chart-live-status .status-head { display:flex; justify-content:space-between; gap:8px; font-weight:700; }
+  .chart-live-status .status-badge { color:var(--muted); font-size:11px; white-space:nowrap; }
+  .chart-live-status .status-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 8px; margin-top:6px; }
+  .chart-live-status .status-grid span, .chart-live-status .status-note { color:var(--muted); }
+  .chart-live-status .status-grid b { font-variant-numeric:tabular-nums; }
+  .chart-live-status .status-note { margin-top:6px; }
+  .position-overlay {
+    position:absolute; inset:0; pointer-events:none; z-index:4;
+  }
+  .position-box {
+    position:absolute; right:64px; width:min(230px, 32vw); min-width:150px;
+    border-left:2px solid #e2e8f0; border-right:1px solid rgba(226,232,240,.45);
+    font-size:11px; font-variant-numeric:tabular-nums; color:#e8edf2;
+  }
+  .position-zone {
+    position:absolute; left:0; right:0; display:flex; align-items:center; justify-content:space-between;
+    gap:8px; padding:3px 7px; overflow:hidden; border:1px solid transparent;
+  }
+  .position-zone.reward { background:rgba(34,197,94,.22); border-color:rgba(34,197,94,.62); }
+  .position-zone.risk { background:rgba(239,68,68,.22); border-color:rgba(239,68,68,.62); }
+  .position-entry {
+    position:absolute; left:-8px; right:-8px; height:2px; background:#e2e8f0;
+    box-shadow:0 0 0 1px rgba(15,23,42,.7);
+  }
+  .position-label {
+    position:absolute; right:0; transform:translateY(-50%); background:#0b1118;
+    border:1px solid var(--border); border-radius:4px; padding:2px 5px;
+    white-space:nowrap; color:#e8edf2;
+  }
+  .subcharts { display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid var(--border); }
+  .subchart { height:170px; border-right:1px solid var(--border); position:relative; }
+  .subchart:last-child { border-right:0; }
+  .sub-title { position:absolute; top:8px; left:10px; z-index:2; color:var(--muted); font-size:12px; }
+  #rsiChart, #macdChart { width:100%; height:100%; }
+  .section { padding:12px; border-bottom:1px solid var(--border); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .field { display:flex; flex-direction:column; gap:4px; }
+  .field input[type="color"] { width:100%; height:34px; padding:3px; }
+  .checkrow { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; }
+  .checkrow input { min-height:auto; }
+  .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; padding:12px; border-bottom:1px solid var(--border); }
+  .stat { background:#0d131a; border:1px solid var(--border); border-radius:8px; padding:8px; min-width:0; }
+  .stat span { color:var(--muted); font-size:12px; display:block; }
+  .stat b { font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+  .tabs { display:flex; gap:6px; padding:12px 12px 0; }
+  .tab { flex:0 0 auto; }
+  .tab.active { background:var(--accent); border-color:var(--accent); }
+  .panel-body { padding:12px; }
+  .table-scroll { max-height:520px; overflow:auto; border:1px solid var(--border); border-radius:8px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-size:12px; position:sticky; top:0; background:#0d131a; z-index:1; }
+  .up { color:var(--green); } .down { color:var(--red); } .neutral { color:var(--muted); }
+  .pill { font-size:11px; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:1px 6px; }
+  .gauge { height:30px; display:flex; overflow:hidden; border:1px solid var(--border); border-radius:7px; margin:8px 0; }
+  .gauge div { display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; min-width:40px; }
+  .g-up { background:rgba(34,197,94,.24); color:var(--green); }
+  .g-down { background:rgba(239,68,68,.24); color:var(--red); }
+  .note { color:var(--muted); font-size:12px; line-height:1.5; }
+  .watch-head { display:grid; grid-template-columns:1fr 72px 70px 34px; gap:8px; color:var(--muted); font-size:11px; padding:0 10px 6px; }
+  .watch-row { grid-template-columns:1fr 72px 70px 34px; border-left:0; border-right:0; border-top:0; border-radius:0; padding:8px 10px; }
+  .watch-row { cursor:pointer; }
+  .watch-row.active { background:#132033; }
+  .price { text-align:right; font-variant-numeric:tabular-nums; }
+  .tiny { font-size:11px; color:var(--muted); }
+  .chart-status { color:var(--muted); font-size:11px; padding:0 4px; }
+  .alert-item { display:flex; justify-content:space-between; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .hidden { display:none !important; }
+  @media (max-width:1100px) {
+    .app { grid-template-columns:1fr; }
+    .left { border-right:0; }
+    .right { max-height:none; }
+    .subcharts { grid-template-columns:1fr; }
+    .subchart { border-right:0; border-bottom:1px solid var(--border); }
+    .summary { grid-template-columns:1fr 1fr; }
+  }
+  @media (max-width:760px) {
+    header {
+      height:auto; min-height:50px; flex-wrap:wrap; align-items:flex-start;
+      gap:6px; padding:8px;
+    }
+    h1 { width:100%; font-size:15px; }
+    .badge {
+      max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      font-size:11px; padding:2px 7px;
+    }
+    .app { min-height:calc(100vh - 88px); min-height:calc(100dvh - 88px); }
+    .toolbar {
+      display:grid; grid-template-columns:1fr 82px; align-items:stretch;
+      gap:6px; padding:8px;
+    }
+    .searchbox {
+      grid-column:1 / -1; min-width:0; display:grid; grid-template-columns:minmax(0,1fr) 76px;
+    }
+    .searchbox button { padding-left:8px; padding-right:8px; }
+    .toolbar select, .toolbar > button { width:100%; }
+    .toolbar > button.primary { grid-column:1 / -1; }
+    .results { right:0; top:40px; max-height:50vh; }
+    .result-row { grid-template-columns:minmax(0,1fr) auto; }
+    .quick, .toolstrip, .tabs {
+      overflow-x:auto; flex-wrap:nowrap; padding-left:8px; padding-right:8px;
+      scrollbar-width:thin;
+    }
+    .quick button, .toolstrip button, .toolstrip select, .tab { flex:0 0 auto; white-space:nowrap; }
+    .chart-title { margin-left:0; flex:0 0 auto; }
+    .chart-wrap { height:56vh; min-height:330px; }
+    .chart-live-status { top:8px; left:8px; width:min(300px, calc(100% - 16px)); font-size:11px; padding:8px; }
+    .position-box { right:40px; width:min(190px, 45vw); min-width:132px; font-size:10px; }
+    .subchart { height:156px; }
+    .summary, .section, .panel-body { padding:8px; }
+    .grid2, .grid3 { grid-template-columns:1fr; }
+    .watch-head, .watch-row {
+      grid-template-columns:minmax(86px,1fr) 76px 62px 32px;
+      gap:6px; padding-left:8px; padding-right:8px;
+    }
+    .table-scroll { max-height:65vh; border-radius:6px; }
+    th, td { padding:7px 6px; font-size:12px; }
+    button, input, select, textarea { font-size:14px; }
+  }
+  @media (max-width:430px) {
+    .toolbar { grid-template-columns:1fr 74px; }
+    .searchbox { grid-template-columns:minmax(0,1fr) 70px; }
+    .chart-wrap { height:52vh; min-height:300px; }
+    .chart-live-status .status-grid { grid-template-columns:1fr; gap:3px; }
+    .position-box { right:28px; width:min(160px, 54vw); }
+    .summary { grid-template-columns:1fr; }
+    .watch-head, .watch-row {
+      grid-template-columns:minmax(70px,1fr) 68px 56px 28px;
+      gap:4px;
+    }
+    .watch-row .name { max-width:100%; }
+    .price { font-size:12px; }
+  }
+  @media (orientation:landscape) and (max-height:520px) {
+    .chart-wrap { height:320px; min-height:300px; }
+    .subchart { height:132px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>📈 AI Trade Assistant</h1>
-  <span class="badge" id="providerBadge">provider: …</span>
-  <span class="badge" id="aiBadge">AI: …</span>
-  <span class="badge">วิเคราะห์ + แจ้งเตือนเท่านั้น • ไม่ใช่คำแนะนำลงทุน</span>
+  <h1>AI Trade Assistant</h1>
+  <span class="badge" id="providerBadge">provider: ...</span>
+  <span class="badge" id="aiBadge">AI: ...</span>
+  <span class="badge" id="activeBadge">AAPL 1h</span>
 </header>
 
-<div class="wrap">
-  <!-- ซ้าย: กราฟ + อินดิเคเตอร์ -->
-  <div>
-    <div class="panel">
-      <div class="controls">
-        <label>สัญลักษณ์</label>
-        <select id="symbol"></select>
-        <label>Timeframe</label>
-        <select id="timeframe">
-          <option value="15m">15m</option>
-          <option value="1h" selected>1h</option>
-          <option value="4h">4h</option>
-          <option value="1d">1d</option>
-        </select>
-        <button onclick="loadChart()">โหลดกราฟ</button>
-        <button class="primary" onclick="runAnalysis()">🤖 วิเคราะห์ด้วย AI</button>
-        <span id="quote" class="muted"></span>
+<main class="app">
+  <section class="left">
+    <div class="toolbar">
+      <div class="searchbox">
+        <input id="searchInput" placeholder="Search symbols: AAPL, PTT.BK, BTC-USD, GC=F" autocomplete="off" />
+        <button class="primary" onclick="searchSymbols()">Search</button>
+        <div class="results" id="searchResults"></div>
       </div>
+      <select id="timeframe" onchange="onTimeframeChange()">
+        <option value="1m">1m</option>
+        <option value="5m">5m</option>
+        <option value="15m">15m</option>
+        <option value="1h" selected>1h</option>
+        <option value="4h">4h</option>
+        <option value="1d">1d</option>
+      </select>
+      <button onclick="reloadLive()">Reload</button>
+      <button class="primary" onclick="runDataAnalysis()">Analyze Schools</button>
+    </div>
+
+    <div class="quick" id="quickAssets"></div>
+
+    <div class="toolstrip">
+      <button id="toolSelect" class="active" onclick="setDrawTool('select')">Cursor</button>
+      <button id="toolLevel" onclick="setDrawTool('level')">Level</button>
+      <button id="toolTrend" onclick="setDrawTool('trend')">Trendline</button>
+      <button id="toolFib" onclick="setDrawTool('fib')">Fibonacci</button>
+      <button onclick="clearDrawings()">Clear drawings</button>
+      <button id="toolCDC" onclick="toggleCDC()">CDC Zone</button>
+      <button id="autoRefreshBtn" class="live-toggle active" onclick="toggleAutoRefresh()">Live On</button>
+      <select id="refreshInterval" onchange="setRefreshInterval(this.value)" aria-label="Chart refresh interval">
+        <option value="auto" selected>Auto</option>
+        <option value="2000">2s</option>
+        <option value="5000">5s</option>
+        <option value="10000">10s</option>
+        <option value="15000">15s</option>
+        <option value="30000">30s</option>
+        <option value="60000">1m</option>
+      </select>
+      <span class="chart-status" id="chartStatus">Live: waiting</span>
+      <span class="chart-title" id="chartTitle">AAPL</span>
+    </div>
+
+    <div class="chart-wrap">
       <div id="chart"></div>
-      <div class="summary" id="summary"></div>
+      <div id="chartLiveStatus" class="chart-live-status hidden"></div>
+      <div id="positionOverlay" class="position-overlay hidden"></div>
+    </div>
+    <div class="subcharts">
+      <div class="subchart"><div class="sub-title">RSI / Stochastic</div><div id="rsiChart"></div></div>
+      <div class="subchart"><div class="sub-title">MACD</div><div id="macdChart"></div></div>
     </div>
 
-    <div class="panel" style="margin-top:16px;">
-      <h3>รายงานวิเคราะห์ (AI)</h3>
-      <div id="report" class="report muted">กดปุ่ม “วิเคราะห์ด้วย AI” เพื่อสร้างรายงานตามเทมเพลต 8 หัวข้อ</div>
-      <div class="disclaimer" id="disclaimer"></div>
-    </div>
-  </div>
+    <div class="summary" id="summary"></div>
 
-  <!-- ขวา: แจ้งเตือน -->
-  <div>
-    <div class="panel">
-      <h3>ตั้งการแจ้งเตือน</h3>
-      <div class="row" style="margin-bottom:8px;">
-        <select id="alertKind">
-          <option value="price_above">ราคา ≥</option>
-          <option value="price_below">ราคา ≤</option>
-          <option value="rsi_above">RSI ≥</option>
-          <option value="rsi_below">RSI ≤</option>
-        </select>
-        <input id="alertValue" type="number" placeholder="ค่า" style="width:90px;" />
-        <button onclick="addAlert()">เพิ่ม</button>
+    <div class="tabs">
+      <button class="tab active" id="tabReport" onclick="showTab('report')">Multi-school report</button>
+      <button class="tab" id="tabStrategy" onclick="showTab('strategy')">⚔️ ท่าไม้ตาย</button>
+      <button class="tab" id="tabImage" onclick="showTab('image')">Image analysis</button>
+      <button class="tab" id="tabSchools" onclick="showTab('schools')">Schools</button>
+      <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
+      <button class="tab" id="tabAuto" onclick="showTab('auto')">Auto Trade</button>
+    </div>
+
+    <div id="reportPanel" class="panel-body">
+      <div id="result" class="note">Ready.</div>
+    </div>
+
+    <div id="imagePanel" class="panel-body hidden">
+      <div class="grid3">
+        <input type="file" id="imgFile" accept="image/*" onchange="previewImg()" />
+        <input id="imgSymbol" placeholder="Symbol" />
+        <input id="imgTf" placeholder="Timeframe" />
       </div>
-      <div id="alertList"></div>
+      <textarea id="imgNote" placeholder="Note" style="width:100%; min-height:64px; margin-top:8px;"></textarea>
+      <div style="margin-top:8px;"><button class="primary" onclick="runImageAnalysis()">Analyze image</button></div>
+      <img id="imgPreview" style="display:none; max-width:100%; max-height:380px; margin-top:10px; border:1px solid var(--border); border-radius:8px;" />
     </div>
 
-    <div class="panel" style="margin-top:16px;">
-      <h3>แจ้งเตือนที่ทริกเกอร์แล้ว</h3>
-      <div id="triggeredList" class="muted">ยังไม่มี</div>
+    <div id="schoolsPanel" class="panel-body hidden">
+      <h3>Analysis schools <button style="float:right; min-height:28px; padding:4px 8px; font-size:12px;" onclick="resetSchools()">Reset defaults</button></h3>
+      <div id="schoolControls" style="max-height:500px; overflow-y:auto;"></div>
     </div>
-  </div>
-</div>
 
+    <div id="indicatorsPanel" class="panel-body hidden">
+      <h3>Chart style <button style="float:right; min-height:28px; padding:4px 10px; font-size:12px;" onclick="resetIndicatorSettings()">↺ Reset defaults</button></h3>
+      <div class="grid3">
+        <div class="field"><label>Chart type</label><select id="chart_type" onchange="setChartType(this.value)"><option value="candlestick">Candles</option><option value="heikinashi">Heikin Ashi</option><option value="bar">Bars</option><option value="area">Area</option><option value="line">Line</option><option value="baseline">Baseline</option></select></div>
+        <div class="field"><label>Chart background</label><input id="style_chartBg" type="color" onchange="updateChartStyle('chartBg', this.value)" /></div>
+        <div class="field"><label>Text color</label><input id="style_textColor" type="color" onchange="updateChartStyle('textColor', this.value)" /></div>
+        <div class="field"><label>Grid color</label><input id="style_gridColor" type="color" onchange="updateChartStyle('gridColor', this.value)" /></div>
+        <label class="checkrow"><span>Show grid</span><input id="style_gridVisible" type="checkbox" onchange="updateChartStyle('gridVisible', this.checked)" /></label>
+        <div class="field"><label>Crosshair mode</label><select id="style_crosshairMode" onchange="updateChartStyle('crosshairMode', this.value)"><option value="normal">Normal</option><option value="magnet">Magnet</option><option value="hidden">Hidden</option></select></div>
+        <label class="checkrow"><span>Vertical crosshair</span><input id="style_crosshairVertVisible" type="checkbox" onchange="updateChartStyle('crosshairVertVisible', this.checked)" /></label>
+        <label class="checkrow"><span>Horizontal crosshair</span><input id="style_crosshairHorzVisible" type="checkbox" onchange="updateChartStyle('crosshairHorzVisible', this.checked)" /></label>
+        <div class="field"><label>Bull candle</label><input id="style_upColor" type="color" onchange="updateChartStyle('upColor', this.value)" /></div>
+        <div class="field"><label>Bear candle</label><input id="style_downColor" type="color" onchange="updateChartStyle('downColor', this.value)" /></div>
+        <div class="field"><label>Wick up</label><input id="style_wickUpColor" type="color" onchange="updateChartStyle('wickUpColor', this.value)" /></div>
+        <div class="field"><label>Wick down</label><input id="style_wickDownColor" type="color" onchange="updateChartStyle('wickDownColor', this.value)" /></div>
+        <div class="field"><label>Volume</label><input id="style_volumeColor" type="color" onchange="updateChartStyle('volumeColor', this.value)" /></div>
+      </div>
+      <h3 style="margin-top:14px;">Indicator colors</h3>
+      <div class="grid3">
+        <div class="field"><label>EMA fast</label><input id="style_emaFastColor" type="color" onchange="updateChartStyle('emaFastColor', this.value)" /></div>
+        <div class="field"><label>EMA mid</label><input id="style_emaMidColor" type="color" onchange="updateChartStyle('emaMidColor', this.value)" /></div>
+        <div class="field"><label>EMA slow</label><input id="style_emaSlowColor" type="color" onchange="updateChartStyle('emaSlowColor', this.value)" /></div>
+        <div class="field"><label>Bollinger</label><input id="style_bbColor" type="color" onchange="updateChartStyle('bbColor', this.value)" /></div>
+        <div class="field"><label>RSI</label><input id="style_rsiColor" type="color" onchange="updateChartStyle('rsiColor', this.value)" /></div>
+        <div class="field"><label>Stoch K</label><input id="style_stochKColor" type="color" onchange="updateChartStyle('stochKColor', this.value)" /></div>
+        <div class="field"><label>Stoch D</label><input id="style_stochDColor" type="color" onchange="updateChartStyle('stochDColor', this.value)" /></div>
+        <div class="field"><label>MACD</label><input id="style_macdColor" type="color" onchange="updateChartStyle('macdColor', this.value)" /></div>
+        <div class="field"><label>Signal</label><input id="style_signalColor" type="color" onchange="updateChartStyle('signalColor', this.value)" /></div>
+      </div>
+      <h3 style="margin-top:14px;">Indicator settings</h3>
+      <div class="grid3">
+        <div class="field"><label>EMA fast</label><input id="ema_fast" type="number" min="1" value="20" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>EMA mid</label><input id="ema_mid" type="number" min="1" value="50" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>EMA slow</label><input id="ema_slow" type="number" min="1" value="200" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>RSI period</label><input id="rsi_period" type="number" min="2" value="14" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>BB period</label><input id="bb_period" type="number" min="2" value="20" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>BB multiplier</label><input id="bb_mult" type="number" min="0.1" step="0.1" value="2" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>Stoch K</label><input id="stoch_k" type="number" min="2" value="14" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>Stoch D</label><input id="stoch_d" type="number" min="1" value="3" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>MACD signal</label><input id="macd_signal" type="number" min="1" value="9" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>MACD fast</label><input id="macd_fast" type="number" min="1" value="12" onchange="loadChart({preserveRange:true})" /></div>
+        <div class="field"><label>MACD slow</label><input id="macd_slow" type="number" min="2" value="26" onchange="loadChart({preserveRange:true})" /></div>
+      </div>
+      <div class="grid2" style="margin-top:12px;">
+        <label class="checkrow"><span>EMA fast</span><input id="showEmaFast" type="checkbox" checked onchange="renderIndicators()" /></label>
+        <label class="checkrow"><span>EMA mid</span><input id="showEmaMid" type="checkbox" checked onchange="renderIndicators()" /></label>
+        <label class="checkrow"><span>EMA slow</span><input id="showEmaSlow" type="checkbox" onchange="renderIndicators()" /></label>
+        <label class="checkrow"><span>Bollinger Bands</span><input id="showBB" type="checkbox" checked onchange="renderIndicators()" /></label>
+        <label class="checkrow"><span>RSI</span><input id="showRSI" type="checkbox" checked onchange="renderIndicators()" /></label>
+        <label class="checkrow"><span>Stochastic</span><input id="showStoch" type="checkbox" onchange="renderIndicators()" /></label>
+        <label class="checkrow"><span>MACD</span><input id="showMACD" type="checkbox" checked onchange="renderIndicators()" /></label>
+        <label class="checkrow"><span>Volume</span><input id="showVolume" type="checkbox" checked onchange="renderIndicators()" /></label>
+      </div>
+    </div>
+
+    <div id="strategyPanel" class="panel-body hidden">
+      <h3>⚔️ ท่าไม้ตาย — ระบบเทรดรวมทุกศาสตร์ + Backtest ย้อนหลังยาว</h3>
+      <div class="note" style="margin-bottom:10px;">
+        ทุกแท่งในอดีต ทุกศาสตร์จะโหวต → รวมเป็น "คะแนนฉันทามติ". เข้า Order เมื่อหลายศาสตร์
+        เห็นพ้องแรงพอ + ผ่าน Trend Filter แล้วจำลองผลย้อนหลัง พร้อมจุดเข้า-ออกบนกราฟ.
+      </div>
+      <div style="margin-bottom:10px;">
+        <label style="display:block; margin-bottom:6px;">⚡ ท่าสำเร็จรูป (กดแล้วรันได้เลย):</label>
+        <div class="quick" style="padding:0; border:0; gap:6px;">
+          <button onclick="applyPreset('winrate')" title="ชนะบ่อย 60-67% บนหุ้นเทรนด์ขึ้น (RR0.5/ATR2.5/เข้า60/Long)">🎯 ชนะบ่อย 60-67%</button>
+          <button onclick="applyPreset('winmax')" title="เน้น %ชนะสูงสุด ~66% (RR0.5/ATR2.0/เข้า70/Long)">🎯 ชนะบ่อยสุด ~66%</button>
+          <button onclick="applyPreset('sniper')" title="ยิงน้อย ~4 ไม้/ปี ไม้ชนะใหญ่ 3 เท่า กำไร +350% (เข้า85/MDW5/RR3/Long)">🎯 สไนเปอร์ (กำไร/ไม้สูงสุด)</button>
+          <button onclick="applyPreset('snipebal')" title="สไนเปอร์ชนะ ~50% ยิงน้อย (เข้า85/MDW5/RR1.2/Long)">🎯 สไนเปอร์สมดุล ~50%</button>
+          <button onclick="applyPreset('coach')" title="สไตล์ Coach James: MMC Liquidity Sweep + EMA80 (ทอง/forex 1h)">🥇 Coach James MMC (ทอง)</button>
+          <button onclick="applyPreset('balanced')" title="สมดุล กำไร/ไม้ใหญ่ (RR1.8/ATR1.5/เข้า65/Long+Short)">⚖️ สมดุล (กำไร/ไม้ใหญ่)</button>
+        </div>
+        <div id="presetNote" class="tiny" style="margin-top:6px;"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Timeframe (ย้อนหลัง)</label>
+          <select id="bt_timeframe">
+            <option value="1m">1m (~7 days)</option>
+            <option value="1d" selected>1d (ยาวสุด — หลายสิบปี)</option>
+            <option value="4h">4h (~2 ปี)</option>
+            <option value="1h">1h (~2 ปี)</option>
+            <option value="15m">15m (~60 วัน)</option>
+            <option value="5m">5m (~60 วัน)</option>
+          </select>
+        </div>
+        <div class="field"><label>Direction</label>
+          <select id="bt_direction">
+            <option value="both" selected>Long + Short</option>
+            <option value="long">Long เท่านั้น</option>
+            <option value="short">Short เท่านั้น</option>
+          </select>
+        </div>
+        <div class="field"><label>เกณฑ์เข้า (ฉันทามติ %)</label><input id="bt_entry" type="number" min="51" max="95" value="65" /></div>
+        <div class="field"><label>Risk:Reward</label><input id="bt_rr" type="number" min="0.5" max="10" step="0.1" value="1.8" /></div>
+        <div class="field"><label>ATR x (ระยะ Stop)</label><input id="bt_atr" type="number" min="0.2" max="10" step="0.1" value="1.5" /></div>
+        <div class="field"><label>ถือสูงสุด (แท่ง)</label><input id="bt_hold" type="number" min="3" max="500" value="60" /></div>
+        <div class="field"><label>ศาสตร์เห็นพ้องขั้นต่ำ (น้ำหนัก)</label><input id="bt_mdw" type="number" min="0.5" max="12" step="0.5" value="2" title="สูง = ต้องหลายศาสตร์เห็นตรงกัน = เทรดน้อยลงแต่คัดกว่า" /></div>
+        <div class="field"><label>ขนาดพอร์ต ($)</label><input id="bt_account" type="number" min="1" step="100" value="1000" title="ใช้คำนวณขนาดโพสิชันตอน Go Live" /></div>
+        <div class="field"><label>ความเสี่ยง/ไม้ (% พอร์ต)</label><input id="bt_risk" type="number" min="0.1" max="20" step="0.1" value="1" title="เสี่ยงกี่ % ของพอร์ตต่อการเทรด 1 ไม้" /></div>
+      </div>
+      <label class="checkrow" style="margin-top:8px;"><span>Trend Filter (Long เหนือ SMA200 / Short ใต้ SMA200)</span><input id="bt_trend" type="checkbox" checked /></label>
+      <div style="margin-top:10px;"><button class="primary" style="width:100%;" onclick="runBacktest()">▶ รัน Backtest ท่าไม้ตาย</button></div>
+      <div id="backtestResult" class="note" style="margin-top:12px;">ยังไม่ได้รัน — กดปุ่มด้านบนเพื่อเริ่ม</div>
+      <div id="liveSignalBox" class="hidden" style="margin-top:12px;"></div>
+    </div>
+
+    <div id="autoPanel" class="panel-body hidden">
+      <h3>Auto Trade Bot - Bitkub</h3>
+      <div class="note" style="margin-bottom:10px;">
+        เริ่มจาก Paper mode ก่อน ระบบจะใช้สัญญาณ A+ เดียวกับ Go Live และจำลอง order/position โดยไม่ยิงเงินจริง
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Mode</label>
+          <select id="bot_mode">
+            <option value="paper" selected>Paper - จำลอง</option>
+            <option value="real">Real - Bitkub order</option>
+          </select>
+        </div>
+        <div class="field"><label>Bitkub pair</label><input id="bot_symbol" value="BTC_THB" list="botPairList" /></div>
+        <div class="field"><label>Timeframe</label>
+          <select id="bot_timeframe">
+            <option value="1m">1m</option>
+            <option value="5m">5m</option>
+            <option value="15m">15m</option>
+            <option value="1h" selected>1h</option>
+            <option value="4h">4h</option>
+            <option value="1d">1d</option>
+          </select>
+        </div>
+        <div class="field"><label>Budget THB</label><input id="bot_budget" type="number" min="100" step="100" value="10000" /></div>
+        <div class="field"><label>Risk / trade %</label><input id="bot_risk" type="number" min="0.1" max="10" step="0.1" value="5" /></div>
+        <div class="field"><label>Max daily loss %</label><input id="bot_daily_loss" type="number" min="0.5" max="50" step="0.5" value="3" /></div>
+        <div class="field"><label>Poll every sec</label><input id="bot_poll" type="number" min="5" max="3600" step="5" value="30" /></div>
+        <div class="field"><label>A+ entry %</label><input id="bot_entry" type="number" min="51" max="95" value="65" /></div>
+        <div class="field"><label>Risk:Reward</label><input id="bot_rr" type="number" min="1.5" max="10" step="0.1" value="1.5" /></div>
+        <div class="field"><label>ATR x stop</label><input id="bot_atr" type="number" min="0.2" max="10" step="0.1" value="1.5" /></div>
+        <div class="field"><label>School weight gate</label><input id="bot_mdw" type="number" min="0.5" max="12" step="0.5" value="2" /></div>
+        <div class="field"><label>Real confirm</label><input id="bot_confirm" placeholder="I UNDERSTAND REAL ORDERS" /></div>
+      </div>
+      <datalist id="botPairList"></datalist>
+      <div style="margin-top:10px;">
+        <label style="display:block; margin-bottom:6px;">Bitkub top tier pairs</label>
+        <div class="quick" id="botTopPairs" style="padding:0; border:0; gap:6px;"></div>
+      </div>
+      <label class="checkrow" style="margin-top:8px;"><span>Trend Filter</span><input id="bot_trend" type="checkbox" checked /></label>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+        <button class="primary" onclick="startAutoTrade()">Start Bot</button>
+        <button onclick="stopAutoTrade()">Stop</button>
+        <button onclick="tickAutoTrade()">Run 1 Tick</button>
+        <button onclick="refreshAutoTrade()">Refresh</button>
+      </div>
+      <div id="autoTradeStatus" class="note" style="margin-top:12px;">Bot waiting.</div>
+    </div>
+  </section>
+
+  <aside class="right">
+    <div class="section">
+      <h3>Watchlist</h3>
+      <div class="grid2">
+        <input id="watchInput" placeholder="Add symbol" />
+        <button onclick="addWatchSymbol()">Add</button>
+      </div>
+      <div class="watch-head" style="margin-top:10px;"><span>Symbol</span><span>Last</span><span>Change</span><span></span></div>
+      <div id="watchList"></div>
+      <div class="tiny" id="watchUpdated" style="padding:8px 10px 0;">Waiting...</div>
+    </div>
+
+    <div class="section">
+      <h3>Alerts</h3>
+      <div class="grid2">
+        <select id="alertKind">
+          <option value="price_above">Price >=</option>
+          <option value="price_below">Price <=</option>
+          <option value="rsi_above">RSI >=</option>
+          <option value="rsi_below">RSI <=</option>
+        </select>
+        <input id="alertValue" type="number" placeholder="Value" />
+      </div>
+      <button style="width:100%; margin-top:8px;" onclick="addAlert()">Add alert</button>
+      <div id="alertList" style="margin-top:8px;"></div>
+      <h3 style="margin-top:14px;">Triggered</h3>
+      <div id="triggeredList" class="note">None</div>
+    </div>
+
+    <div class="section">
+      <h3>Schools</h3>
+      <div id="schoolList" class="note">...</div>
+    </div>
+  </aside>
+</main>
+
+<script src="./config.js"></script>
 <script>
-const API = "";  // same origin
-let chart, candleSeries, ema20Series, ema50Series;
+const API = (window.API_BASE_URL || "").replace(/\/$/, "");
+const quickAssets = [
+  ["AAPL","US"],["NVDA","US"],["TSLA","US"],["PTT.BK","TH"],["KBANK.BK","TH"],
+  ["BTC-USD","Crypto"],["ETH-USD","Crypto"],["SOL-USD","Crypto"],["GC=F","Gold"],["XAUUSD=X","Gold"]
+];
+const bitkubTopPairs = [
+  ["BTC_THB","Bitcoin"],
+  ["ETH_THB","Ethereum"],
+  ["SOL_THB","Solana"],
+  ["XRP_THB","XRP"],
+  ["BNB_THB","BNB"],
+  ["ADA_THB","Cardano"],
+  ["DOGE_THB","Dogecoin"],
+  ["LINK_THB","Chainlink"],
+  ["DOT_THB","Polkadot"],
+  ["AVAX_THB","Avalanche"],
+  ["ATOM_THB","Cosmos"],
+  ["ARB_THB","Arbitrum"],
+  ["OP_THB","Optimism"],
+  ["NEAR_THB","NEAR"],
+  ["UNI_THB","Uniswap"],
+  ["AAVE_THB","Aave"],
+  ["USDT_THB","Tether"],
+];
+const defaultChartStyle = {
+  chartType:"candlestick",
+  chartBg:"#0b0f14",
+  textColor:"#e8edf2",
+  gridColor:"#17202b",
+  gridVisible:true,
+  crosshairMode:"normal",
+  crosshairVertVisible:true,
+  crosshairHorzVisible:true,
+  upColor:"#22c55e",
+  downColor:"#ef4444",
+  wickUpColor:"#22c55e",
+  wickDownColor:"#ef4444",
+  volumeColor:"#334155",
+  emaFastColor:"#3b82f6",
+  emaMidColor:"#f59e0b",
+  emaSlowColor:"#a78bfa",
+  bbColor:"#64748b",
+  rsiColor:"#22d3ee",
+  stochKColor:"#f59e0b",
+  stochDColor:"#a78bfa",
+  macdColor:"#3b82f6",
+  signalColor:"#f59e0b",
+};
+const defaultIndicatorSettings = {
+  ema_fast:20, ema_mid:50, ema_slow:200, rsi_period:14,
+  bb_period:20, bb_mult:2, stoch_k:14, stoch_d:3,
+  macd_signal:9, macd_fast:12, macd_slow:26,
+};
+const defaultIndicatorToggles = {
+  showEmaFast:true, showEmaMid:true, showEmaSlow:false, showBB:true,
+  showRSI:true, showStoch:false, showMACD:true, showVolume:true,
+};
+let chartStyle = { ...defaultChartStyle, ...JSON.parse(localStorage.getItem("chartStyle") || "{}") };
+let currentSymbol = "AAPL";
+let mode = "data";
+let chart, rsiChart, macdChart;
+let candleSeries, volumeSeries;
+let emaFastSeries, emaMidSeries, emaSlowSeries, bbUpperSeries, bbMidSeries, bbLowerSeries;
+let rsiSeries, stochKSeries, stochDSeries, macdLineSeries, macdSignalSeries, macdHistSeries;
+let latestChartData = null;
+let drawTool = "select";
+let trendStart = null;
+let fibStart = null;
+let priceLines = [];
+let trendLines = [];
+const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618];
+let watchlist = JSON.parse(localStorage.getItem("watchlist") || '["AAPL","NVDA","PTT.BK","BTC-USD","GC=F"]');
+let searchTimer = null;
+let searchRows = [];
+let searchIndex = -1;
+let searchToken = 0;
+let chartTimer = null;
+let autoRefreshEnabled = localStorage.getItem("autoRefreshEnabled") !== "false";
+let refreshIntervalValue = localStorage.getItem("refreshInterval") || "auto";
+let quoteTimer = null;
+let watchTimer = null;
+let realtimeSocket = null;
+let realtimeStreamKey = "";
+let realtimeReconnectTimer = null;
+let realtimeAnimationFrame = null;
+let chartLoadToken = 0;
+let quoteInFlight = false;
+let chartInFlight = false;
+let watchInFlight = false;
+let allSchools = [];
+let enabledSchools = {};
+let schoolWeights = {};
+let cdcEnabled = false;
+let cdcFastSeries = null;
+let cdcSlowSeries = null;
+let backtestMode = false;
+let liveMode = false;
+let liveSignalTimer = null;
+let liveStrategyParams = null;
+let livePositionLines = [];
+let activeLiveTrade = null;
+let latestLiveSignal = null;
+let latestAutoTradeState = null;
+let autoTradeTimer = null;
+
+function $(id) { return document.getElementById(id); }
+function tf() { return $("timeframe").value; }
+function indicatorParams() {
+  const keys = ["ema_fast","ema_mid","ema_slow","rsi_period","bb_period","bb_mult","stoch_k","stoch_d","macd_fast","macd_slow","macd_signal"];
+  const params = {};
+  keys.forEach(k => { const v = $(k).value; if (v !== "") params[k] = v; });
+  return params;
+}
+function queryString(params) {
+  return new URLSearchParams(params).toString();
+}
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;",
+  }[ch]));
+}
+function escapeJs(value) {
+  return String(value ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+function lineData(series) {
+  return latestChartData.candles
+    .map((c, i) => ({ time:c.time, value:series?.[i] }))
+    .filter(p => p.value !== null && p.value !== undefined);
+}
+function setLine(series, data, visible=true) {
+  series.setData(visible ? data : []);
+}
+function hexToRgba(hex, alpha) {
+  const clean = String(hex || "#000000").replace("#", "");
+  const value = parseInt(clean.length === 3 ? clean.split("").map(x => x + x).join("") : clean, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function heikinAshiCandles(candles) {
+  const out = [];
+  let prevOpen, prevClose;
+  for (let i = 0; i < candles.length; i++) {
+    const c = candles[i];
+    const haClose = (c.open + c.high + c.low + c.close) / 4;
+    const haOpen = i === 0 ? (c.open + c.close) / 2 : (prevOpen + prevClose) / 2;
+    const haHigh = Math.max(c.high, haOpen, haClose);
+    const haLow = Math.min(c.low, haOpen, haClose);
+    out.push({ time:c.time, open:haOpen, high:haHigh, low:haLow, close:haClose });
+    prevOpen = haOpen; prevClose = haClose;
+  }
+  return out;
+}
+function priceData() {
+  if (!latestChartData) return [];
+  const candles = latestChartData.candles;
+  if (chartStyle.chartType === "heikinashi") {
+    return heikinAshiCandles(candles);
+  }
+  if (["line", "area", "baseline"].includes(chartStyle.chartType)) {
+    return candles.map(c => ({ time:c.time, value:c.close }));
+  }
+  return candles.map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close }));
+}
+function lastPricePoint() {
+  if (!latestChartData?.candles?.length) return null;
+  const c = latestChartData.candles[latestChartData.candles.length - 1];
+  if (["line", "area", "baseline"].includes(chartStyle.chartType)) {
+    return { time:c.time, value:c.close };
+  }
+  return { time:c.time, open:c.open, high:c.high, low:c.low, close:c.close };
+}
+function timeframeSeconds(value = tf()) {
+  return ({ "1m":60, "5m":300, "15m":900, "1h":3600, "4h":14400, "1d":86400 })[value] || 3600;
+}
+function binanceStreamSymbol(symbol) {
+  const s = symbol.toUpperCase();
+  const direct = {
+    "BTC-USD":"BTCUSDT", "ETH-USD":"ETHUSDT", "SOL-USD":"SOLUSDT", "BNB-USD":"BNBUSDT",
+    "XRP-USD":"XRPUSDT", "DOGE-USD":"DOGEUSDT", "ADA-USD":"ADAUSDT", "AVAX-USD":"AVAXUSDT",
+    "LINK-USD":"LINKUSDT", "DOT-USD":"DOTUSDT", "LTC-USD":"LTCUSDT", "UNI-USD":"UNIUSDT",
+    "AAVE-USD":"AAVEUSDT", "NEAR-USD":"NEARUSDT", "ATOM-USD":"ATOMUSDT", "OP-USD":"OPUSDT",
+    "ARB-USD":"ARBUSDT",
+  };
+  if (direct[s]) return direct[s].toLowerCase();
+  const m = s.match(/^([A-Z0-9]+)-USD$/);
+  return m ? `${m[1]}USDT`.toLowerCase() : null;
+}
+function closeRealtimeStream() {
+  clearTimeout(realtimeReconnectTimer);
+  realtimeReconnectTimer = null;
+  realtimeStreamKey = "";
+  if (realtimeSocket) {
+    realtimeSocket.onclose = null;
+    realtimeSocket.onerror = null;
+    realtimeSocket.onmessage = null;
+    try { realtimeSocket.close(); } catch (_) {}
+    realtimeSocket = null;
+  }
+}
+function realtimeWsUrl(path) {
+  const base = API || location.origin;
+  const url = new URL(path, base);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
+function startRealtimeStream() {
+  if (backtestMode) {
+    closeRealtimeStream();
+    return;
+  }
+  const symbol = currentSymbol.toUpperCase();
+  const key = `${symbol}|${tf()}`;
+  if (realtimeStreamKey === key && realtimeSocket && realtimeSocket.readyState <= 1) return;
+  closeRealtimeStream();
+  realtimeStreamKey = key;
+
+  const binanceSymbol = binanceStreamSymbol(symbol);
+  if (binanceSymbol) {
+    realtimeSocket = new WebSocket(`wss://stream.binance.com:9443/ws/${binanceSymbol}@trade`);
+    realtimeSocket.onopen = () => {
+      if (currentSymbol.toUpperCase() === symbol) $("chartStatus").textContent = `Stream: Binance tick · ${symbol}`;
+    };
+    realtimeSocket.onmessage = (event) => {
+      if (currentSymbol.toUpperCase() !== symbol || backtestMode) return;
+      try {
+        const data = JSON.parse(event.data);
+        applyRealtimePrice(Number(data.p), Math.floor(Number(data.T || Date.now()) / 1000), Number(data.q || 0), "Binance tick");
+      } catch (_) {}
+    };
+    realtimeSocket.onerror = () => {
+      if (currentSymbol.toUpperCase() === symbol) $("chartStatus").textContent = "Stream error: Binance · fallback quote";
+      openQuoteWebSocket(symbol, key);
+    };
+    realtimeSocket.onclose = () => {
+      if (currentSymbol.toUpperCase() !== symbol || realtimeStreamKey !== key || backtestMode) return;
+      realtimeReconnectTimer = setTimeout(startRealtimeStream, 1200);
+    };
+    return;
+  }
+
+  openQuoteWebSocket(symbol, key);
+}
+function openQuoteWebSocket(symbol, key) {
+  if (realtimeSocket) {
+    realtimeSocket.onclose = null;
+    realtimeSocket.onerror = null;
+    realtimeSocket.onmessage = null;
+    try { realtimeSocket.close(); } catch (_) {}
+  }
+  realtimeStreamKey = key || `${symbol}|${tf()}`;
+  realtimeSocket = new WebSocket(realtimeWsUrl(`/ws/quotes?symbol=${encodeURIComponent(symbol)}&interval=1`));
+  realtimeSocket.onopen = () => {
+    if (currentSymbol.toUpperCase() === symbol) $("chartStatus").textContent = `Stream: quote 1s · ${symbol}`;
+  };
+  realtimeSocket.onmessage = (event) => {
+    if (currentSymbol.toUpperCase() !== symbol || backtestMode) return;
+    try {
+      const q = JSON.parse(event.data);
+      updateQuoteBadge(q);
+      applyLiveQuote(q, "Quote WS");
+    } catch (_) {}
+  };
+  realtimeSocket.onerror = () => {
+    if (currentSymbol.toUpperCase() === symbol) $("chartStatus").textContent = "Stream error: quote websocket";
+  };
+  realtimeSocket.onclose = () => {
+    if (currentSymbol.toUpperCase() !== symbol || realtimeStreamKey !== `${symbol}|${tf()}` || backtestMode) return;
+    realtimeReconnectTimer = setTimeout(startRealtimeStream, 1500);
+  };
+}
+const CHART_TIME_ZONE = "Asia/Bangkok";
+const chartTimeFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone:CHART_TIME_ZONE, hour:"2-digit", minute:"2-digit", hour12:false,
+});
+const chartTimeWithSecondsFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone:CHART_TIME_ZONE, hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false,
+});
+const chartDateFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone:CHART_TIME_ZONE, day:"2-digit", month:"short",
+});
+const chartDateTimeFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone:CHART_TIME_ZONE, day:"2-digit", month:"short", year:"2-digit",
+  hour:"2-digit", minute:"2-digit", hour12:false,
+});
+function chartTimeToDate(time) {
+  if (typeof time === "number") return new Date(time * 1000);
+  if (time && typeof time === "object" && "year" in time) {
+    return new Date(Date.UTC(time.year, time.month - 1, time.day));
+  }
+  return new Date();
+}
+function formatChartTick(time) {
+  const d = chartTimeToDate(time);
+  return tf() === "1d" ? chartDateFmt.format(d) : chartTimeFmt.format(d);
+}
+function formatChartTooltipTime(time) {
+  const d = chartTimeToDate(time);
+  return tf() === "1d" ? chartDateFmt.format(d) : chartDateTimeFmt.format(d);
+}
+function applyChartTimeFormat() {
+  const timeOptions = {
+    localization:{ locale:"th-TH", timeFormatter:formatChartTooltipTime },
+    timeScale:{ borderColor:"#26313d", timeVisible:true, secondsVisible:tf() === "1m", tickMarkFormatter:formatChartTick },
+  };
+  [chart, rsiChart, macdChart].filter(Boolean).forEach(c => c.applyOptions(timeOptions));
+}
+function chartBaseOptions() {
+  const crosshairModes = {
+    normal: LightweightCharts.CrosshairMode.Normal,
+    magnet: LightweightCharts.CrosshairMode.Magnet,
+    hidden: LightweightCharts.CrosshairMode.Hidden,
+  };
+  const gridColor = chartStyle.gridVisible ? chartStyle.gridColor : "rgba(0,0,0,0)";
+  const crosshairHidden = chartStyle.crosshairMode === "hidden";
+  return {
+    layout:{ background:{ color:chartStyle.chartBg }, textColor:chartStyle.textColor },
+    grid:{ vertLines:{ color:gridColor }, horzLines:{ color:gridColor } },
+    crosshair:{
+      mode:crosshairModes[chartStyle.crosshairMode] ?? LightweightCharts.CrosshairMode.Normal,
+      vertLine:{ visible:!crosshairHidden && chartStyle.crosshairVertVisible, labelVisible:!crosshairHidden && chartStyle.crosshairVertVisible },
+      horzLine:{ visible:!crosshairHidden && chartStyle.crosshairHorzVisible, labelVisible:!crosshairHidden && chartStyle.crosshairHorzVisible },
+    },
+    rightPriceScale:{ borderColor:"#26313d" },
+    localization:{ locale:"th-TH", timeFormatter:formatChartTooltipTime },
+    timeScale:{ borderColor:"#26313d", timeVisible:true, secondsVisible:tf() === "1m", tickMarkFormatter:formatChartTick },
+  };
+}
+function saveChartStyle() {
+  localStorage.setItem("chartStyle", JSON.stringify(chartStyle));
+}
+function hydrateStyleControls() {
+  Object.entries(chartStyle).forEach(([key, value]) => {
+    const el = $("style_" + key) || (key === "chartType" ? $("chart_type") : null);
+    if (el) {
+      if (el.type === "checkbox") el.checked = Boolean(value);
+      else el.value = value;
+    }
+  });
+  if ($("chart_type")) $("chart_type").value = chartStyle.chartType;
+}
+function createPriceSeries() {
+  if (candleSeries && chart) {
+    priceLines = [];
+    chart.removeSeries(candleSeries);
+  }
+  const common = { priceLineVisible:true, lastValueVisible:true };
+  if (chartStyle.chartType === "bar") {
+    candleSeries = chart.addBarSeries({
+      ...common,
+      upColor:chartStyle.upColor,
+      downColor:chartStyle.downColor,
+    });
+  } else if (chartStyle.chartType === "area") {
+    candleSeries = chart.addAreaSeries({
+      ...common,
+      lineColor:chartStyle.upColor,
+      topColor:hexToRgba(chartStyle.upColor, .32),
+      bottomColor:hexToRgba(chartStyle.chartBg, .05),
+    });
+  } else if (chartStyle.chartType === "line") {
+    candleSeries = chart.addLineSeries({
+      ...common,
+      color:chartStyle.upColor,
+      lineWidth:2,
+    });
+  } else if (chartStyle.chartType === "baseline") {
+    candleSeries = chart.addBaselineSeries({
+      ...common,
+      baseValue:{ type:"price", price:latestChartData?.indicators?.summary?.ema20 || latestChartData?.candles?.at(-1)?.close || 0 },
+      topLineColor:chartStyle.upColor,
+      topFillColor1:hexToRgba(chartStyle.upColor, .30),
+      topFillColor2:hexToRgba(chartStyle.upColor, .05),
+      bottomLineColor:chartStyle.downColor,
+      bottomFillColor1:hexToRgba(chartStyle.downColor, .30),
+      bottomFillColor2:hexToRgba(chartStyle.downColor, .05),
+    });
+  } else {
+    candleSeries = chart.addCandlestickSeries({
+      ...common,
+      upColor:chartStyle.upColor,
+      downColor:chartStyle.downColor,
+      borderUpColor:chartStyle.upColor,
+      borderDownColor:chartStyle.downColor,
+      wickUpColor:chartStyle.wickUpColor,
+      wickDownColor:chartStyle.wickDownColor,
+    });
+  }
+  if (latestChartData) candleSeries.setData(priceData());
+}
+function applyPriceSeriesStyle() {
+  if (!candleSeries) return;
+  if (chartStyle.chartType === "bar") {
+    candleSeries.applyOptions({ upColor:chartStyle.upColor, downColor:chartStyle.downColor });
+  } else if (chartStyle.chartType === "area") {
+    candleSeries.applyOptions({
+      lineColor:chartStyle.upColor,
+      topColor:hexToRgba(chartStyle.upColor, .32),
+      bottomColor:hexToRgba(chartStyle.chartBg, .05),
+    });
+  } else if (chartStyle.chartType === "line") {
+    candleSeries.applyOptions({ color:chartStyle.upColor });
+  } else if (chartStyle.chartType === "baseline") {
+    candleSeries.applyOptions({
+      topLineColor:chartStyle.upColor,
+      topFillColor1:hexToRgba(chartStyle.upColor, .30),
+      topFillColor2:hexToRgba(chartStyle.upColor, .05),
+      bottomLineColor:chartStyle.downColor,
+      bottomFillColor1:hexToRgba(chartStyle.downColor, .30),
+      bottomFillColor2:hexToRgba(chartStyle.downColor, .05),
+    });
+  } else {
+    candleSeries.applyOptions({
+      upColor:chartStyle.upColor,
+      downColor:chartStyle.downColor,
+      borderUpColor:chartStyle.upColor,
+      borderDownColor:chartStyle.downColor,
+      wickUpColor:chartStyle.wickUpColor,
+      wickDownColor:chartStyle.wickDownColor,
+    });
+  }
+}
+function applyChartStyle() {
+  const base = chartBaseOptions();
+  [chart, rsiChart, macdChart].filter(Boolean).forEach(c => c.applyOptions(base));
+  if (volumeSeries) volumeSeries.applyOptions({ color:chartStyle.volumeColor });
+  if (emaFastSeries) emaFastSeries.applyOptions({ color:chartStyle.emaFastColor });
+  if (emaMidSeries) emaMidSeries.applyOptions({ color:chartStyle.emaMidColor });
+  if (emaSlowSeries) emaSlowSeries.applyOptions({ color:chartStyle.emaSlowColor });
+  if (bbUpperSeries) bbUpperSeries.applyOptions({ color:chartStyle.bbColor });
+  if (bbMidSeries) bbMidSeries.applyOptions({ color:hexToRgba(chartStyle.bbColor, .68) });
+  if (bbLowerSeries) bbLowerSeries.applyOptions({ color:chartStyle.bbColor });
+  if (rsiSeries) rsiSeries.applyOptions({ color:chartStyle.rsiColor });
+  if (stochKSeries) stochKSeries.applyOptions({ color:chartStyle.stochKColor });
+  if (stochDSeries) stochDSeries.applyOptions({ color:chartStyle.stochDColor });
+  if (macdLineSeries) macdLineSeries.applyOptions({ color:chartStyle.macdColor });
+  if (macdSignalSeries) macdSignalSeries.applyOptions({ color:chartStyle.signalColor });
+  applyPriceSeriesStyle();
+  renderIndicators();
+}
+function updateChartStyle(key, value) {
+  chartStyle[key] = value;
+  saveChartStyle();
+  applyChartStyle();
+}
+function resetIndicatorSettings() {
+  // 1) สี/สไตล์กราฟกลับค่าเริ่มต้น
+  chartStyle = { ...defaultChartStyle };
+  saveChartStyle();
+  hydrateStyleControls();
+  // 2) ค่า period อินดิเคเตอร์กลับค่าเริ่มต้น
+  Object.entries(defaultIndicatorSettings).forEach(([id, val]) => {
+    if ($(id)) $(id).value = val;
+  });
+  // 3) สวิตช์เปิด/ปิดอินดิเคเตอร์กลับค่าเริ่มต้น
+  Object.entries(defaultIndicatorToggles).forEach(([id, on]) => {
+    if ($(id)) $(id).checked = on;
+  });
+  // 4) วาดกราฟใหม่ตามชนิด/สีที่รีเซ็ต แล้วโหลดข้อมูลใหม่ด้วย period เริ่มต้น
+  createPriceSeries();
+  applyChartStyle();
+  loadChart({ preserveRange:true });
+}
+function setChartType(type) {
+  chartStyle.chartType = type;
+  saveChartStyle();
+  createPriceSeries();
+  renderPriceSeries();
+  if (cdcEnabled) renderCDC();
+}
+function renderPriceSeries() {
+  if (!latestChartData || !candleSeries) return;
+  candleSeries.setData(priceData());
+  renderVolume();
+  updateLivePositionOverlay();
+}
+function renderVolume() {
+  if (!latestChartData || !volumeSeries) return;
+  const volume = latestChartData.candles.map(c => ({
+    time:c.time,
+    value:c.volume,
+    color:c.close >= c.open ? hexToRgba(chartStyle.upColor, .24) : hexToRgba(chartStyle.downColor, .24),
+  }));
+  volumeSeries.setData($("showVolume").checked ? volume : []);
+}
+
+function hydrateBotPairs() {
+  const buttons = $("botTopPairs");
+  const list = $("botPairList");
+  if (!buttons || !list) return;
+  buttons.innerHTML = bitkubTopPairs.map(([symbol, name]) =>
+    `<button type="button" onclick="setBotSymbol('${symbol}')" title="${escapeHtml(name)}">${symbol.replace("_THB", "")} <span class="tiny">THB</span></button>`
+  ).join("");
+  list.innerHTML = bitkubTopPairs.map(([symbol, name]) =>
+    `<option value="${escapeHtml(symbol)}">${escapeHtml(name)}</option>`
+  ).join("");
+}
+
+function setBotSymbol(symbol) {
+  if ($("bot_symbol")) $("bot_symbol").value = symbol;
+  if ($("autoTradeStatus")) {
+    $("autoTradeStatus").innerHTML = `<div class="note">Selected ${escapeHtml(symbol)}. Press Start Bot or Run 1 Tick to test this pair.</div>`;
+  }
+}
 
 async function init() {
   const h = await fetch(API + "/api/health").then(r => r.json());
-  document.getElementById("providerBadge").textContent = "provider: " + h.data_provider;
-  document.getElementById("aiBadge").textContent = "AI: " + (h.ai_enabled ? h.model : "rule-based (ยังไม่ตั้งคีย์)");
-
-  const syms = await fetch(API + "/api/symbols").then(r => r.json());
-  const sel = document.getElementById("symbol");
-  syms.forEach(s => {
-    const o = document.createElement("option");
-    o.value = s.symbol; o.textContent = `${s.symbol} — ${s.name} [${s.market}]`;
-    sel.appendChild(o);
-  });
-
-  chart = LightweightCharts.createChart(document.getElementById("chart"), {
-    layout: { background: { color: "#0d1117" }, textColor: "#e6edf3" },
-    grid: { vertLines: { color: "#21262d" }, horzLines: { color: "#21262d" } },
-    timeScale: { timeVisible: true, borderColor: "#30363d" },
-    rightPriceScale: { borderColor: "#30363d" },
-    height: 420,
-  });
-  candleSeries = chart.addCandlestickSeries({
-    upColor: "#3fb950", downColor: "#f85149", borderVisible: false,
-    wickUpColor: "#3fb950", wickDownColor: "#f85149",
-  });
-  ema20Series = chart.addLineSeries({ color: "#2f81f7", lineWidth: 1, title: "EMA20" });
-  ema50Series = chart.addLineSeries({ color: "#d29922", lineWidth: 1, title: "EMA50" });
-
+  $("providerBadge").textContent = "provider: " + h.data_provider;
+  $("aiBadge").textContent = "AI: " + (h.ai_enabled ? `${h.ai_provider} (${h.model})` : "rule-based");
+  $("quickAssets").innerHTML = quickAssets.map(([s,m]) => `<button onclick="selectSymbol('${s}')">${s} <span class="tiny">${m}</span></button>`).join("");
+  hydrateBotPairs();
+  hydrateStyleControls();
+  setupCharts();
+  bindSearch();
+  hydrateLiveControls();
   await loadChart();
+  await refreshWatchlist();
   refreshAlerts();
-  setInterval(refreshQuote, 4000);
+  refreshTriggered();
+  refreshAutoTrade();
+  loadSchools();
+  quoteTimer = setInterval(refreshQuote, 1000);
+  watchTimer = setInterval(refreshWatchlist, 5000);
   setInterval(refreshTriggered, 8000);
+  autoTradeTimer = setInterval(refreshAutoTrade, 5000);
+  resetChartRefreshTimer();
+  renderChartLiveStatus();
 }
 
-function sym() { return document.getElementById("symbol").value; }
-function tf() { return document.getElementById("timeframe").value; }
+function setupCharts() {
+  const base = chartBaseOptions();
+  chart = LightweightCharts.createChart($("chart"), { ...base, width:$("chart").clientWidth, height:$("chart").clientHeight });
+  createPriceSeries();
+  volumeSeries = chart.addHistogramSeries({
+    priceFormat:{ type:"volume" }, priceScaleId:"", color:chartStyle.volumeColor,
+    scaleMargins:{ top:.82, bottom:0 }, lastValueVisible:false, priceLineVisible:false,
+  });
+  emaFastSeries = chart.addLineSeries({ color:chartStyle.emaFastColor, lineWidth:1, title:"EMA fast" });
+  emaMidSeries = chart.addLineSeries({ color:chartStyle.emaMidColor, lineWidth:1, title:"EMA mid" });
+  emaSlowSeries = chart.addLineSeries({ color:chartStyle.emaSlowColor, lineWidth:1, title:"EMA slow" });
+  bbUpperSeries = chart.addLineSeries({ color:chartStyle.bbColor, lineWidth:1, title:"BB upper" });
+  bbMidSeries = chart.addLineSeries({ color:hexToRgba(chartStyle.bbColor, .68), lineWidth:1, title:"BB mid" });
+  bbLowerSeries = chart.addLineSeries({ color:chartStyle.bbColor, lineWidth:1, title:"BB lower" });
 
-async function loadChart() {
-  const url = `${API}/api/candles?symbol=${encodeURIComponent(sym())}&timeframe=${tf()}&limit=300`;
-  const res = await fetch(url);
-  if (!res.ok) { alert("โหลดข้อมูลไม่สำเร็จ"); return; }
-  const data = await res.json();
-  const candles = data.candles.map(c => ({
-    time: c.time, open: c.open, high: c.high, low: c.low, close: c.close,
-  }));
-  candleSeries.setData(candles);
+  rsiChart = LightweightCharts.createChart($("rsiChart"), { ...base, width:$("rsiChart").clientWidth, height:$("rsiChart").clientHeight });
+  rsiSeries = rsiChart.addLineSeries({ color:chartStyle.rsiColor, lineWidth:1, title:"RSI" });
+  stochKSeries = rsiChart.addLineSeries({ color:chartStyle.stochKColor, lineWidth:1, title:"%K" });
+  stochDSeries = rsiChart.addLineSeries({ color:chartStyle.stochDColor, lineWidth:1, title:"%D" });
 
-  const ema = (arr) => data.candles
-    .map((c, i) => ({ time: c.time, value: arr[i] }))
-    .filter(p => p.value != null);
-  ema20Series.setData(ema(data.indicators.series.ema20));
-  ema50Series.setData(ema(data.indicators.series.ema50));
-  chart.timeScale().fitContent();
-  renderSummary(data.indicators.summary);
-  refreshQuote();
+  macdChart = LightweightCharts.createChart($("macdChart"), { ...base, width:$("macdChart").clientWidth, height:$("macdChart").clientHeight });
+  macdHistSeries = macdChart.addHistogramSeries({ color:chartStyle.volumeColor, title:"Hist" });
+  macdLineSeries = macdChart.addLineSeries({ color:chartStyle.macdColor, lineWidth:1, title:"MACD" });
+  macdSignalSeries = macdChart.addLineSeries({ color:chartStyle.signalColor, lineWidth:1, title:"Signal" });
+
+  cdcFastSeries = chart.addLineSeries({ color:"#ef4444", lineWidth:1, title:"CDC EMA12", lastValueVisible:false, priceLineVisible:false });
+  cdcSlowSeries = chart.addLineSeries({ color:"#3b82f6", lineWidth:1, title:"CDC EMA26", lastValueVisible:false, priceLineVisible:false });
+
+  chart.subscribeClick(onChartClick);
+  const resizeCharts = () => {
+    chart.applyOptions({ width:$("chart").clientWidth, height:$("chart").clientHeight });
+    rsiChart.applyOptions({ width:$("rsiChart").clientWidth, height:$("rsiChart").clientHeight });
+    macdChart.applyOptions({ width:$("macdChart").clientWidth, height:$("macdChart").clientHeight });
+    updateLivePositionOverlay();
+  };
+  const ro = new ResizeObserver(resizeCharts);
+  [$("chart"), $("rsiChart"), $("macdChart")].forEach(el => ro.observe(el));
+  window.addEventListener("orientationchange", () => setTimeout(resizeCharts, 250));
+  applyChartTimeFormat();
+}
+
+function bindSearch() {
+  const input = $("searchInput");
+  input.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    const q = input.value.trim();
+    if (!q) {
+      hideSearchResults();
+      return;
+    }
+    searchTimer = setTimeout(() => searchSymbols(), 180);
+  });
+  input.addEventListener("focus", () => {
+    if (input.value.trim()) searchSymbols();
+  });
+  input.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveSearchIndex(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveSearchIndex(-1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (searchRows.length) {
+        const idx = searchIndex >= 0 ? searchIndex : 0;
+        selectSearchResult(searchRows[idx].symbol);
+      } else {
+        searchSymbols();
+      }
+    } else if (e.key === "Escape") {
+      hideSearchResults();
+    }
+  });
+  $("watchInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") addWatchSymbol();
+  });
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".searchbox")) hideSearchResults();
+  });
+}
+
+async function searchSymbols() {
+  const q = $("searchInput").value.trim();
+  if (!q) {
+    hideSearchResults();
+    return;
+  }
+  const token = ++searchToken;
+  try {
+    const rows = await fetch(`${API}/api/search-symbols?${queryString({ q, limit:60 })}`).then(r => r.json());
+    if (token !== searchToken) return;
+    searchRows = rows;
+    searchIndex = rows.length ? 0 : -1;
+    renderSearchResults();
+  } catch (e) {
+    if (token !== searchToken) return;
+    searchRows = [];
+    searchIndex = -1;
+    $("searchResults").innerHTML = `<div class="result-row"><div><div class="symbol">Search unavailable</div><div class="name">Yahoo Finance did not respond.</div></div></div>`;
+    $("searchResults").style.display = "block";
+  }
+}
+
+function renderSearchResults() {
+  const box = $("searchResults");
+  box.innerHTML = "";
+  if (!searchRows.length) {
+    box.innerHTML = `<div class="result-row"><div><div class="symbol">No results</div></div></div>`;
+    box.style.display = "block";
+    return;
+  }
+  // สร้างปุ่มครั้งเดียว + ผูก event ด้วย addEventListener (ไม่ rebuild innerHTML ตอน hover
+  // เพื่อไม่ให้คลิกหลุดเพราะ DOM ถูกสร้างใหม่)
+  searchRows.forEach((item, idx) => {
+    const btn = document.createElement("button");
+    btn.className = "result-row" + (idx === searchIndex ? " active" : "");
+    btn.dataset.idx = idx;
+    btn.innerHTML =
+      `<div><div class="symbol">${escapeHtml(item.symbol)}</div>` +
+      `<div class="name">${escapeHtml(item.name || "")}</div></div>` +
+      `<span class="market">${escapeHtml(item.market || "")}</span>`;
+    btn.addEventListener("mouseenter", () => highlightSearchIndex(idx));
+    // mousedown กันไม่ให้ input เสีย focus ก่อน, click เป็นตัวเลือกจริง
+    btn.addEventListener("mousedown", e => e.preventDefault());
+    btn.addEventListener("click", () => selectSearchResult(item.symbol));
+    box.appendChild(btn);
+  });
+  box.style.display = "block";
+}
+
+function highlightSearchIndex(idx) {
+  searchIndex = idx;
+  const box = $("searchResults");
+  box.querySelectorAll(".result-row").forEach(el => {
+    el.classList.toggle("active", Number(el.dataset.idx) === idx);
+  });
+}
+
+function hideSearchResults() {
+  $("searchResults").style.display = "none";
+  searchRows = [];
+  searchIndex = -1;
+}
+
+function setSearchIndex(idx) {
+  highlightSearchIndex(idx);
+}
+
+function moveSearchIndex(delta) {
+  if (!searchRows.length) return;
+  const next = (searchIndex + delta + searchRows.length) % searchRows.length;
+  highlightSearchIndex(next);
+}
+
+function selectSearchResult(symbol) {
+  hideSearchResults();
+  selectSymbol(symbol);
+  if (!watchlist.includes(symbol)) {
+    watchlist.unshift(symbol);
+    saveWatchlist();
+    refreshWatchlist();
+  }
+}
+
+function clearAllSeries() {
+  if (candleSeries) { candleSeries.setData([]); candleSeries.setMarkers([]); }
+  [emaFastSeries, emaMidSeries, emaSlowSeries, bbUpperSeries, bbMidSeries, bbLowerSeries,
+   rsiSeries, stochKSeries, stochDSeries, macdLineSeries, macdSignalSeries, macdHistSeries,
+   volumeSeries, cdcFastSeries, cdcSlowSeries]
+    .filter(Boolean).forEach(series => series.setData([]));
+}
+
+async function selectSymbol(symbol) {
+  backtestMode = false;
+  closeRealtimeStream();
+  currentSymbol = symbol.trim().toUpperCase();
+  if (liveMode) {
+    latestLiveSignal = null;
+    clearLivePosition();
+    $("liveSignalBox").classList.remove("hidden");
+    $("liveSignalBox").innerHTML = `<div class="note">กำลังเปลี่ยน Live strategy เป็น ${escapeHtml(currentSymbol)} / ${escapeHtml(tf())}...</div>`;
+  }
+  $("searchInput").value = currentSymbol;
+  // เคลียร์กราฟเดิมทันที เพื่อให้เห็นว่ากำลังเปลี่ยน symbol (กันอาการ "เหมือนไม่มีอะไรเกิดขึ้น")
+  latestChartData = null;
+  clearAllSeries();
+  $("chartTitle").textContent = `${currentSymbol} / ${tf()}`;
+  $("activeBadge").textContent = `${currentSymbol} ${tf()}`;
+  $("chartStatus").textContent = `กำลังโหลด ${currentSymbol}...`;
+  $("summary").innerHTML = `<div class="stat"><span>สถานะ</span><b>กำลังโหลด ${escapeHtml(currentSymbol)}</b></div>`;
+  await loadChart({ fit:true });
+  resetChartRefreshTimer();
+  renderChartLiveStatus();
+  if (liveMode) refreshLiveSignal();
+}
+
+function activeChartRefreshMs() {
+  const symbol = currentSymbol.toUpperCase();
+  if (symbol.includes("-USD") || symbol.includes("=X") || symbol.includes("=F")) return 5000;
+  if (["1m", "5m"].includes(tf())) return 5000;
+  if (tf() === "15m") return 10000;
+  return 15000;
+}
+
+function selectedChartRefreshMs() {
+  if (refreshIntervalValue === "auto") return activeChartRefreshMs();
+  const ms = Number(refreshIntervalValue);
+  return Number.isFinite(ms) && ms >= 1000 ? ms : activeChartRefreshMs();
+}
+
+function formatRefreshInterval(ms) {
+  if (ms >= 60000 && ms % 60000 === 0) return `${ms / 60000}m`;
+  return `${Math.round(ms / 1000)}s`;
+}
+
+function updateAutoRefreshUi() {
+  const btn = $("autoRefreshBtn");
+  const select = $("refreshInterval");
+  if (!btn || !select) return;
+  select.value = refreshIntervalValue;
+  btn.textContent = backtestMode ? "Live Paused" : (autoRefreshEnabled ? "Live On" : "Live Off");
+  btn.classList.toggle("active", autoRefreshEnabled && !backtestMode);
+  btn.classList.toggle("off", !autoRefreshEnabled || backtestMode);
+}
+
+function hydrateLiveControls() {
+  if (!$("refreshInterval")) return;
+  const allowed = Array.from($("refreshInterval").options).map(o => o.value);
+  if (!allowed.includes(refreshIntervalValue)) refreshIntervalValue = "auto";
+  updateAutoRefreshUi();
+}
+
+function resetChartRefreshTimer() {
+  clearInterval(chartTimer);
+  chartTimer = null;
+  updateAutoRefreshUi();
+  if (backtestMode) {
+    $("chartStatus").textContent = "Backtest mode - Reload to return Live";
+    renderChartLiveStatus();
+    return;
+  }
+  if (!autoRefreshEnabled) {
+    $("chartStatus").textContent = "Live: off";
+    renderChartLiveStatus();
+    return;
+  }
+  const ms = selectedChartRefreshMs();
+  chartTimer = setInterval(() => loadChart({ preserveRange:true, silent:true }), ms);
+  $("chartStatus").textContent = `Live: every ${formatRefreshInterval(ms)}`;
+  renderChartLiveStatus();
+}
+
+function toggleAutoRefresh() {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  localStorage.setItem("autoRefreshEnabled", String(autoRefreshEnabled));
+  resetChartRefreshTimer();
+  if (autoRefreshEnabled && !backtestMode) loadChart({ preserveRange:true, silent:true });
+}
+
+function setRefreshInterval(value) {
+  refreshIntervalValue = value || "auto";
+  localStorage.setItem("refreshInterval", refreshIntervalValue);
+  resetChartRefreshTimer();
+}
+function onTimeframeChange() {
+  backtestMode = false;
+  closeRealtimeStream();
+  applyChartTimeFormat();
+  if (liveMode && liveStrategyParams) {
+    latestLiveSignal = null;
+    liveStrategyParams.timeframe = tf();
+    if ($("bt_timeframe")) $("bt_timeframe").value = tf();
+    clearLivePosition();
+    $("liveSignalBox").classList.remove("hidden");
+    $("liveSignalBox").innerHTML = `<div class="note">กำลังเปลี่ยน Live strategy เป็น ${escapeHtml(tf())}...</div>`;
+    renderChartLiveStatus();
+    refreshLiveSignal();
+  }
+  latestChartData = null;
+  if (candleSeries) candleSeries.setData([]);
+  [emaFastSeries, emaMidSeries, emaSlowSeries, bbUpperSeries, bbMidSeries, bbLowerSeries,
+   rsiSeries, stochKSeries, stochDSeries, macdLineSeries, macdSignalSeries, macdHistSeries, volumeSeries]
+    .filter(Boolean).forEach(series => series.setData([]));
+  loadChart({ fit:true });
+  resetChartRefreshTimer();
+  renderChartLiveStatus();
+}
+
+async function loadChart(options = {}) {
+  if (backtestMode && options.silent) return;   // อยู่โหมด backtest — อย่าให้ timer มาทับกราฟย้อนหลัง
+  if (chartInFlight && options.silent) return;
+  chartInFlight = true;
+  const token = ++chartLoadToken;
+  const visibleRange = options.preserveRange ? chart.timeScale().getVisibleLogicalRange() : null;
+  const params = { symbol:currentSymbol, timeframe:tf(), limit:500, ...indicatorParams() };
+  $("chartTitle").textContent = `${currentSymbol} / ${tf()}`;
+  $("activeBadge").textContent = `${currentSymbol} ${tf()}`;
+  if (!options.silent) $("chartStatus").textContent = "Live: loading";
+  try {
+    const res = await fetch(`${API}/api/candles?${queryString(params)}`);
+    if (token !== chartLoadToken) return;
+    if (!res.ok) {
+      const reason = res.status === 404
+        ? `ไม่พบข้อมูลของ ${escapeHtml(currentSymbol)} ใน timeframe ${tf()} (ลองเปลี่ยน timeframe หรือสัญลักษณ์)`
+        : `โหลดข้อมูลไม่สำเร็จ (HTTP ${res.status})`;
+      if (!options.silent) {
+        latestChartData = null;
+        clearAllSeries();
+        $("summary").innerHTML = `<div class="stat" style="grid-column:1 / -1;"><span>ผิดพลาด</span><b class="down">${reason}</b></div>`;
+      }
+      $("chartStatus").textContent = "Live: load failed";
+      closeRealtimeStream();
+      return;
+    }
+    latestChartData = await res.json();
+    renderPriceSeries();
+    renderIndicators();
+    renderSummary(latestChartData.indicators.summary);
+    if (options.preserveRange && visibleRange) {
+      chart.timeScale().setVisibleLogicalRange(visibleRange);
+      rsiChart.timeScale().setVisibleLogicalRange(visibleRange);
+      macdChart.timeScale().setVisibleLogicalRange(visibleRange);
+    } else {
+      chart.timeScale().fitContent();
+      rsiChart.timeScale().fitContent();
+      macdChart.timeScale().fitContent();
+    }
+    applyChartTimeFormat();
+    const updatedAt = new Date().toLocaleTimeString();
+    $("chartStatus").textContent = autoRefreshEnabled && !backtestMode
+      ? `Live: ${updatedAt}`
+      : `Live off: updated ${updatedAt}`;
+    renderChartLiveStatus();
+    startRealtimeStream();
+    refreshQuote();
+  } catch (e) {
+    if (!options.silent) {
+      $("summary").innerHTML = `<div class="stat" style="grid-column:1 / -1;"><span>ผิดพลาด</span><b class="down">เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — ตรวจว่า backend ทำงานอยู่</b></div>`;
+    }
+    $("chartStatus").textContent = "Live: update failed";
+    closeRealtimeStream();
+  } finally {
+    chartInFlight = false;
+  }
+}
+
+function renderIndicators() {
+  if (!latestChartData) return;
+  const s = latestChartData.indicators.series;
+  setLine(emaFastSeries, lineData(s.ema20), $("showEmaFast").checked);
+  setLine(emaMidSeries, lineData(s.ema50), $("showEmaMid").checked);
+  setLine(emaSlowSeries, lineData(s.sma200), $("showEmaSlow").checked);
+  const showBB = $("showBB").checked;
+  setLine(bbUpperSeries, lineData(s.bb_upper), showBB);
+  setLine(bbMidSeries, lineData(s.bb_mid), showBB);
+  setLine(bbLowerSeries, lineData(s.bb_lower), showBB);
+  setLine(rsiSeries, lineData(s.rsi14), $("showRSI").checked);
+  setLine(stochKSeries, lineData(s.stoch_k), $("showStoch").checked);
+  setLine(stochDSeries, lineData(s.stoch_d), $("showStoch").checked);
+  setLine(macdLineSeries, lineData(s.macd), $("showMACD").checked);
+  setLine(macdSignalSeries, lineData(s.macd_signal), $("showMACD").checked);
+  macdHistSeries.setData($("showMACD").checked ? lineData(s.macd_hist).map(p => ({
+    ...p, color:p.value >= 0 ? hexToRgba(chartStyle.upColor, .45) : hexToRgba(chartStyle.downColor, .45),
+  })) : []);
+  renderVolume();
+  renderCDC();
 }
 
 function renderSummary(s) {
-  const f = (k, v) => `<div><span>${k}:</span> ${v ?? "-"}</div>`;
-  document.getElementById("summary").innerHTML =
-    f("ราคา", s.price) + f("โครงสร้าง", s.structure) +
-    f("EMA20", s.ema20) + f("EMA50", s.ema50) +
-    f("RSI14", s.rsi14) + f("MACD hist", s.macd_hist) +
-    f("แนวรับ~", s.support_recent) + f("แนวต้าน~", s.resistance_recent) +
-    f("ราคา vs EMA20", s.price_vs_ema20) + f("Vol ล่าสุด/เฉลี่ย20", `${s.last_volume}/${s.avg_volume_20}`);
+  const item = (k, v) => `<div class="stat"><span>${k}</span><b>${v ?? "-"}</b></div>`;
+  $("summary").innerHTML =
+    item("Price", s.price) + item("Structure", s.structure) + item("EMA fast", s.ema20) + item("EMA mid", s.ema50) +
+    item("RSI", s.rsi14) + item("MACD hist", s.macd_hist) + item("Support", s.support_recent) + item("Resistance", s.resistance_recent);
 }
 
 async function refreshQuote() {
+  if (realtimeSocket && realtimeSocket.readyState === WebSocket.OPEN) return;
+  if (quoteInFlight) return;
+  quoteInFlight = true;
+  const sym = currentSymbol;   // จำ symbol ตอนเริ่ม กันราคาตัวเก่ามาแปะตัวใหม่
   try {
-    const q = await fetch(`${API}/api/quote?symbol=${encodeURIComponent(sym())}`).then(r => r.json());
-    const cls = q.change >= 0 ? "up" : "down";
-    document.getElementById("quote").innerHTML =
-      `ราคา <b>${q.price}</b> <span class="${cls}">${q.change >= 0 ? "▲" : "▼"} ${q.change} (${q.change_percent}%)</span>`;
-  } catch (e) {}
+    const q = await fetch(`${API}/api/quote?symbol=${encodeURIComponent(sym)}`).then(r => r.json());
+    if (sym !== currentSymbol) return;   // สลับ symbol ระหว่างรอ → ทิ้ง quote เก่า
+    updateQuoteBadge(q);
+    applyLiveQuote(q, "REST quote");
+  } catch (e) {
+  } finally {
+    quoteInFlight = false;
+  }
 }
 
-async function runAnalysis() {
-  const box = document.getElementById("report");
-  box.classList.remove("muted");
-  box.textContent = "⏳ กำลังวิเคราะห์… (อาจใช้เวลาสักครู่)";
-  try {
-    const res = await fetch(`${API}/api/analyze`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symbol: sym(), timeframe: tf() }),
+function updateQuoteBadge(q) {
+  const price = Number(q.price);
+  if (!Number.isFinite(price) || price === 0) {
+    $("activeBadge").textContent = `${currentSymbol} ${tf()}`;
+    return;
+  }
+  const cls = (q.change || 0) >= 0 ? "up" : "down";
+  $("activeBadge").innerHTML = `${currentSymbol} ${tf()} <span class="${cls}">${q.price} ${q.change_percent ?? 0}%</span>`;
+}
+
+function drawRealtimeCandle(index, candle) {
+  if (!latestChartData?.candles?.length || !candleSeries) return;
+  latestChartData.candles[index] = candle;
+  latestChartData.indicators.summary.price = Number(candle.close.toFixed ? candle.close.toFixed(6) : candle.close);
+  if (chartStyle.chartType === "heikinashi") {
+    candleSeries.setData(priceData());
+  } else {
+    const point = ["line", "area", "baseline"].includes(chartStyle.chartType)
+      ? { time:candle.time, value:candle.close }
+      : { time:candle.time, open:candle.open, high:candle.high, low:candle.low, close:candle.close };
+    candleSeries.update(point);
+  }
+  if (volumeSeries && $("showVolume")?.checked) {
+    volumeSeries.update({
+      time:candle.time,
+      value:candle.volume || 0,
+      color:candle.close >= candle.open ? hexToRgba(chartStyle.upColor, .24) : hexToRgba(chartStyle.downColor, .24),
     });
-    const data = await res.json();
-    box.textContent = data.report + "\n\n— แหล่งวิเคราะห์: " + data.source;
-    document.getElementById("disclaimer").textContent = data.disclaimer;
+  }
+  renderSummary(latestChartData.indicators.summary);
+}
+
+function animateRealtimeCandle(index, fromClose, target, source) {
+  cancelAnimationFrame(realtimeAnimationFrame);
+  const start = performance.now();
+  const duration = 260;
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const close = fromClose + (target.close - fromClose) * eased;
+    const frame = {
+      ...target,
+      close,
+      high:Math.max(target.high, close, fromClose),
+      low:Math.min(target.low, close, fromClose),
+    };
+    drawRealtimeCandle(index, frame);
+    if (t < 1) {
+      realtimeAnimationFrame = requestAnimationFrame(step);
+    } else if (!backtestMode) {
+      drawRealtimeCandle(index, target);
+      $("chartStatus").textContent = `${source}: ${new Date().toLocaleTimeString()}`;
+    }
+  };
+  realtimeAnimationFrame = requestAnimationFrame(step);
+}
+
+function applyRealtimePrice(price, timestampSec, volume = 0, source = "Realtime") {
+  if (!latestChartData?.candles?.length || !Number.isFinite(price) || price <= 0) return;
+  const step = timeframeSeconds();
+  const bucket = Math.floor((timestampSec || Date.now() / 1000) / step) * step;
+  const candles = latestChartData.candles;
+  let last = candles[candles.length - 1];
+  let index = candles.length - 1;
+  let target;
+
+  if (bucket > last.time) {
+    target = {
+      time:bucket,
+      open:last.close,
+      high:Math.max(last.close, price),
+      low:Math.min(last.close, price),
+      close:price,
+      volume:volume || 0,
+    };
+    candles.push({ ...target, close:last.close });
+    index = candles.length - 1;
+    animateRealtimeCandle(index, last.close, target, source);
+  } else {
+    target = {
+      ...last,
+      close:price,
+      high:Math.max(last.high, price),
+      low:Math.min(last.low, price),
+      volume:(last.volume || 0) + (volume || 0),
+    };
+    animateRealtimeCandle(index, last.close, target, source);
+  }
+
+  updateQuoteBadge({ symbol:currentSymbol, price, change:price - target.open, change_percent:target.open ? ((price - target.open) / target.open * 100).toFixed(2) : 0 });
+}
+
+function applyLiveQuote(q, source = "Quote") {
+  if (!latestChartData?.candles?.length || q.symbol?.toUpperCase() !== currentSymbol.toUpperCase()) return;
+  const price = Number(q.price);
+  if (!Number.isFinite(price)) return;
+  applyRealtimePrice(price, Number(q.time) || Math.floor(Date.now() / 1000), 0, source);
+}
+
+function setDrawTool(tool) {
+  drawTool = tool;
+  trendStart = null;
+  fibStart = null;
+  ["Select","Level","Trend","Fib"].forEach(name => {
+    const el = $("tool" + name);
+    if (el) el.classList.toggle("active", tool.toLowerCase() === name.toLowerCase());
+  });
+  $("chartStatus").textContent = tool === "fib"
+    ? "Fibonacci: คลิกจุดสูง แล้วคลิกจุดต่ำ"
+    : tool === "trend" ? "Trendline: คลิก 2 จุด"
+    : tool === "level" ? "Level: คลิกเพื่อวางเส้นแนวราคา"
+    : `Live: ${new Date().toLocaleTimeString()}`;
+}
+
+function drawFibonacci(priceA, priceB) {
+  const high = Math.max(priceA, priceB);
+  const low = Math.min(priceA, priceB);
+  const range = high - low;
+  if (range <= 0) return;
+  FIB_LEVELS.forEach(level => {
+    const p = high - range * level;
+    const emphasize = level === 0.5 || level === 0.618;
+    const color = level === 0 || level === 1 ? "#8b98a7"
+      : emphasize ? "#f59e0b" : "#22d3ee";
+    const line = candleSeries.createPriceLine({
+      price:Number(p.toFixed(6)),
+      color, lineWidth:emphasize ? 2 : 1, lineStyle:2,
+      axisLabelVisible:true, title:`Fib ${level}`,
+    });
+    priceLines.push(line);
+  });
+}
+
+function onChartClick(param) {
+  if (drawTool === "select" || !param.point || !param.time) return;
+  const price = candleSeries.coordinateToPrice(param.point.y);
+  if (price == null) return;
+  if (drawTool === "level") {
+    const line = candleSeries.createPriceLine({ price, color:"#22d3ee", lineWidth:1, lineStyle:2, axisLabelVisible:true, title:"Level" });
+    priceLines.push(line);
+  }
+  if (drawTool === "trend") {
+    const point = { time:param.time, value:price };
+    if (!trendStart) {
+      trendStart = point;
+      return;
+    }
+    const line = chart.addLineSeries({ color:"#22d3ee", lineWidth:2, priceLineVisible:false, lastValueVisible:false });
+    line.setData([trendStart, point]);
+    trendLines.push(line);
+    trendStart = null;
+  }
+  if (drawTool === "fib") {
+    if (fibStart == null) {
+      fibStart = price;
+      $("chartStatus").textContent = "Fibonacci: คลิกจุดที่สองเพื่อวาด";
+      return;
+    }
+    drawFibonacci(fibStart, price);
+    fibStart = null;
+    $("chartStatus").textContent = "Fibonacci: วาดเสร็จแล้ว";
+  }
+}
+
+function clearDrawings() {
+  priceLines.forEach(line => candleSeries.removePriceLine(line));
+  trendLines.forEach(line => chart.removeSeries(line));
+  priceLines = [];
+  trendLines = [];
+  trendStart = null;
+  fibStart = null;
+}
+
+function showTab(tab) {
+  ["report","strategy","image","schools","indicators","auto"].forEach(name => {
+    $(name + "Panel").classList.toggle("hidden", name !== tab);
+    $("tab" + name[0].toUpperCase() + name.slice(1)).classList.toggle("active", name === tab);
+  });
+}
+
+function loading(msg) {
+  $("result").innerHTML = `<div class="note">${msg}</div>`;
+  showTab("report");
+}
+
+function getActiveSchools() {
+  const active = [];
+  Object.entries(enabledSchools).forEach(([id, enabled]) => {
+    if (enabled) active.push(id);
+  });
+  return active.length > 0 ? active : null;
+}
+
+function getSchoolWeights() {
+  const weights = {};
+  let hasCustom = false;
+  Object.entries(schoolWeights).forEach(([id, w]) => {
+    if (w !== 1.0) hasCustom = true;
+    weights[id] = w;
+  });
+  return hasCustom ? weights : null;
+}
+
+async function runDataAnalysis() {
+  await loadChart();
+  loading("Analyzing...");
+  try {
+    const req = {
+      symbol:currentSymbol,
+      timeframe:tf(),
+      indicator_params:indicatorParams(),
+      enabled_schools:getActiveSchools(),
+      weights:getSchoolWeights(),
+    };
+    const res = await fetch(`${API}/api/analyze`, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(req),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    renderReport(await res.json());
+  } catch (e) { $("result").innerHTML = `<div class="down">${e.message || e}</div>`; }
+}
+
+function renderReport(r) {
+  const rows = r.verdicts.map(v => `
+    <tr>
+      <td><b>${v.name}</b> <span class="pill">${v.evaluator}</span></td>
+      <td class="${v.view === "up" ? "up" : v.view === "down" ? "down" : "neutral"}">${v.view}</td>
+      <td>${v.signal}</td>
+      <td>${v.confidence}%</td>
+      <td class="note">${v.rationale || ""}</td>
+    </tr>`).join("");
+  $("result").innerHTML = `
+    <div><b>Bias:</b> ${r.bias}</div>
+    <div class="gauge"><div class="g-up" style="width:${r.up_probability}%">Up ${r.up_probability}%</div><div class="g-down" style="width:${r.down_probability}%">Down ${r.down_probability}%</div></div>
+    <div class="note">${r.consensus_strength}</div>
+    <div class="note" style="margin:10px 0;">${r.psychology_summary || ""}</div>
+    ${r.suggested_plan ? `<div class="note" style="margin:10px 0;">${r.suggested_plan}</div>` : ""}
+    <div class="table-scroll"><table><thead><tr><th>School</th><th>View</th><th>Signal</th><th>Confidence</th><th>Reason</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="note" style="margin-top:10px;">${r.disclaimer}</div>`;
+}
+
+function previewImg() {
+  const f = $("imgFile").files[0];
+  if (!f) { $("imgPreview").style.display = "none"; return; }
+  $("imgPreview").src = URL.createObjectURL(f);
+  $("imgPreview").style.display = "block";
+}
+
+async function runImageAnalysis() {
+  const f = $("imgFile").files[0];
+  if (!f) return;
+  loading("Analyzing image...");
+  try {
+    const fd = new FormData();
+    fd.append("file", f);
+    if ($("imgSymbol").value) fd.append("symbol", $("imgSymbol").value);
+    if ($("imgTf").value) fd.append("timeframe", $("imgTf").value);
+    if ($("imgNote").value) fd.append("note", $("imgNote").value);
+    const res = await fetch(`${API}/api/analyze-image`, { method:"POST", body:fd });
+    if (!res.ok) throw new Error(await res.text());
+    renderReport(await res.json());
+  } catch (e) { $("result").innerHTML = `<div class="down">${e.message || e}</div>`; }
+}
+
+function saveWatchlist() {
+  watchlist = [...new Set(watchlist.map(s => s.trim().toUpperCase()).filter(Boolean))].slice(0, 40);
+  localStorage.setItem("watchlist", JSON.stringify(watchlist));
+}
+
+function addWatchSymbol() {
+  const s = $("watchInput").value.trim().toUpperCase();
+  if (!s) return;
+  if (!watchlist.includes(s)) watchlist.unshift(s);
+  $("watchInput").value = "";
+  saveWatchlist();
+  refreshWatchlist();
+}
+
+function removeWatchSymbol(symbol, event) {
+  event.stopPropagation();
+  watchlist = watchlist.filter(s => s !== symbol);
+  saveWatchlist();
+  refreshWatchlist();
+}
+
+async function refreshWatchlist() {
+  if (watchInFlight) return;
+  if (!watchlist.length) {
+    $("watchList").innerHTML = `<div class="note" style="padding:8px 10px;">Empty</div>`;
+    return;
+  }
+  watchInFlight = true;
+  try {
+    const quotes = await fetch(`${API}/api/quotes?symbols=${encodeURIComponent(watchlist.join(","))}`).then(r => r.json());
+    $("watchList").innerHTML = quotes.map(q => {
+      const cls = (q.change || 0) >= 0 ? "up" : "down";
+      const err = q.error ? `<span class="tiny">error</span>` : "";
+      return `<div class="watch-row ${q.symbol === currentSymbol ? "active" : ""}" onclick="selectSymbol('${q.symbol}')">
+        <div><div class="symbol">${q.symbol}</div>${err}</div>
+        <div class="price">${q.price ?? "-"}</div>
+        <div class="price ${cls}">${q.change_percent ?? "-"}%</div>
+        <button class="icon" onclick="removeWatchSymbol('${q.symbol}', event)">x</button>
+      </div>`;
+    }).join("");
+    $("watchUpdated").textContent = "Updated " + new Date().toLocaleTimeString();
   } catch (e) {
-    box.textContent = "เกิดข้อผิดพลาดในการวิเคราะห์: " + e;
+    $("watchUpdated").textContent = "Update failed: " + new Date().toLocaleTimeString();
+  } finally {
+    watchInFlight = false;
   }
 }
 
 async function addAlert() {
-  const value = parseFloat(document.getElementById("alertValue").value);
-  if (isNaN(value)) { alert("ใส่ค่าตัวเลข"); return; }
+  const value = parseFloat($("alertValue").value);
+  if (Number.isNaN(value)) return;
   await fetch(`${API}/api/alerts`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ symbol: sym(), kind: document.getElementById("alertKind").value,
-                           value, timeframe: tf() }),
+    method:"POST", headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ symbol:currentSymbol, kind:$("alertKind").value, value, timeframe:tf() }),
   });
-  document.getElementById("alertValue").value = "";
+  $("alertValue").value = "";
   refreshAlerts();
 }
 
 async function refreshAlerts() {
-  const rules = await fetch(`${API}/api/alerts`).then(r => r.json());
-  const el = document.getElementById("alertList");
-  if (!rules.length) { el.innerHTML = '<div class="muted">ยังไม่มีกฎ</div>'; return; }
-  el.innerHTML = rules.map(r =>
-    `<div class="alert-item row" style="justify-content:space-between;">
-       <span>${r.symbol} · ${r.kind} · ${r.value}</span>
-       <button onclick="delAlert('${r.id}')">ลบ</button>
-     </div>`).join("");
+  try {
+    const rules = await fetch(`${API}/api/alerts`).then(r => r.json());
+    $("alertList").innerHTML = rules.length ? rules.map(r => `
+      <div class="alert-item"><span>${r.symbol} ${r.kind} ${r.value}</span><button onclick="delAlert('${r.id}')">Delete</button></div>`).join("") : `<div class="note">None</div>`;
+  } catch (e) {
+    $("alertList").innerHTML = `<div class="note">Alerts unavailable</div>`;
+  }
 }
 
 async function delAlert(id) {
-  await fetch(`${API}/api/alerts/${id}`, { method: "DELETE" });
+  await fetch(`${API}/api/alerts/${id}`, { method:"DELETE" });
   refreshAlerts();
 }
 
 async function refreshTriggered() {
-  const t = await fetch(`${API}/api/alerts/triggered`).then(r => r.json());
-  const el = document.getElementById("triggeredList");
-  if (!t.length) { el.innerHTML = '<div class="muted">ยังไม่มี</div>'; return; }
-  el.innerHTML = t.map(x =>
-    `<div class="alert-item triggered">✓ ${x.message}</div>`).join("");
+  try {
+    const items = await fetch(`${API}/api/alerts/triggered`).then(r => r.json());
+    $("triggeredList").innerHTML = items.length ? items.map(x => `<div class="alert-item up">${x.message}</div>`).join("") : "None";
+  } catch (e) {
+    $("triggeredList").innerHTML = "Unavailable";
+  }
+}
+
+async function loadSchools() {
+  try {
+    const idx = await fetch(`${API}/api/schools`).then(r => r.json());
+    allSchools = idx.schools || [];
+
+    let saved = JSON.parse(localStorage.getItem("enabledSchools") || "{}");
+    let savedWeights = JSON.parse(localStorage.getItem("schoolWeights") || "{}");
+
+    enabledSchools = {};
+    schoolWeights = {};
+    allSchools.forEach(s => {
+      enabledSchools[s.id] = saved[s.id] !== undefined ? saved[s.id] : true;
+      schoolWeights[s.id] = savedWeights[s.id] || 1.0;
+    });
+
+    renderSchoolControls();
+    $("schoolList").innerHTML = allSchools.map(s => `<div class="alert-item"><span>${s.display_name}</span><span class="pill">${s.evaluator}</span></div>`).join("");
+  } catch (e) {}
+}
+
+function renderSchoolControls() {
+  const html = allSchools.map(s => {
+    const checked = enabledSchools[s.id] ? "checked" : "";
+    const weight = schoolWeights[s.id] || 1.0;
+    return `<div class="checkrow" style="padding:8px 0; border-bottom:1px solid var(--border);">
+      <div style="flex:1;">
+        <label style="display:flex; align-items:center; gap:8px; margin:0;">
+          <input type="checkbox" ${checked} onchange="toggleSchool('${s.id}', this.checked)" />
+          <span>${s.display_name}</span>
+          <span class="pill">${s.evaluator}</span>
+        </label>
+      </div>
+      <div style="display:flex; gap:4px; align-items:center;">
+        <input type="range" min="0.1" max="2" step="0.1" value="${weight}" onchange="setSchoolWeight('${s.id}', parseFloat(this.value))" style="width:80px; min-height:auto;" />
+        <span style="width:30px; text-align:right; font-size:12px; color:var(--muted);">${weight.toFixed(1)}x</span>
+      </div>
+    </div>`;
+  }).join("");
+  $("schoolControls").innerHTML = html;
+}
+
+function toggleSchool(id, enabled) {
+  enabledSchools[id] = enabled;
+  localStorage.setItem("enabledSchools", JSON.stringify(enabledSchools));
+  renderSchoolControls();
+}
+
+function setSchoolWeight(id, weight) {
+  schoolWeights[id] = weight;
+  localStorage.setItem("schoolWeights", JSON.stringify(schoolWeights));
+  renderSchoolControls();
+}
+
+function resetSchools() {
+  enabledSchools = {};
+  schoolWeights = {};
+  allSchools.forEach(s => {
+    enabledSchools[s.id] = true;
+    schoolWeights[s.id] = 1.0;
+  });
+  localStorage.setItem("enabledSchools", JSON.stringify(enabledSchools));
+  localStorage.setItem("schoolWeights", JSON.stringify(schoolWeights));
+  renderSchoolControls();
+}
+
+// ============================================================
+// ท่าไม้ตาย (Signature Strategy) — Backtest ย้อนหลังยาว
+// ============================================================
+function reloadLive() {
+  backtestMode = false;
+  latestLiveSignal = null;
+  if (candleSeries) candleSeries.setMarkers([]);
+  loadChart({ fit:true });
+  resetChartRefreshTimer();
+  renderChartLiveStatus();
+}
+
+// ============================================================
+// Live Trading Mode — เฝ้าสัญญาณเข้าจริงด้วยกลยุทธ์ที่ผ่าน backtest
+// ============================================================
+function strategyParamsFromForm() {
+  return {
+    timeframe: $("bt_timeframe").value,
+    entry_threshold: parseInt($("bt_entry").value) || 65,
+    rr_ratio: parseFloat($("bt_rr").value) || 1.8,
+    atr_mult: parseFloat($("bt_atr").value) || 1.5,
+    direction: $("bt_direction").value,
+    use_trend_filter: $("bt_trend").checked,
+    min_directional_weight: parseFloat($("bt_mdw").value) || 2.0,
+    indicator_params: indicatorParams(),
+    enabled_schools: getActiveSchools(),
+    weights: { ...(getSchoolWeights() || {}), ...(activePresetWeights || {}) },
+    account_size: parseFloat($("bt_account").value) || 1000,
+    risk_pct: parseFloat($("bt_risk").value) || 1.0,
+  };
+}
+
+function botStatusTime(ts) {
+  if (!ts) return "รอ tick แรก";
+  return new Date(ts * 1000).toLocaleTimeString();
+}
+
+function botSignalLabel(sig) {
+  if (!sig) return "กำลังเริ่มระบบ";
+  if (sig.status === "entry") return "พบจังหวะเข้า";
+  if (sig.status === "error") return "สัญญาณผิดพลาด";
+  return "รอ A+ setup";
+}
+
+function botLeadProb(sig) {
+  if (!sig) return "-";
+  const up = Number(sig.up_probability || 0);
+  const down = Number(sig.down_probability || 0);
+  const gate = sig.live_entry_threshold || sig.entry_threshold || "-";
+  const lead = Math.max(up, down);
+  return `${lead}% / ${gate}%`;
+}
+
+function renderAutoBotChartStatus(bot) {
+  const cfg = bot.config || {};
+  const sig = bot.latest_signal || null;
+  const trade = sig?.trade || null;
+  const openPositions = (bot.positions || []).filter(p => p.status === "open");
+  const latestPosition = openPositions[openPositions.length - 1];
+  const latestOrder = (bot.orders || [])[bot.orders.length - 1];
+  const latestEvent = (bot.events || [])[bot.events.length - 1];
+  const modeText = cfg.mode === "real" ? "REAL" : "PAPER";
+  const side = trade?.side || sig?.side || latestPosition?.side || "-";
+  const note = latestPosition
+    ? `มี position เปิดอยู่: ${latestPosition.side || "long"} entry ${latestPosition.entry} | TP ${latestPosition.take_profit} | SL ${latestPosition.stop_loss}`
+    : trade
+      ? `พบสัญญาณ ${side} ที่ entry ${trade.entry} | TP ${trade.take_profit} | SL ${trade.stop_loss} ระบบกำลังตรวจข้อจำกัดก่อนเปิด position`
+      : (sig?.watch_plan && sig.watch_plan[0])
+        || (sig?.reasons && sig.reasons[0])
+        || latestEvent?.message
+        || "Bot กำลังเฝ้าตลาดและจะขึ้นสัญญาณเมื่อผ่านเงื่อนไข";
+
+  return `
+    <div class="status-head">
+      <span><span class="status-dot"></span>Auto Bot Running</span>
+      <span class="status-badge">${escapeHtml(modeText)} · ${escapeHtml(botStatusTime(bot.updated_at))}</span>
+    </div>
+    <div class="status-grid">
+      <span>คู่เทรด</span><b>${escapeHtml(cfg.symbol || "-")} / ${escapeHtml(cfg.timeframe || "-")}</b>
+      <span>สถานะ AI</span><b>${escapeHtml(botSignalLabel(sig))}</b>
+      <span>ความแรง</span><b>${escapeHtml(botLeadProb(sig))}</b>
+      <span>Position</span><b class="${openPositions.length ? "up" : ""}">${openPositions.length ? `${openPositions.length} open` : "รอสัญญาณ"}</b>
+      <span>Risk/RR</span><b>${escapeHtml(cfg.risk_pct ?? "-")}% · 1:${escapeHtml(cfg.rr_ratio ?? "-")}</b>
+      <span>Order ล่าสุด</span><b>${latestOrder ? `${escapeHtml(latestOrder.side)} ${escapeHtml(latestOrder.status)}` : "-"}</b>
+    </div>
+    <div class="status-note">${escapeHtml(note)}${bot.last_error ? `<br><span class="down">${escapeHtml(bot.last_error)}</span>` : ""}</div>`;
+}
+
+function renderChartLiveStatus(state = latestLiveSignal) {
+  const box = $("chartLiveStatus");
+  if (!box) return;
+
+  const chartLive = !backtestMode && autoRefreshEnabled
+    ? `Chart live ${formatRefreshInterval(selectedChartRefreshMs())}`
+    : backtestMode ? "Backtest mode" : "Chart live off";
+  const symbolText = `${currentSymbol} / ${tf()}`;
+  let mode = "active";
+  let html = "";
+
+  if (latestAutoTradeState?.running) {
+    mode = "autobot";
+    html = renderAutoBotChartStatus(latestAutoTradeState);
+  } else if (backtestMode) {
+    mode = "backtest";
+    html = `
+      <div class="status-head"><span>Backtest Mode</span><span class="status-badge">${escapeHtml(symbolText)}</span></div>
+      <div class="status-note">กำลังดูผลย้อนหลังอยู่ กด Reload เพื่อกลับมาอัปเดตราคาจริง</div>`;
+  } else if (!liveMode) {
+    html = `
+      <div class="status-head"><span>System Active</span><span class="status-badge">${escapeHtml(chartLive)}</span></div>
+      <div class="status-grid">
+        <span>ตลาด</span><b>${escapeHtml(symbolText)}</b>
+        <span>Strategy monitor</span><b>Off</b>
+      </div>
+      <div class="status-note">ถ้าต้องการให้ระบบเฝ้าจังหวะเข้า ให้ Backtest กลยุทธ์แล้วกด Go Live</div>`;
+  } else if (state?.status === "error") {
+    mode = "error";
+    html = `
+      <div class="status-head"><span>Monitor Error</span><span class="status-badge">${escapeHtml(symbolText)}</span></div>
+      <div class="status-note">${escapeHtml(state.message || "Live signal update failed")}</div>`;
+  } else if (!state) {
+    mode = "waiting";
+    html = `
+      <div class="status-head"><span>Strategy Monitor</span><span class="status-badge">Active</span></div>
+      <div class="status-grid">
+        <span>ตลาด</span><b>${escapeHtml(symbolText)}</b>
+        <span>สถานะ</span><b>กำลังอ่านสัญญาณ</b>
+      </div>
+      <div class="status-note">ระบบกำลังตรวจเงื่อนไข A+ และจะขึ้น Entry เฉพาะเมื่อผ่านเกณฑ์จริง</div>`;
+  } else if (state.status === "entry" && state.trade) {
+    const side = state.trade.side || state.side || "-";
+    const isShort = side === "short";
+    mode = isShort ? "entry-short" : "entry-long";
+    const prob = isShort ? state.down_probability : state.up_probability;
+    html = `
+      <div class="status-head"><span>${isShort ? "SHORT Entry" : "LONG Entry"}</span><span class="status-badge">Signal live</span></div>
+      <div class="status-grid">
+        <span>ความมั่นใจ</span><b>${escapeHtml(prob ?? "-")}%</b>
+        <span>Entry</span><b>${escapeHtml(state.trade.entry)}</b>
+        <span>TP</span><b class="up">${escapeHtml(state.trade.take_profit)}</b>
+        <span>SL</span><b class="down">${escapeHtml(state.trade.stop_loss)}</b>
+      </div>
+      <div class="status-note">ลูกศร ENTRY อยู่บนแท่งสัญญาณ และกรอบ Position แสดงสัดส่วน TP/SL แล้ว</div>`;
+  } else {
+    mode = "waiting";
+    const gate = state.live_entry_threshold || state.entry_threshold || 65;
+    const up = Number(state.up_probability || 0);
+    const down = Number(state.down_probability || 0);
+    const leadSide = up >= down ? "Long" : "Short";
+    const leadProb = Math.max(up, down);
+    const plan = (state.watch_plan && state.watch_plan[0]) || (state.reasons && state.reasons[0]) || "รอให้ probability, น้ำหนักศาสตร์, trend filter และ RR ผ่านพร้อมกัน";
+    html = `
+      <div class="status-head"><span>Waiting A+ Setup</span><span class="status-badge">Monitor active</span></div>
+      <div class="status-grid">
+        <span>จับตาฝั่ง</span><b>${escapeHtml(leadSide)}</b>
+        <span>แรงตอนนี้</span><b>${escapeHtml(leadProb)}% / ${escapeHtml(gate)}%</b>
+        <span>น้ำหนักศาสตร์</span><b>${escapeHtml(state.directional_weight ?? "-")}/${escapeHtml(state.min_directional_weight ?? "-")}</b>
+        <span>RR Gate</span><b class="${state.rr_ok === false ? "down" : "up"}">${state.rr_ok === false ? "ต้อง >= 1.5" : "OK"}</b>
+      </div>
+      <div class="status-note">${escapeHtml(plan)}</div>`;
+  }
+
+  box.className = `chart-live-status ${mode}`;
+  box.innerHTML = html;
+}
+
+async function goLive() {
+  liveStrategyParams = strategyParamsFromForm();
+  liveMode = true;
+  backtestMode = false;
+  latestLiveSignal = null;
+  clearLivePosition();
+  renderChartLiveStatus();   // โชว์กล่อง "กำลังอ่านสัญญาณ" บนกราฟทันที
+  $("liveSignalBox").classList.remove("hidden");
+  $("liveSignalBox").innerHTML = `<div class="note">⏳ กำลังเฝ้าสัญญาณ...</div>`;
+  // ปรับกราฟหลักให้ตรง timeframe ของกลยุทธ์ แล้วรอโหลดกราฟให้เสร็จก่อน (กัน race + ให้ priceToCoordinate ใช้ได้)
+  $("timeframe").value = liveStrategyParams.timeframe;
+  if (candleSeries) candleSeries.setMarkers([]);
+  await loadChart({ fit:true });
+  resetChartRefreshTimer();
+  await refreshLiveSignal();
+  clearInterval(liveSignalTimer);
+  liveSignalTimer = setInterval(refreshLiveSignal, 10000);
+}
+
+function stopLive() {
+  liveMode = false;
+  clearInterval(liveSignalTimer);
+  liveSignalTimer = null;
+  clearLivePosition();
+  latestLiveSignal = null;
+  renderChartLiveStatus();
+  $("liveSignalBox").classList.add("hidden");
+}
+
+function clearLivePositionLines() {
+  livePositionLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch (_) {} });
+  livePositionLines = [];
+}
+
+function clearLivePositionOverlay() {
+  activeLiveTrade = null;
+  const overlay = $("positionOverlay");
+  if (!overlay) return;
+  overlay.classList.add("hidden");
+  overlay.innerHTML = "";
+}
+
+function clearLivePosition() {
+  clearLivePositionLines();
+  clearLivePositionOverlay();
+  if (liveMode && candleSeries) candleSeries.setMarkers([]);
+}
+
+function updateLivePositionOverlay() {
+  const overlay = $("positionOverlay");
+  if (!overlay || !activeLiveTrade || !candleSeries || !latestChartData?.candles?.length) return;
+  const trade = activeLiveTrade;
+  const entry = Number(trade.entry);
+  const tp = Number(trade.take_profit);
+  const sl = Number(trade.stop_loss);
+  if (![entry, tp, sl].every(Number.isFinite)) {
+    clearLivePositionOverlay();
+    return;
+  }
+  const yEntry = candleSeries.priceToCoordinate(entry);
+  const yTp = candleSeries.priceToCoordinate(tp);
+  const ySl = candleSeries.priceToCoordinate(sl);
+  if ([yEntry, yTp, ySl].some(v => v === null || v === undefined || Number.isNaN(v))) {
+    overlay.classList.add("hidden");
+    return;
+  }
+  const chartHeight = $("chart").clientHeight || overlay.clientHeight || 1;
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const entryY = clamp(yEntry, 0, chartHeight);
+  const rewardTop = clamp(Math.min(yEntry, yTp), 0, chartHeight);
+  const rewardBottom = clamp(Math.max(yEntry, yTp), 0, chartHeight);
+  const riskTop = clamp(Math.min(yEntry, ySl), 0, chartHeight);
+  const riskBottom = clamp(Math.max(yEntry, ySl), 0, chartHeight);
+  const top = Math.min(rewardTop, riskTop);
+  const bottom = Math.max(rewardBottom, riskBottom);
+  const rewardHeight = Math.max(18, rewardBottom - rewardTop);
+  const riskHeight = Math.max(18, riskBottom - riskTop);
+  const sideText = trade.side === "short" ? "SHORT" : "LONG";
+
+  overlay.innerHTML = `
+    <div class="position-box" style="top:${top}px; height:${Math.max(38, bottom - top)}px;">
+      <div class="position-zone reward" style="top:${rewardTop - top}px; height:${rewardHeight}px;">
+        <span>${sideText} TP</span><b>${escapeHtml(tp)}</b>
+      </div>
+      <div class="position-zone risk" style="top:${riskTop - top}px; height:${riskHeight}px;">
+        <span>SL</span><b>${escapeHtml(sl)}</b>
+      </div>
+      <div class="position-entry" style="top:${entryY - top}px;"></div>
+      <div class="position-label" style="top:${entryY - top}px;">Entry ${escapeHtml(entry)}</div>
+      <div class="position-label" style="top:${rewardTop - top}px; color:#22c55e;">Reward ${escapeHtml(trade.reward_per_unit ?? "")}</div>
+      <div class="position-label" style="top:${riskBottom - top}px; color:#ef4444;">Risk ${escapeHtml(trade.risk_per_unit ?? "")}</div>
+    </div>`;
+  overlay.classList.remove("hidden");
+}
+
+function drawLivePosition(trade, signal = null) {
+  clearLivePosition();
+  if (!trade || !candleSeries) return;
+  activeLiveTrade = trade;
+  if (signal?.as_of_time) {
+    const isShort = trade.side === "short";
+    candleSeries.setMarkers([{
+      time: signal.as_of_time,
+      position: isShort ? "aboveBar" : "belowBar",
+      color: isShort ? "#ef4444" : "#22c55e",
+      shape: isShort ? "arrowDown" : "arrowUp",
+      text: "ENTRY",
+    }]);
+  }
+  const mk = (price, color, title) => livePositionLines.push(candleSeries.createPriceLine({
+    price: Number(price), color, lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title,
+  }));
+  mk(trade.take_profit, "#22c55e", "🎯 TP");
+  mk(trade.entry, "#e2e8f0", "● Entry");
+  mk(trade.stop_loss, "#ef4444", "🛑 SL");
+  updateLivePositionOverlay();
+}
+
+async function refreshLiveSignal() {
+  if (!liveMode || !liveStrategyParams) return;
+  try {
+    const req = { symbol: currentSymbol, ...liveStrategyParams };
+    const res = await fetch(`${API}/api/live-signal`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) {
+      let msg = await res.text();
+      try { msg = JSON.parse(msg).detail || msg; } catch (_) {}
+      clearLivePosition();
+      latestLiveSignal = { status: "error", message: msg };
+      renderChartLiveStatus(latestLiveSignal);
+      $("liveSignalBox").innerHTML = `<div class="down">สัญญาณ live ผิดพลาด: ${escapeHtml(msg)}</div>
+        <div style="margin-top:8px;"><button onclick="stopLive()">■ หยุดเฝ้าสัญญาณ</button></div>`;
+      return;
+    }
+    renderLiveSignal(await res.json());
+  } catch (e) {
+    clearLivePosition();
+    latestLiveSignal = { status: "error", message: e.message || String(e) };
+    renderChartLiveStatus(latestLiveSignal);
+    $("liveSignalBox").innerHTML = `<div class="down">เชื่อมต่อไม่ได้: ${escapeHtml(e.message || e)}</div>
+      <div style="margin-top:8px;"><button onclick="stopLive()">■ หยุดเฝ้าสัญญาณ</button></div>`;
+  }
+}
+
+function renderLiveSignal(d) {
+  latestLiveSignal = d;            // sync กล่องสถานะบนกราฟ (chartLiveStatus) ให้ตรงสัญญาณล่าสุด
+  const isEntry = d.status === "entry";
+  const t = d.trade, sz = d.sizing;
+  const sideTxt = d.side === "long" ? "LONG (ซื้อ)" : d.side === "short" ? "SHORT (ขาย)" : "—";
+  const sideCls = d.side === "long" ? "up" : d.side === "short" ? "down" : "neutral";
+  const updated = new Date().toLocaleTimeString("th-TH");
+
+  // แถบความน่าจะเป็นขึ้น/ลง
+  const probBar = `
+    <div style="display:flex; height:10px; border-radius:5px; overflow:hidden; margin:6px 0;">
+      <div style="width:${d.up_probability}%; background:#22c55e;"></div>
+      <div style="width:${d.down_probability}%; background:#ef4444;"></div>
+    </div>
+    <div class="tiny" style="display:flex; justify-content:space-between;">
+      <span class="up">ขึ้น ${d.up_probability}%</span>
+      <span>เกณฑ์เข้า ${d.entry_threshold}% · น้ำหนัก ${d.directional_weight}/${d.min_directional_weight}</span>
+      <span class="down">ลง ${d.down_probability}%</span>
+    </div>`;
+
+  let body;
+  if (isEntry && t && sz) {
+    // กล่อง Position แบบ TradingView: สัดส่วนเขียว(กำไร)/แดง(ขาดทุน) ตาม RR
+    const rew = t.reward_per_unit, rsk = t.risk_per_unit;
+    const copyText =
+      `${d.symbol} ${d.side.toUpperCase()} (${d.timeframe})\n` +
+      `Entry: ${t.entry}\nTP: ${t.take_profit}\nSL: ${t.stop_loss}\n` +
+      `RR: 1:${t.rr_ratio}\nSize: ${sz.units} units (มูลค่า ~$${sz.position_value})\n` +
+      `Risk: $${sz.risk_amount} (${sz.risk_pct}% ของ $${sz.account_size}) | Reward: $${sz.reward_amount}`;
+    body = `
+      <div class="summary" style="padding:0; border:0; margin:8px 0;">
+        <div class="stat"><span>🎯 Take Profit</span><b class="up">${t.take_profit}</b></div>
+        <div class="stat"><span>● Entry (ราคาเข้า)</span><b>${t.entry}</b></div>
+        <div class="stat"><span>🛑 Stop Loss</span><b class="down">${t.stop_loss}</b></div>
+        <div class="stat"><span>Risk : Reward</span><b>1 : ${t.rr_ratio}</b></div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:stretch; margin:10px 0;">
+        <div style="display:flex; flex-direction:column; width:46px; border-radius:6px; overflow:hidden; min-height:90px;">
+          <div style="flex:${rew}; background:rgba(34,197,94,.35); display:flex; align-items:center; justify-content:center; font-size:10px; color:#22c55e;">กำไร</div>
+          <div style="height:2px; background:#e2e8f0;"></div>
+          <div style="flex:${rsk}; background:rgba(239,68,68,.35); display:flex; align-items:center; justify-content:center; font-size:10px; color:#ef4444;">เสี่ยง</div>
+        </div>
+        <div class="summary" style="padding:0; border:0; flex:1; margin:0;">
+          <div class="stat"><span>ขนาดโพสิชัน</span><b>${sz.units} units</b></div>
+          <div class="stat"><span>มูลค่าโพสิชัน</span><b>$${sz.position_value}</b></div>
+          <div class="stat"><span>เสี่ยง (${sz.risk_pct}%)</span><b class="down">-$${sz.risk_amount}</b></div>
+          <div class="stat"><span>เป้ากำไร</span><b class="up">+$${sz.reward_amount}</b></div>
+        </div>
+      </div>
+      <button class="primary" style="width:100%;" onclick='copyTradePlan(${JSON.stringify(copyText)})'>📋 คัดลอกแผนเทรด (ไปวางในแอป Trade)</button>`;
+  } else {
+    const reasons = (d.reasons || []).map(r => `<li>${escapeHtml(r)}</li>`).join("");
+    const watchItems = (d.watch_plan || []).map(r => `<li>${escapeHtml(r)}</li>`).join("");
+    const gate = d.live_entry_threshold || d.entry_threshold || 65;
+    const leadSide = d.up_probability >= d.down_probability ? "Long" : "Short";
+    const leadProb = Math.max(d.up_probability || 0, d.down_probability || 0);
+    body = `
+      <div class="summary" style="padding:0; border:0; margin:8px 0;">
+        <div class="stat"><span>จับตาฝั่ง</span><b>${leadSide}</b></div>
+        <div class="stat"><span>แรงสุดตอนนี้</span><b>${leadProb}% / ${gate}%</b></div>
+        <div class="stat"><span>น้ำหนักศาสตร์</span><b>${d.directional_weight}/${d.min_directional_weight}</b></div>
+        <div class="stat"><span>RR Gate</span><b class="${d.rr_ok ? "up" : "down"}">${d.rr_ok ? "ผ่าน" : "ต้อง >= 1.5"}</b></div>
+      </div>
+      <div class="note" style="padding:8px; border:1px solid var(--border); border-radius:8px; background:rgba(245,158,11,.06);">
+        <b>ยังไม่ใช่จังหวะเข้า A+</b>
+        <ul class="tiny" style="margin:8px 0 0; padding-left:18px; line-height:1.7;">${watchItems || reasons}</ul>
+      </div>`;
+  }
+
+  $("liveSignalBox").innerHTML = `
+    <div style="border:2px solid ${isEntry ? (d.side === "long" ? "#16a34a" : "#dc2626") : "#a16207"}; border-radius:10px; padding:12px; background:${isEntry ? (d.side === "long" ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)") : "rgba(234,179,8,.06)"};">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <b style="font-size:15px;" class="${isEntry ? sideCls : "neutral"}">
+          ${isEntry ? `⚡ เข้าออเดอร์ ${sideTxt}` : "⏳ รอสัญญาณ"}
+        </b>
+        <span class="tiny">${d.symbol} · ${d.timeframe} · ราคา ${d.last_price}</span>
+      </div>
+      ${probBar}
+      ${body}
+      <div class="tiny" style="margin-top:8px; display:flex; justify-content:space-between; color:var(--muted);">
+        <span>อัปเดตล่าสุด ${updated} · เฝ้าทุก 10 วิ</span>
+        <button onclick="stopLive()" style="padding:2px 8px;">■ หยุด</button>
+      </div>
+    </div>
+    <div class="tiny" style="margin-top:6px; color:var(--muted);">${escapeHtml(d.disclaimer)}</div>`;
+
+  if (isEntry) drawLivePosition(t, d); else clearLivePosition();
+  renderChartLiveStatus(d);        // อัปเดตกล่อง Strategy Monitor บนกราฟด้วยสัญญาณจริง
+}
+
+function copyTradePlan(text) {
+  navigator.clipboard.writeText(text).then(
+    () => { const b = event?.target; if (b) { const o = b.textContent; b.textContent = "✓ คัดลอกแล้ว!"; setTimeout(() => b.textContent = o, 1500); } },
+    () => alert("คัดลอกไม่สำเร็จ:\n\n" + text)
+  );
+}
+
+function autoTradeConfigFromForm() {
+  return {
+    exchange: "bitkub",
+    mode: $("bot_mode").value,
+    symbol: $("bot_symbol").value.trim().toUpperCase().replace("/", "_").replace("-", "_") || "BTC_THB",
+    timeframe: $("bot_timeframe").value,
+    poll_interval_sec: parseInt($("bot_poll").value) || 30,
+    quote_budget_thb: parseFloat($("bot_budget").value) || 10000,
+    risk_pct: parseFloat($("bot_risk").value) || 5,
+    max_daily_loss_pct: parseFloat($("bot_daily_loss").value) || 3,
+    max_open_positions: 1,
+    entry_threshold: parseInt($("bot_entry").value) || 65,
+    rr_ratio: parseFloat($("bot_rr").value) || 1.5,
+    atr_mult: parseFloat($("bot_atr").value) || 1.5,
+    direction: "long",
+    use_trend_filter: $("bot_trend").checked,
+    min_directional_weight: parseFloat($("bot_mdw").value) || 2,
+    indicator_params: indicatorParams(),
+    enabled_schools: getActiveSchools(),
+    weights: getSchoolWeights(),
+    real_confirm_text: $("bot_confirm").value || null,
+  };
+}
+
+async function startAutoTrade() {
+  const box = $("autoTradeStatus");
+  box.innerHTML = `<div class="note">Starting bot...</div>`;
+  const cfg = autoTradeConfigFromForm();
+  latestAutoTradeState = {
+    running: true,
+    config: cfg,
+    positions: [],
+    orders: [],
+    events: [{ level:"info", message:"Auto bot starting", time:Math.floor(Date.now() / 1000) }],
+    latest_signal: null,
+    started_at: Math.floor(Date.now() / 1000),
+    updated_at: null,
+  };
+  renderChartLiveStatus();
+  try {
+    const res = await fetch(`${API}/api/autotrade/start`, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(cfg),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    renderAutoTrade(await res.json());
+    showTab("auto");
+  } catch (e) {
+    box.innerHTML = `<div class="down">Start failed: ${escapeHtml(e.message || e)}</div>`;
+    latestAutoTradeState = { ...latestAutoTradeState, running:false, last_error:e.message || String(e) };
+    renderChartLiveStatus();
+  }
+}
+
+async function stopAutoTrade() {
+  try {
+    const res = await fetch(`${API}/api/autotrade/stop`, { method:"POST" });
+    renderAutoTrade(await res.json());
+  } catch (e) {
+    $("autoTradeStatus").innerHTML = `<div class="down">Stop failed: ${escapeHtml(e.message || e)}</div>`;
+  }
+}
+
+async function tickAutoTrade() {
+  const box = $("autoTradeStatus");
+  box.innerHTML = `<div class="note">Running one bot tick...</div>`;
+  if (latestAutoTradeState?.running) {
+    latestAutoTradeState = {
+      ...latestAutoTradeState,
+      events: [...(latestAutoTradeState.events || []), { level:"info", message:"Running manual tick", time:Math.floor(Date.now() / 1000) }],
+    };
+    renderChartLiveStatus();
+  }
+  try {
+    const res = await fetch(`${API}/api/autotrade/tick`, { method:"POST" });
+    if (!res.ok) throw new Error(await res.text());
+    renderAutoTrade(await res.json());
+  } catch (e) {
+    box.innerHTML = `<div class="down">Tick failed: ${escapeHtml(e.message || e)}</div>`;
+  }
+}
+
+async function refreshAutoTrade() {
+  if (!$("autoTradeStatus")) return;
+  try {
+    const res = await fetch(`${API}/api/autotrade/status`);
+    if (!res.ok) throw new Error(await res.text());
+    renderAutoTrade(await res.json());
+  } catch (e) {
+    $("autoTradeStatus").innerHTML = `<div class="note">Bot status unavailable</div>`;
+    if (latestAutoTradeState?.running) {
+      latestAutoTradeState = { ...latestAutoTradeState, last_error:"Bot status unavailable" };
+      renderChartLiveStatus();
+    }
+  }
+}
+
+function renderAutoTrade(s) {
+  latestAutoTradeState = s;
+  renderChartLiveStatus();
+  const cfg = s.config || {};
+  const sig = s.latest_signal || {};
+  const trade = sig.trade || {};
+  const positions = s.positions || [];
+  const orders = s.orders || [];
+  const events = s.events || [];
+  if ($("chartStatus") && s.running) {
+    $("chartStatus").textContent = `Auto Bot: ${cfg.symbol || "-"} ${cfg.timeframe || "-"} · ${s.latest_signal?.status || "waiting"}`;
+  } else if ($("chartStatus")?.textContent.startsWith("Auto Bot")) {
+    $("chartStatus").textContent = backtestMode
+      ? "Backtest mode - Reload to return Live"
+      : autoRefreshEnabled ? `Live: every ${formatRefreshInterval(selectedChartRefreshMs())}` : "Live: off";
+  }
+  const statusCls = s.running ? "up" : "neutral";
+  const modeCls = cfg.mode === "real" ? "down" : "up";
+  const stat = (label, value, cls="") => `<div class="stat"><span>${label}</span><b class="${cls}">${escapeHtml(value ?? "-")}</b></div>`;
+  const posRows = positions.slice(-10).reverse().map(p => `
+    <tr>
+      <td>${escapeHtml(p.symbol)}</td><td>${escapeHtml(p.status)}</td><td>${escapeHtml(p.entry)}</td>
+      <td>${escapeHtml(p.take_profit)}</td><td>${escapeHtml(p.stop_loss)}</td>
+      <td class="${Number(p.unrealized_pnl_thb || p.realized_pnl_thb || 0) >= 0 ? "up" : "down"}">${escapeHtml(p.realized_pnl_thb ?? p.unrealized_pnl_thb ?? 0)}</td>
+    </tr>`).join("");
+  const orderRows = orders.slice(-10).reverse().map(o => `
+    <tr>
+      <td>${new Date((o.time || 0) * 1000).toLocaleTimeString()}</td><td>${escapeHtml(o.side)}</td>
+      <td>${escapeHtml(o.status)}</td><td>${escapeHtml(o.price)}</td><td>${escapeHtml(o.qty)}</td><td>${escapeHtml(o.notional_thb)}</td>
+    </tr>`).join("");
+  const eventRows = events.slice(-8).reverse().map(e => `
+    <div class="alert-item"><span>${escapeHtml(e.message)}</span><span class="pill">${escapeHtml(e.level)}</span></div>`).join("");
+
+  $("autoTradeStatus").innerHTML = `
+    <div class="summary" style="padding:0; border:0; margin-bottom:10px;">
+      ${stat("Bot", s.running ? "Running" : "Stopped", statusCls)}
+      ${stat("Mode", cfg.mode || "paper", modeCls)}
+      ${stat("Pair", cfg.symbol || "-")}
+      ${stat("TF", cfg.timeframe || "-")}
+      ${stat("Signal", sig.status || "-")}
+      ${stat("Side", sig.side || "-")}
+      ${stat("Prob", sig.up_probability != null ? `${sig.up_probability}% / ${sig.live_entry_threshold || sig.entry_threshold}%` : "-")}
+      ${stat("P/L THB", s.realized_pnl_thb ?? 0, Number(s.realized_pnl_thb || 0) >= 0 ? "up" : "down")}
+    </div>
+    ${cfg.mode === "real" ? `<div class="note" style="border:1px solid #ef4444; padding:8px; border-radius:8px; margin-bottom:10px;">Real mode จะยิงคำสั่ง Bitkub จริงได้เฉพาะเมื่อ backend เปิด BITKUB_REAL_TRADING_ENABLED=true และใส่ confirm text ถูกต้อง</div>` : ""}
+    <div class="note" style="margin-bottom:8px;">
+      ${sig.status === "entry" ? `Entry ${escapeHtml(trade.entry)} / TP ${escapeHtml(trade.take_profit)} / SL ${escapeHtml(trade.stop_loss)}` : escapeHtml((sig.watch_plan || sig.reasons || ["รอสัญญาณ"])[0])}
+      ${s.last_error ? `<br><span class="down">Error: ${escapeHtml(s.last_error)}</span>` : ""}
+    </div>
+    <h3>Positions</h3>
+    <div class="table-scroll" style="max-height:210px;"><table><thead><tr><th>Pair</th><th>Status</th><th>Entry</th><th>TP</th><th>SL</th><th>P/L</th></tr></thead><tbody>${posRows || `<tr><td colspan="6" class="tiny">No positions</td></tr>`}</tbody></table></div>
+    <h3 style="margin-top:12px;">Orders</h3>
+    <div class="table-scroll" style="max-height:210px;"><table><thead><tr><th>Time</th><th>Side</th><th>Status</th><th>Price</th><th>Qty</th><th>THB</th></tr></thead><tbody>${orderRows || `<tr><td colspan="6" class="tiny">No orders</td></tr>`}</tbody></table></div>
+    <h3 style="margin-top:12px;">Bot Events</h3>
+    <div>${eventRows || `<div class="note">No events</div>`}</div>`;
+}
+
+const BT_PRESETS = {
+  winrate:  { entry:60, rr:0.5, atr:2.5, dir:"long", hold:60, mdw:2.0, trend:true,
+              note:"ชนะบ่อย 60-67% บนหุ้นเทรนด์ขึ้น (AAPL/NVDA/GOOGL/AMZN). เหมาะกับของที่เป็นขาขึ้น — เน้นจำนวนไม้ชนะ ทบต้นด้วย winrate สูง." },
+  winmax:   { entry:70, rr:0.5, atr:2.0, dir:"long", hold:60, mdw:2.0, trend:true,
+              note:"เน้น %ชนะสูงสุด ~66% คัดเฉพาะฉันทามติแรง (>=70). เทรดน้อยลงแต่แม่นขึ้น กำไร/ไม้เล็ก." },
+  sniper:   { entry:85, rr:3.0, atr:2.0, dir:"long", hold:120, mdw:5.0, trend:true,
+              note:"สไนเปอร์: ยิงน้อย ~4 ไม้/ปี (หลายศาสตร์เห็นพ้องแรงมาก). ชนะ ~38% แต่ไม้ชนะใหญ่ 3 เท่า → กำไรรวม +350%, edge/ไม้สูงสุด (expectancy 0.43R). โอกาสต่อจังหวะคุ้มสุด." },
+  snipebal: { entry:85, rr:1.2, atr:2.5, dir:"long", hold:120, mdw:5.0, trend:true,
+              note:"สไนเปอร์สมดุล: ยิงน้อย ~4 ไม้/ปี แต่ชนะ ~50% (RR 1.2). ลูกผสมระหว่างชนะบ่อย + กำไรต่อไม้ดี (+167%)." },
+  coach:    { entry:70, rr:2.5, atr:2.0, dir:"long", hold:80, mdw:2.5, trend:true,
+              tf:"1h", emaSlow:80, weights:{ mmc_liquidity:2.0, support_resistance:1.5 },
+              note:"สไตล์ Coach James (MMC/ทอง): EMA80 เป็นแนวรับ-ต้าน + Liquidity Sweep (เจ้ามือกวาด stop แล้วเด้ง). เหมาะกับ XAUUSD/GC=F บน 1h. WR ~33% แต่ RR 2.5 → +25% ใน 2 ปี. กดแล้วเลือกสัญลักษณ์ทองก่อนรัน." },
+  balanced: { entry:65, rr:1.8, atr:1.5, dir:"both", hold:60, mdw:2.0, trend:true,
+              note:"สมดุล: winrate ~40-45% แต่ไม้ชนะใหญ่กว่าไม้แพ้มาก (RR 1.8) — กำไรรวมมาจากไม้ใหญ่ ไม่ใช่ความถี่ชนะ." },
+};
+
+let activePresetWeights = null;   // น้ำหนักศาสตร์ที่ preset กำหนด (merge ตอนรัน)
+
+function applyPreset(name) {
+  const p = BT_PRESETS[name];
+  if (!p) return;
+  $("bt_entry").value = p.entry;
+  $("bt_rr").value = p.rr;
+  $("bt_atr").value = p.atr;
+  $("bt_direction").value = p.dir;
+  $("bt_hold").value = p.hold;
+  $("bt_mdw").value = p.mdw;
+  $("bt_trend").checked = p.trend;
+  if (p.tf) $("bt_timeframe").value = p.tf;
+  // EMA slow (ใช้เป็น Trend Filter); ถ้า preset ไม่ระบุ คืนค่า default 200
+  if ($("ema_slow")) $("ema_slow").value = p.emaSlow || 200;
+  activePresetWeights = p.weights || null;
+  $("presetNote").textContent = "✓ ตั้งค่าแล้ว: " + p.note;
+}
+
+async function runBacktest() {
+  const btn = event?.target;
+  const box = $("backtestResult");
+  box.innerHTML = `<div class="note">⏳ กำลังดึงข้อมูลย้อนหลังและจำลองระบบ... (ข้อมูลยิ่งยาวยิ่งใช้เวลา)</div>`;
+  if (btn) btn.disabled = true;
+  try {
+    const req = {
+      symbol: currentSymbol,
+      timeframe: $("bt_timeframe").value,
+      entry_threshold: parseInt($("bt_entry").value) || 65,
+      rr_ratio: parseFloat($("bt_rr").value) || 1.8,
+      atr_mult: parseFloat($("bt_atr").value) || 1.5,
+      direction: $("bt_direction").value,
+      use_trend_filter: $("bt_trend").checked,
+      min_directional_weight: parseFloat($("bt_mdw").value) || 2.0,
+      max_hold_bars: parseInt($("bt_hold").value) || 60,
+      indicator_params: indicatorParams(),
+      enabled_schools: getActiveSchools(),
+      weights: { ...(getSchoolWeights() || {}), ...(activePresetWeights || {}) },
+    };
+    const res = await fetch(`${API}/api/backtest`, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(req),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt);
+    }
+    const data = await res.json();
+    applyBacktestToChart(data);
+    renderBacktestStats(data);
+  } catch (e) {
+    let msg = e.message || String(e);
+    try { msg = JSON.parse(msg).detail || msg; } catch (_) {}
+    box.innerHTML = `<div class="down">รัน Backtest ไม่สำเร็จ: ${escapeHtml(msg)}</div>`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function applyBacktestToChart(data) {
+  if (liveMode) stopLive();
+  // โหลดประวัติยาวเข้าไปในกราฟหลัก + ปักจุดเข้า/ออก แล้วหยุด live ไม่ให้มาทับ
+  backtestMode = true;
+  closeRealtimeStream();
+  latestLiveSignal = null;
+  clearInterval(chartTimer);
+  chartTimer = null;
+  updateAutoRefreshUi();
+  if (cdcEnabled) toggleCDC();   // ปิด CDC เพื่อไม่ให้ทับสีแท่ง/markers
+  latestChartData = { candles: data.chart.candles, indicators: data.chart.indicators };
+  renderPriceSeries();
+  renderIndicators();
+  renderSummary(data.chart.indicators.summary);
+  if (candleSeries) candleSeries.setMarkers(data.markers || []);
+  chart.timeScale().fitContent();
+  rsiChart.timeScale().fitContent();
+  macdChart.timeScale().fitContent();
+  renderChartLiveStatus();
+  $("chartTitle").textContent = `${data.symbol} / ${data.timeframe} · BACKTEST`;
+  $("chartStatus").textContent = `Backtest ${data.trades.length} เทรด — กด Reload เพื่อกลับ Live`;
+}
+
+function fmtDate(ts) {
+  return new Date(ts * 1000).toLocaleDateString("th-TH", { year:"numeric", month:"short", day:"numeric" });
+}
+
+function renderBacktestStats(data) {
+  const s = data.stats;
+  if (!s.total_trades) {
+    $("backtestResult").innerHTML = `<div class="note">ไม่มีการเข้าเทรดในเงื่อนไขนี้เลย — ลองลดเกณฑ์เข้า หรือปิด Trend Filter</div>`;
+    showTab("strategy");
+    return;
+  }
+  const wr = s.win_rate;
+  const wrCls = wr >= 55 ? "up" : wr >= 45 ? "neutral" : "down";
+  const retCls = s.total_return_pct >= 0 ? "up" : "down";
+  const vsHold = s.total_return_pct - s.buy_hold_return_pct;
+  const stat = (label, val, cls) => `<div class="stat"><span>${label}</span><b class="${cls||""}">${val}</b></div>`;
+
+  const strengthRows = (data.by_strength || []).map(b => `
+    <tr>
+      <td>${b.range}</td>
+      <td>${b.trades}</td>
+      <td class="${b.win_rate >= 55 ? "up" : b.win_rate >= 45 ? "neutral" : "down"}">${b.win_rate}%</td>
+      <td class="${b.avg_pnl_pct >= 0 ? "up" : "down"}">${b.avg_pnl_pct >= 0 ? "+" : ""}${b.avg_pnl_pct}%</td>
+    </tr>`).join("");
+
+  const best = [...(data.by_strength || [])].sort((a,b) => b.win_rate - a.win_rate)[0];
+
+  const recent = data.trades.slice(-25).reverse().map(t => `
+    <tr>
+      <td>${fmtDate(t.entry_time)}</td>
+      <td class="${t.side === "long" ? "up" : "down"}">${t.side === "long" ? "Long" : "Short"}</td>
+      <td>${t.confluence}%</td>
+      <td>${t.entry_price}</td>
+      <td>${t.exit_price}</td>
+      <td class="${t.win ? "up" : "down"}">${t.pnl_pct >= 0 ? "+" : ""}${t.pnl_pct}%</td>
+      <td>${t.r_multiple}R</td>
+      <td class="tiny">${t.exit_reason}</td>
+    </tr>`).join("");
+
+  $("backtestResult").innerHTML = `
+    <div style="margin-bottom:10px; padding:10px; border:1px solid #16a34a; border-radius:8px; background:rgba(34,197,94,.08);">
+      <div class="tiny" style="margin-bottom:6px;">พอใจกลยุทธ์นี้แล้ว? เริ่มเฝ้าสัญญาณเข้าจริงด้วยพารามิเตอร์ชุดนี้:</div>
+      <button class="primary" style="width:100%; background:#16a34a;" onclick="goLive()">🎯 ใช้กลยุทธ์นี้ — เฝ้าสัญญาณเข้า (Go Live)</button>
+    </div>
+    <div class="note" style="margin-bottom:8px;">
+      <b>${data.symbol}</b> · ${data.timeframe} · ทดสอบ ${data.bars_tested} แท่ง
+      (${fmtDate(data.period_start)} → ${fmtDate(data.period_end)})
+    </div>
+    <div class="summary" style="padding:0; border:0; margin-bottom:10px;">
+      ${stat("Win rate", wr + "%", wrCls)}
+      ${stat("เทรดทั้งหมด", s.total_trades + ` (L${s.long_trades}/S${s.short_trades})`)}
+      ${stat("Profit Factor", s.profit_factor)}
+      ${stat("ผลตอบแทนรวม", (s.total_return_pct >= 0 ? "+" : "") + s.total_return_pct + "%", retCls)}
+      ${stat("Max Drawdown", "-" + s.max_drawdown_pct + "%", "down")}
+      ${stat("Expectancy", s.expectancy_r + "R", s.expectancy_r >= 0 ? "up" : "down")}
+      ${stat("กำไรเฉลี่ย/ไม้ชนะ", "+" + s.avg_win_pct + "%", "up")}
+      ${stat("ขาดทุนเฉลี่ย/ไม้แพ้", s.avg_loss_pct + "%", "down")}
+      ${stat("Buy & Hold", (s.buy_hold_return_pct >= 0 ? "+" : "") + s.buy_hold_return_pct + "%")}
+      ${stat("ชนะ Buy&Hold", (vsHold >= 0 ? "+" : "") + vsHold.toFixed(2) + "%", vsHold >= 0 ? "up" : "down")}
+      ${stat("ถือเฉลี่ย", s.avg_hold_bars + " แท่ง")}
+      ${stat("ไม้ดี/แย่สุด", "+" + s.best_trade_pct + "% / " + s.worst_trade_pct + "%")}
+    </div>
+
+    ${best ? `<div class="note" style="margin:8px 0; padding:8px; border:1px solid var(--border); border-radius:8px;">
+      💡 <b>setup ที่ชนะสูงสุด:</b> เมื่อฉันทามติอยู่ช่วง <b>${best.range}</b> →
+      ชนะ <b class="up">${best.win_rate}%</b> (${best.trades} เทรด, เฉลี่ย ${best.avg_pnl_pct >= 0 ? "+" : ""}${best.avg_pnl_pct}%/ไม้)
+    </div>` : ""}
+
+    <h3 style="margin:12px 0 6px;">อัตราชนะตามความแรงฉันทามติ</h3>
+    <div class="table-scroll" style="max-height:none;">
+      <table><thead><tr><th>ช่วงคะแนน</th><th>เทรด</th><th>Win rate</th><th>เฉลี่ย/ไม้</th></tr></thead>
+      <tbody>${strengthRows}</tbody></table>
+    </div>
+
+    <h3 style="margin:12px 0 6px;">เทรดล่าสุด (25 ไม้)</h3>
+    <div class="table-scroll">
+      <table><thead><tr><th>วันเข้า</th><th>ทิศ</th><th>คะแนน</th><th>เข้า</th><th>ออก</th><th>กำไร</th><th>R</th><th>ออกเพราะ</th></tr></thead>
+      <tbody>${recent}</tbody></table>
+    </div>
+
+    <div class="note" style="margin-top:10px;">${escapeHtml(data.disclaimer)}</div>`;
+  showTab("strategy");
+}
+
+// ============================================================
+// CDC ActionZone V3 — ported from Pine Script by piriya33
+// Zones: Green=Buy, Blue=Pre-Buy2, Aqua=Pre-Buy1
+//        Red=Sell, Orange=Pre-Sell2, Yellow=Pre-Sell1
+// ============================================================
+function calcEMA(values, period) {
+  const k = 2 / (period + 1);
+  const result = new Array(values.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < Math.min(period - 1, values.length); i++) sum += values[i];
+  for (let i = period - 1; i < values.length; i++) {
+    sum += values[i];
+    if (i === period - 1) { result[i] = sum / period; }
+    else { result[i] = values[i] * k + result[i - 1] * (1 - k); }
+  }
+  return result;
+}
+
+const CDC_COLORS = {
+  green:  { bar:"#22c55e", wick:"#16a34a" },
+  blue:   { bar:"#3b82f6", wick:"#2563eb" },
+  aqua:   { bar:"#22d3ee", wick:"#0891b2" },
+  red:    { bar:"#ef4444", wick:"#dc2626" },
+  orange: { bar:"#f97316", wick:"#ea580c" },
+  yellow: { bar:"#eab308", wick:"#ca8a04" },
+};
+
+function computeCDC(candles) {
+  const closes = candles.map(c => c.close);
+  const fast = calcEMA(closes, 12);  // EMA12
+  const slow = calcEMA(closes, 26);  // EMA26
+
+  const zones = candles.map((c, i) => {
+    if (fast[i] === null || slow[i] === null) return "none";
+    const price = c.close;
+    const bull = fast[i] > slow[i];
+    const bear = fast[i] < slow[i];
+    if (bull && price > fast[i]) return "green";
+    if (bear && price > fast[i] && price > slow[i]) return "blue";
+    if (bear && price > fast[i] && price < slow[i]) return "aqua";
+    if (bear && price < fast[i]) return "red";
+    if (bull && price < fast[i] && price < slow[i]) return "orange";
+    if (bull && price < fast[i] && price > slow[i]) return "yellow";
+    return "neutral";
+  });
+
+  // Buy = first green bar; Sell = first red bar
+  const markers = [];
+  for (let i = 1; i < zones.length; i++) {
+    if (zones[i] === "green" && zones[i - 1] !== "green") {
+      markers.push({ time:candles[i].time, position:"belowBar", color:"#22c55e", shape:"circle", text:"B" });
+    }
+    if (zones[i] === "red" && zones[i - 1] !== "red") {
+      markers.push({ time:candles[i].time, position:"aboveBar", color:"#ef4444", shape:"circle", text:"S" });
+    }
+  }
+  return { fast, slow, zones, markers };
+}
+
+function toggleCDC() {
+  cdcEnabled = !cdcEnabled;
+  const btn = $("toolCDC");
+  if (btn) btn.classList.toggle("active", cdcEnabled);
+  if (latestChartData) {
+    if (!cdcEnabled) {
+      // Restore default candle colors
+      if (candleSeries) { candleSeries.setData(priceData()); candleSeries.setMarkers([]); }
+      if (cdcFastSeries) cdcFastSeries.setData([]);
+      if (cdcSlowSeries) cdcSlowSeries.setData([]);
+    } else {
+      renderCDC();
+    }
+  }
+}
+
+function renderCDC() {
+  if (!latestChartData || !cdcFastSeries) return;
+  if (!cdcEnabled) return;
+
+  const candles = latestChartData.candles;
+  const { fast, slow, zones, markers } = computeCDC(candles);
+
+  // Draw EMA12 (red) and EMA26 (blue)
+  cdcFastSeries.setData(candles.map((c, i) => ({ time:c.time, value:fast[i] })).filter(p => p.value !== null));
+  cdcSlowSeries.setData(candles.map((c, i) => ({ time:c.time, value:slow[i] })).filter(p => p.value !== null));
+
+  // Color bars by zone (candlestick / heikinashi / bar chart types only)
+  const type = chartStyle.chartType;
+  if (["candlestick", "heikinashi"].includes(type)) {
+    const colored = priceData().map((c, i) => {
+      const col = CDC_COLORS[zones[i]];
+      if (!col) return c;
+      return { ...c, color:col.bar, borderColor:col.bar, wickColor:col.wick };
+    });
+    if (candleSeries) candleSeries.setData(colored);
+  } else if (type === "bar") {
+    const colored = priceData().map((c, i) => {
+      const col = CDC_COLORS[zones[i]];
+      if (!col) return c;
+      return { ...c, color:col.bar };
+    });
+    if (candleSeries) candleSeries.setData(colored);
+  }
+
+  // Set Buy/Sell markers
+  if (candleSeries) candleSeries.setMarkers(markers);
 }
 
 init();

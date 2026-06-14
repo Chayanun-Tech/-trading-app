@@ -1,0 +1,22 @@
+{
+  "school": "smc_ict",
+  "display_name": "Smart Money Concepts / ICT",
+  "origin": "พัฒนาต่อจาก Wyckoff/order flow; เผยแพร่โดย ICT (Michael Huddleston) และชุมชน SMC",
+  "core_idea": "ตลาดถูกขับโดยสภาพคล่อง รายใหญ่ล่าสภาพคล่อง (stop) ของรายย่อยก่อนเคลื่อนราคาจริง เทรดตามรอยเท้าสถาบัน",
+  "psychology": "รายย่อยตั้ง stop ไว้เหนือ high/ใต้ low ที่ชัดเจน = สภาพคล่อง รายใหญ่กวาดโซนนั้นเพื่อเติมออเดอร์ขนาดใหญ่ก่อนพาไปทิศจริง",
+  "concepts": [
+    {"name": "Liquidity (BSL/SSL)", "detail": "Buy-side liquidity เหนือ high, Sell-side liquidity ใต้ low — เป้าหมายที่ราคาวิ่งไปกวาด"},
+    {"name": "Liquidity Grab / Sweep", "detail": "ทะลุ high/low หลอกเพื่อเก็บ stop แล้วกลับทิศ = จุดกลับตัวคุณภาพสูง"},
+    {"name": "Order Block (OB)", "detail": "แท่งตรงข้ามสุดท้ายก่อนการเคลื่อนแรง = โซนคำสั่งสถาบัน ราคามักกลับมาตอบสนอง"},
+    {"name": "Fair Value Gap (FVG/Imbalance)", "detail": "ช่องว่าง 3 แท่งที่ราคาไม่สมดุล มักถูกเติมกลับ"},
+    {"name": "Break of Structure (BOS)", "detail": "เบรกโครงสร้างตามทิศ = ยืนยันเทรนด์ต่อ"},
+    {"name": "Change of Character (CHoCH)", "detail": "เบรกโครงสร้างสวนทิศครั้งแรก = สัญญาณกลับเทรนด์"},
+    {"name": "Premium / Discount", "detail": "แบ่งครึ่ง range: ซื้อในโซน discount (ครึ่งล่าง) ขายในโซน premium (ครึ่งบน)"},
+    {"name": "Mitigation Block", "detail": "โซนที่รายใหญ่กลับมาแก้ออเดอร์ที่ค้าง"}
+  ],
+  "signals": {
+    "buy": "เกิด sweep ใต้ low (SSL) + CHoCH ขึ้น + ราคากลับเข้า bullish OB/FVG ในโซน discount",
+    "sell": "เกิด sweep เหนือ high (BSL) + CHoCH ลง + ราคากลับเข้า bearish OB/FVG ในโซน premium",
+    "wait": "ยังไม่กวาดสภาพคล่อง/ยังไม่ CHoCH"
+  }
+}

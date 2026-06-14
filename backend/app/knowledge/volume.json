@@ -1,0 +1,24 @@
+{
+  "school": "volume",
+  "display_name": "Volume & Volume Spread Analysis (VSA)",
+  "core_idea": "ปริมาณการซื้อขายคือ 'เชื้อเพลิง' ของราคา ยืนยันความจริงของการเคลื่อนไหว และเผยร่องรอยของรายใหญ่ (smart money)",
+  "psychology": "ราคาขึ้นด้วย volume สูง = มีแรงซื้อจริง; ขึ้นด้วย volume ต่ำ = ขาดแรงสนับสนุน เสี่ยงหลอก. รายใหญ่สะสมเงียบ ๆ และทิ้งของตอนคนแห่เข้า",
+  "principles": [
+    "Volume ควรเพิ่มตามทิศเทรนด์ — ยืนยันความแข็งแรง",
+    "Breakout ที่ volume พุ่ง = น่าเชื่อ; breakout volume เบาบาง = ระวัง fakeout",
+    "Volume สูงผิดปกติที่ปลายเทรนด์ (climax) = อาจเป็นจุดกลับตัว (buying/selling climax)",
+    "ราคาทำ new high แต่ volume ลดลง = โมเมนตัมอ่อน (volume divergence)"
+  ],
+  "vsa_signals": [
+    {"name": "Climactic Volume", "detail": "volume สูงสุดผิดปกติ + ไส้ยาว = ฝั่งครองหมดแรง อาจกลับตัว"},
+    {"name": "No Demand", "detail": "แท่งขึ้นเนื้อสั้น volume ต่ำ = ไม่มีแรงซื้อจริง"},
+    {"name": "No Supply", "detail": "แท่งลงเนื้อสั้น volume ต่ำ = ไม่มีแรงขาย bullish"},
+    {"name": "Stopping Volume", "detail": "volume พุ่งในขาลงแล้วราคาเริ่มนิ่ง = รายใหญ่เริ่มรับ"},
+    {"name": "Effort vs Result", "detail": "volume มาก(effort)แต่ราคาขยับน้อย(result) = มีแรงต้านซ่อน"}
+  ],
+  "tools": [
+    {"name": "OBV", "detail": "สะสมปริมาณตามทิศราคา ยืนยัน/divergence เทรนด์"},
+    {"name": "Volume Profile", "detail": "กระจายปริมาณตามระดับราคา หา POC / value area / โหนดบาง"},
+    {"name": "VWAP", "detail": "ราคาเฉลี่ยถ่วงปริมาณ แนวอ้างอิงรายสถาบัน"}
+  ]
+}

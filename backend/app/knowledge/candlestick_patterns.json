@@ -1,0 +1,37 @@
+{
+  "school": "candlestick",
+  "display_name": "แท่งเทียน (Candlestick Patterns)",
+  "origin": "Munehisa Homma (ญี่ปุ่น, ศตวรรษที่ 18) — เผยแพร่สู่ตะวันตกโดย Steve Nison",
+  "core_idea": "แท่งเทียนสะท้อนการต่อสู้ระหว่างแรงซื้อ-แรงขายในแต่ละช่วงเวลา รูปร่างของแท่งและความสัมพันธ์ระหว่างแท่งบอกอารมณ์ตลาดและจุดกลับตัว/ไปต่อ",
+  "psychology": "ไส้เทียนยาว = การปฏิเสธราคา (rejection); เนื้อเทียนใหญ่ = ฝ่ายชนะเด็ดขาด; แท่งเล็ก = ลังเล/สมดุล. ต้องดู 'บริบท' เสมอ: รูปแบบเดียวกันที่แนวรับสำคัญมีน้ำหนักกว่ากลางเทรนด์",
+  "usage_rules": [
+    "รูปแบบกลับตัวมีความหมายเมื่ออยู่ 'ปลายเทรนด์' หรือที่แนวรับ/แนวต้านสำคัญเท่านั้น",
+    "ยิ่ง timeframe ใหญ่ สัญญาณยิ่งน่าเชื่อถือ",
+    "รอแท่งยืนยัน (confirmation) ก่อนเข้า ลดสัญญาณหลอก",
+    "เพิ่มน้ำหนักเมื่อมี volume สนับสนุน หรือเกิดพร้อม divergence / แนว Fibonacci"
+  ],
+  "single_candle": [
+    {"name": "Doji", "thai": "โดจิ", "type": "neutral/indecision", "structure": "เปิด=ปิดเกือบเท่ากัน ไส้สองด้าน", "signal": "wait", "psychology": "ตลาดลังเล สมดุลแรงซื้อขาย — เตือนการกลับตัวถ้าอยู่ปลายเทรนด์"},
+    {"name": "Dragonfly Doji", "thai": "โดจิแมงปอ", "type": "bullish-reversal", "structure": "ไส้ล่างยาว ไม่มีไส้บน เปิด=ปิด=สูงสุด", "signal": "buy", "psychology": "แรงขายดันลงแต่ถูกซื้อกลับหมด — กลับตัวขึ้นที่แนวรับ"},
+    {"name": "Gravestone Doji", "thai": "โดจิหลุมศพ", "type": "bearish-reversal", "structure": "ไส้บนยาว ไม่มีไส้ล่าง เปิด=ปิด=ต่ำสุด", "signal": "sell", "psychology": "แรงซื้อดันขึ้นแต่ถูกขายกลับหมด — กลับตัวลงที่แนวต้าน"},
+    {"name": "Hammer", "thai": "ค้อน", "type": "bullish-reversal", "structure": "เนื้อเล็กด้านบน ไส้ล่างยาว >2 เท่าเนื้อ ไส้บนสั้น", "signal": "buy", "psychology": "ถูกขายลงลึกแล้วซื้อกลับ — ปฏิเสธราคาต่ำ เกิดปลายเทรนด์ลง"},
+    {"name": "Hanging Man", "thai": "คนแขวนคอ", "type": "bearish-reversal", "structure": "เหมือน Hammer แต่อยู่ปลายเทรนด์ขึ้น", "signal": "sell", "psychology": "เริ่มมีแรงขายแทรกในขาขึ้น — เตือนกลับตัว ต้องรอยืนยัน"},
+    {"name": "Inverted Hammer", "thai": "ค้อนกลับหัว", "type": "bullish-reversal", "structure": "เนื้อเล็กล่าง ไส้บนยาว เกิดปลายเทรนด์ลง", "signal": "buy", "psychology": "แรงซื้อเริ่มทดสอบขึ้น — รอยืนยันแท่งถัดไป"},
+    {"name": "Shooting Star", "thai": "ดาวตก", "type": "bearish-reversal", "structure": "เนื้อเล็กล่าง ไส้บนยาว เกิดปลายเทรนด์ขึ้น", "signal": "sell", "psychology": "ดันขึ้นแล้วถูกขายกลับ — ปฏิเสธราคาสูง"},
+    {"name": "Marubozu", "thai": "มารูโบสุ", "type": "continuation", "structure": "เนื้อยาวเต็ม ไม่มีไส้", "signal": "trend-strength", "psychology": "ฝ่ายใดฝ่ายหนึ่งคุมเด็ดขาดตลอดแท่ง — โมเมนตัมแรง"},
+    {"name": "Spinning Top", "thai": "ลูกข่าง", "type": "neutral/indecision", "structure": "เนื้อเล็ก ไส้สองด้านยาวพอกัน", "signal": "wait", "psychology": "ลังเล โมเมนตัมอ่อนลง"}
+  ],
+  "multi_candle": [
+    {"name": "Bullish Engulfing", "thai": "กลืนกินขาขึ้น", "type": "bullish-reversal", "structure": "แท่งเขียวกลืนเนื้อแท่งแดงก่อนหน้าทั้งแท่ง", "signal": "buy", "reliability": "high", "psychology": "แรงซื้อกลบแรงขายเดิมทั้งหมด — กลับตัวแรงที่แนวรับ"},
+    {"name": "Bearish Engulfing", "thai": "กลืนกินขาลง", "type": "bearish-reversal", "structure": "แท่งแดงกลืนเนื้อแท่งเขียวก่อนหน้าทั้งแท่ง", "signal": "sell", "reliability": "high", "psychology": "แรงขายกลบแรงซื้อเดิม — กลับตัวลงที่แนวต้าน"},
+    {"name": "Piercing Line", "thai": "เส้นแทงทะลุ", "type": "bullish-reversal", "structure": "แท่งเขียวปิดเหนือกึ่งกลางแท่งแดงก่อนหน้า", "signal": "buy", "reliability": "medium", "psychology": "แรงซื้อกลับเข้ามาเกินครึ่ง"},
+    {"name": "Dark Cloud Cover", "thai": "เมฆดำปกคลุม", "type": "bearish-reversal", "structure": "แท่งแดงเปิดสูงแล้วปิดใต้กึ่งกลางแท่งเขียวก่อนหน้า", "signal": "sell", "reliability": "medium", "psychology": "แรงขายกลับเข้ามาเกินครึ่ง"},
+    {"name": "Morning Star", "thai": "ดาวประจำรุ่ง", "type": "bullish-reversal", "structure": "แท่งแดงใหญ่ → แท่งเล็ก(gap) → แท่งเขียวใหญ่", "signal": "buy", "reliability": "high", "psychology": "ขาลงหมดแรง → ลังเล → ซื้อกลับ จุดกลับตัวคลาสสิก"},
+    {"name": "Evening Star", "thai": "ดาวประจำค่ำ", "type": "bearish-reversal", "structure": "แท่งเขียวใหญ่ → แท่งเล็ก(gap) → แท่งแดงใหญ่", "signal": "sell", "reliability": "high", "psychology": "ขาขึ้นหมดแรง → ลังเล → ขายกลับ"},
+    {"name": "Three White Soldiers", "thai": "ทหารขาวสามนาย", "type": "bullish-reversal/continuation", "structure": "แท่งเขียวยาวสามแท่งติด ปิดสูงขึ้นเรื่อย", "signal": "buy", "reliability": "high", "psychology": "แรงซื้อเข้าต่อเนื่องมั่นคง"},
+    {"name": "Three Black Crows", "thai": "อีกาดำสามตัว", "type": "bearish-reversal", "structure": "แท่งแดงยาวสามแท่งติด ปิดต่ำลงเรื่อย", "signal": "sell", "reliability": "high", "psychology": "แรงขายเข้าต่อเนื่อง"},
+    {"name": "Tweezer Top/Bottom", "thai": "คีมบน/ล่าง", "type": "reversal", "structure": "สองแท่งจุดสูงสุด(หรือต่ำสุด)เท่ากัน", "signal": "reversal", "reliability": "medium", "psychology": "ทดสอบระดับเดิมซ้ำแล้วผ่านไม่ได้"},
+    {"name": "Harami", "thai": "ฮารามิ (ตั้งครรภ์)", "type": "reversal/indecision", "structure": "แท่งเล็กอยู่ในเนื้อแท่งใหญ่ก่อนหน้า", "signal": "wait", "reliability": "low-medium", "psychology": "โมเมนตัมหดตัว เตือนกลับตัว"},
+    {"name": "Rising/Falling Three Methods", "thai": "สามวิธีขึ้น/ลง", "type": "continuation", "structure": "แท่งใหญ่ + แท่งเล็กสวนทาง 3 แท่งในกรอบ + แท่งใหญ่ไปต่อ", "signal": "continuation", "reliability": "medium", "psychology": "พักตัวสั้นก่อนไปต่อตามเทรนด์"}
+  ]
+}

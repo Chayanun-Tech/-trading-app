@@ -79,6 +79,40 @@ def macd(values: list[float], fast: int = 12, slow: int = 26, signal: int = 9):
     return macd_line, signal_line, hist
 
 
+def bollinger(values: list[float], period: int = 20, mult: float = 2.0):
+    """คืน (mid, upper, lower) เป็น series."""
+    mid = sma(values, period)
+    upper: list[float | None] = [None] * len(values)
+    lower: list[float | None] = [None] * len(values)
+    for i in range(len(values)):
+        if i + 1 >= period:
+            window = values[i + 1 - period:i + 1]
+            m = mid[i]
+            var = sum((x - m) ** 2 for x in window) / period
+            sd = var ** 0.5
+            upper[i] = m + mult * sd
+            lower[i] = m - mult * sd
+    return mid, upper, lower
+
+
+def stochastic(highs: list[float], lows: list[float], closes: list[float],
+               k_period: int = 14, d_period: int = 3):
+    """คืน (%K, %D) เป็น series."""
+    k: list[float | None] = [None] * len(closes)
+    for i in range(len(closes)):
+        if i + 1 >= k_period:
+            hh = max(highs[i + 1 - k_period:i + 1])
+            ll = min(lows[i + 1 - k_period:i + 1])
+            k[i] = 100 * (closes[i] - ll) / (hh - ll) if hh != ll else 50.0
+    # %D = SMA ของ %K
+    d: list[float | None] = [None] * len(closes)
+    for i in range(len(closes)):
+        window = [v for v in k[max(0, i + 1 - d_period):i + 1] if v is not None]
+        if len(window) == d_period:
+            d[i] = sum(window) / d_period
+    return k, d
+
+
 def _last(seq: list[float | None]):
     for v in reversed(seq):
         if v is not None:
@@ -117,18 +151,47 @@ def swing_structure(highs: list[float], lows: list[float], lookback: int = 5):
     }
 
 
-def compute_indicators(candles: list[Candle]) -> dict:
-    """คำนวณอินดิเคเตอร์ทั้งหมดและสรุปค่าล่าสุด — ใช้ทั้งแสดงผลและป้อนให้ AI."""
+# ค่า period เริ่มต้นของอินดิเคเตอร์ (ผู้ใช้ปรับได้ผ่านแผงเครื่องมือ)
+INDICATOR_DEFAULTS = {
+    "ema_fast": 20, "ema_mid": 50, "ema_slow": 200,
+    "rsi_period": 14,
+    "bb_period": 20, "bb_mult": 2.0,
+    "stoch_k": 14, "stoch_d": 3,
+    "macd_fast": 12, "macd_slow": 26, "macd_signal": 9,
+}
+
+
+def _merge_params(params: dict | None) -> dict:
+    p = dict(INDICATOR_DEFAULTS)
+    if params:
+        for k, v in params.items():
+            if k in p and v is not None:
+                try:
+                    p[k] = float(v) if k == "bb_mult" else int(v)
+                except (ValueError, TypeError):
+                    pass
+    return p
+
+
+def compute_indicators(candles: list[Candle], params: dict | None = None) -> dict:
+    """คำนวณอินดิเคเตอร์ทั้งหมดและสรุปค่าล่าสุด — ใช้ทั้งแสดงผลและป้อนให้ AI.
+
+    params: ปรับ period ของอินดิเคเตอร์ได้ (ดู INDICATOR_DEFAULTS). คีย์ใน summary/series
+    ยังคงเดิม (ema20/ema50/sma200/rsi14) เป็น 'ช่อง' fast/mid/slow เพื่อความเข้ากันได้.
+    """
+    p = _merge_params(params)
     closes = [c.close for c in candles]
     highs = [c.high for c in candles]
     lows = [c.low for c in candles]
     volumes = [c.volume for c in candles]
 
-    ema20 = ema(closes, 20)
-    ema50 = ema(closes, 50)
-    sma200 = sma(closes, 200)
-    rsi14 = rsi(closes, 14)
-    macd_line, signal_line, hist = macd(closes)
+    ema20 = ema(closes, p["ema_fast"])
+    ema50 = ema(closes, p["ema_mid"])
+    sma200 = ema(closes, p["ema_slow"])  # ช่อง slow ใช้ EMA ตามค่าที่ตั้ง
+    rsi14 = rsi(closes, p["rsi_period"])
+    macd_line, signal_line, hist = macd(closes, p["macd_fast"], p["macd_slow"], p["macd_signal"])
+    bb_mid, bb_upper, bb_lower = bollinger(closes, p["bb_period"], p["bb_mult"])
+    stoch_k, stoch_d = stochastic(highs, lows, closes, p["stoch_k"], p["stoch_d"])
 
     price = closes[-1] if closes else None
     structure = swing_structure(highs, lows)
@@ -152,6 +215,11 @@ def compute_indicators(candles: list[Candle]) -> dict:
         "macd_hist": _last(hist),
         "support_recent": support,
         "resistance_recent": resistance,
+        "bb_upper": _last(bb_upper),
+        "bb_mid": _last(bb_mid),
+        "bb_lower": _last(bb_lower),
+        "stoch_k": _last(stoch_k),
+        "stoch_d": _last(stoch_d),
         "avg_volume_20": avg_vol,
         "last_volume": last_vol,
         "price_vs_ema20": (
@@ -165,10 +233,20 @@ def compute_indicators(candles: list[Candle]) -> dict:
 
     return {
         "summary": summary,
+        "params": p,   # ค่า period ที่ใช้จริง (ให้ frontend ทำ label)
         # ส่ง series ไปให้ frontend วาดได้ (เฉพาะค่าล่าสุด ๆ เพื่อความเบา)
         "series": {
             "ema20": [None if v is None else round(v, 2) for v in ema20],
             "ema50": [None if v is None else round(v, 2) for v in ema50],
+            "sma200": [None if v is None else round(v, 2) for v in sma200],
             "rsi14": [None if v is None else round(v, 2) for v in rsi14],
+            "macd": [None if v is None else round(v, 4) for v in macd_line],
+            "macd_signal": [None if v is None else round(v, 4) for v in signal_line],
+            "macd_hist": [None if v is None else round(v, 4) for v in hist],
+            "bb_mid": [None if v is None else round(v, 2) for v in bb_mid],
+            "bb_upper": [None if v is None else round(v, 2) for v in bb_upper],
+            "bb_lower": [None if v is None else round(v, 2) for v in bb_lower],
+            "stoch_k": [None if v is None else round(v, 2) for v in stoch_k],
+            "stoch_d": [None if v is None else round(v, 2) for v in stoch_d],
         },
     }

@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "updated": "2026-06-13",
+  "note": "ทะเบียนศาสตร์การวิเคราะห์กราฟทั้งหมดที่แอปใช้ประเมิน แต่ละ school มีไฟล์ความรู้ของตัวเอง และมี evaluator ('python' = คำนวณเชิงกฎ, 'claude' = ใช้ AI ground ด้วยไฟล์ความรู้). weight = น้ำหนักเริ่มต้นเวลาเฉลี่ยรวมเป็นคะแนนขึ้น/ลง (ปรับได้)",
+  "schools": [
+    {"id": "trend_ema", "display_name": "เทรนด์ & เส้นค่าเฉลี่ย (EMA/SMA)", "category": "indicator", "evaluator": "python", "weight": 1.2, "file": "indicators.json"},
+    {"id": "rsi", "display_name": "RSI (โมเมนตัม/overbought-oversold)", "category": "indicator", "evaluator": "python", "weight": 1.0, "file": "indicators.json"},
+    {"id": "macd", "display_name": "MACD (โมเมนตัม/ตัดกัน)", "category": "indicator", "evaluator": "python", "weight": 1.0, "file": "indicators.json"},
+    {"id": "bollinger", "display_name": "Bollinger Bands (ความผันผวน)", "category": "indicator", "evaluator": "python", "weight": 0.9, "file": "indicators.json"},
+    {"id": "stochastic", "display_name": "Stochastic", "category": "indicator", "evaluator": "python", "weight": 0.8, "file": "indicators.json"},
+    {"id": "support_resistance", "display_name": "แนวรับ–แนวต้าน", "category": "structure", "evaluator": "python", "weight": 1.2, "file": "support_resistance.json"},
+    {"id": "volume", "display_name": "Volume / VSA", "category": "volume", "evaluator": "python", "weight": 1.0, "file": "volume.json"},
+    {"id": "dow_theory", "display_name": "Dow Theory (โครงสร้างเทรนด์)", "category": "structure", "evaluator": "python", "weight": 1.1, "file": "dow_theory.json"},
+    {"id": "divergence", "display_name": "Divergence (RSI/MACD)", "category": "indicator", "evaluator": "python", "weight": 1.0, "file": "divergence.json"},
+    {"id": "mmc_liquidity", "display_name": "Market Maker Concept (Liquidity Sweep)", "category": "structure", "evaluator": "python", "weight": 1.2, "file": "mmc_liquidity.json"},
+    {"id": "candlestick", "display_name": "แท่งเทียน (Candlestick)", "category": "price-action", "evaluator": "claude", "weight": 1.0, "file": "candlestick_patterns.json"},
+    {"id": "chart_patterns", "display_name": "รูปแบบกราฟ (Chart Patterns)", "category": "price-action", "evaluator": "claude", "weight": 1.0, "file": "chart_patterns.json"},
+    {"id": "price_action", "display_name": "Price Action", "category": "price-action", "evaluator": "claude", "weight": 1.2, "file": "price_action.json"},
+    {"id": "elliott_wave", "display_name": "Elliott Wave", "category": "wave", "evaluator": "claude", "weight": 1.0, "file": "elliott_wave.json"},
+    {"id": "fibonacci", "display_name": "Fibonacci", "category": "ratio", "evaluator": "claude", "weight": 1.0, "file": "fibonacci.json"},
+    {"id": "harmonic", "display_name": "Harmonic Patterns", "category": "ratio", "evaluator": "claude", "weight": 0.9, "file": "harmonic_patterns.json"},
+    {"id": "wyckoff", "display_name": "Wyckoff (สะสม/แจกจ่าย)", "category": "structure", "evaluator": "claude", "weight": 1.0, "file": "wyckoff.json"},
+    {"id": "smc_ict", "display_name": "Smart Money Concepts / ICT", "category": "structure", "evaluator": "claude", "weight": 1.0, "file": "smc_ict.json"},
+    {"id": "gann", "display_name": "Gann", "category": "geometry", "evaluator": "claude", "weight": 0.6, "file": "gann.json"},
+    {"id": "market_psychology", "display_name": "จิตวิทยาตลาด / Sentiment", "category": "psychology", "evaluator": "claude", "weight": 1.3, "file": "market_psychology.json"}
+  ]
+}

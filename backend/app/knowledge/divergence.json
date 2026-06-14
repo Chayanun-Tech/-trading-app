@@ -1,0 +1,17 @@
+{
+  "school": "divergence",
+  "display_name": "Divergence (การขัดแย้งราคากับโมเมนตัม)",
+  "core_idea": "เมื่อราคาเคลื่อนสวนทางกับอินดิเคเตอร์โมเมนตัม (RSI/MACD/Stochastic) แสดงว่าโมเมนตัมที่แท้จริงอ่อนลง — เตือนกลับตัวหรือไปต่อ",
+  "psychology": "ราคาทำยอดใหม่ได้ด้วย 'แรงเฉื่อย' แต่พลังภายใน (โมเมนตัม) ลดลง = รายใหญ่เริ่มถอย ก่อนฝูงชนจะรู้ตัว",
+  "types": [
+    {"name": "Regular Bullish Divergence", "signal": "buy", "structure": "ราคาทำ Lower Low แต่อินดิเคเตอร์ทำ Higher Low", "meaning": "แรงขายอ่อนลง — เตือนกลับตัวขึ้น"},
+    {"name": "Regular Bearish Divergence", "signal": "sell", "structure": "ราคาทำ Higher High แต่อินดิเคเตอร์ทำ Lower High", "meaning": "แรงซื้ออ่อนลง — เตือนกลับตัวลง"},
+    {"name": "Hidden Bullish Divergence", "signal": "buy-continuation", "structure": "ราคาทำ Higher Low แต่อินดิเคเตอร์ทำ Lower Low", "meaning": "เทรนด์ขึ้นยังแข็ง — ไปต่อ"},
+    {"name": "Hidden Bearish Divergence", "signal": "sell-continuation", "structure": "ราคาทำ Lower High แต่อินดิเคเตอร์ทำ Higher High", "meaning": "เทรนด์ลงยังแข็ง — ไปต่อ"}
+  ],
+  "usage_rules": [
+    "Divergence ที่แนวรับ-ต้านสำคัญ/ปลายเทรนด์ มีน้ำหนักมากที่สุด",
+    "ใช้ยืนยันร่วมกับ price action — อย่าเข้าเพราะ divergence อย่างเดียว",
+    "Divergence อาจเกิดต่อเนื่องหลายครั้งในเทรนด์แรง (อย่าสวนเร็วเกินไป)"
+  ]
+}
