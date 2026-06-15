@@ -1365,6 +1365,19 @@ Alternative:
 
 **commit:** (รอ push hf+origin)
 
+## OANDA login ติด → user เลือกใช้ PAXG ไปก่อน (2026-06-15, Claude/Opus)
+
+**OANDA ใช้ไม่ได้ (2 ปัญหา):**
+1. user สมัครได้บัญชี **MetaTrader 5 demo** (login=1715543785, server=OANDA_Global-Demo-1) — แต่ **v20 REST API ใช้กับ MT5 account ไม่ได้** (ต้องเป็น fxTrade/OANDA Trade account)
+2. login เว็บ OANDA โดน block "suspicious login behavior" (เพราะเอารหัส MT5 ไป login เว็บ — คนละรหัส)
+
+**user เลือก: ใช้ PAXG ไปก่อน (ไม่ต้องสมัคร)** → ทอง spot realtime ผ่าน Binance PAXG, ต่าง OANDA ~$6 (0.16%)
+- โค้ด OANDA (oanda.py/RouterProvider/config) **เก็บไว้ในrepo** — active เฉพาะตอนตั้ง `OANDA_API_TOKEN` (ตอนนี้ไม่ได้ตั้ง → ใช้ Yahoo+PAXG)
+- คืนค่า frontend `binanceStreamSymbol`: XAUUSD=X/XAUUSD → PAXGUSDT (ทอง tick realtime Binance อีกครั้ง)
+- **⚠️ footgun อนาคต:** ถ้าวันหลังตั้ง OANDA_API_TOKEN → candles=OANDA(~4305) แต่ frontend tick ยัง=Binance PAXG(~4298) ไม่ตรงกัน. ต้องแก้ frontend ให้ทอง "ไม่ใช้ Binance" เมื่อ OANDA active (เช่น backend ส่ง flag) ก่อนใช้ OANDA จริง
+
+**สรุปสถานะทอง:** XAUUSD=X = PAXG spot (Yahoo candles + Binance realtime tick), ใกล้ OANDA ~$6 — ใช้เทรดได้, ดีกว่า GC=F futures (~$28) มาก
+
 ## ✅ PUSH ขึ้น main สำเร็จ (2026-06-15, Claude/Opus)
 
 **ปมสิทธิ์/บัญชีจบแล้ว — push ผ่าน:**

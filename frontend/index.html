@@ -696,8 +696,9 @@ function binanceStreamSymbol(symbol) {
     "LINK-USD":"LINKUSDT", "DOT-USD":"DOTUSDT", "LTC-USD":"LTCUSDT", "UNI-USD":"UNIUSDT",
     "AAVE-USD":"AAVEUSDT", "NEAR-USD":"NEARUSDT", "ATOM-USD":"ATOMUSDT", "OP-USD":"OPUSDT",
     "ARB-USD":"ARBUSDT",
-    // PAXG (PAX Gold) ถ้าผู้ใช้เลือกตรงๆ; ทอง XAUUSD=X ใช้ฟีด OANDA ผ่าน backend (ตรง TradingView)
-    "PAXG-USD":"PAXGUSDT",
+    // ทอง spot: XAUUSD=X / PAXG-USD → สตรีม PAXG เรียลไทม์จาก Binance (ใกล้ OANDA ~$6)
+    // หมายเหตุ: ถ้าตั้ง OANDA_API_TOKEN ฝั่ง backend จะ route ทองไป OANDA แทน (ตรง TradingView เป๊ะ)
+    "XAUUSD=X":"PAXGUSDT", "XAUUSD":"PAXGUSDT", "PAXG-USD":"PAXGUSDT",
   };
   if (direct[s]) return direct[s].toLowerCase();
   const m = s.match(/^([A-Z0-9]+)-USD$/);
