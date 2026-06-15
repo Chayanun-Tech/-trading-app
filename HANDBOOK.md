@@ -99,8 +99,12 @@
 | `GROQ_MODEL` | รุ่น Groq | ค่า: `llama-3.3-70b-versatile` | optional |
 | `DATABASE_URL` | connection string ฐานข้อมูล Supabase | Supabase → Connect → **Session pooler** (port 5432) | optional* |
 | `SUPABASE_URL` | URL โปรเจกต์ (ไม่ลับ) | `https://xiblqetehrnprycbkwyp.supabase.co` | optional |
+| `OANDA_API_TOKEN` | ทอง/เงิน/forex ตรง TradingView OANDA เป๊ะ | oanda.com → practice ฟรี → Manage API Access | แนะนำ (ทอง) |
+| `OANDA_ENV` | `practice` (demo) หรือ `live` | ตั้ง `practice` | optional |
 | `BITKUB_API_KEY` / `_SECRET` | สำหรับ auto trade เงินจริง | Bitkub account | เฉพาะเทรดจริง |
 | `FINNHUB_API_KEY` | (อนาคต) หุ้นเรียลไทม์ | https://finnhub.io | ยังไม่ใช้ |
+
+> 💡 ใส่ `OANDA_API_TOKEN` แล้ว ทอง (XAUUSD=X) + forex จะ route ไป OANDA อัตโนมัติ (ตรง TradingView), หุ้นยังใช้ Yahoo, คริปโตยังใช้ Binance — ไม่ต้องตั้งอย่างอื่นเพิ่ม
 
 \* `DATABASE_URL` ไม่ใส่ก็ได้ — แอปทำงานปกติ แต่จะ**ไม่บันทึกข้อมูลลง Supabase** (in-memory เท่านั้น)
 

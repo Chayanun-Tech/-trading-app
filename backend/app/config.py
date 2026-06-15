@@ -12,6 +12,10 @@ load_dotenv()
 class Settings:
     data_provider: str = os.getenv("DATA_PROVIDER", "mock").lower()
     finnhub_api_key: str = os.getenv("FINNHUB_API_KEY", "")
+    # OANDA (ทอง/เงิน/forex ตรง TradingView OANDA เป๊ะ). ตั้ง token แล้วระบบ route ให้เอง
+    oanda_api_token: str = os.getenv("OANDA_API_TOKEN", "")
+    oanda_account_id: str = os.getenv("OANDA_ACCOUNT_ID", "")  # เว้นว่างได้ ระบบดึงอัตโนมัติ
+    oanda_env: str = os.getenv("OANDA_ENV", "practice").lower()  # practice | live
 
     # ---------- ผู้ให้บริการ AI (เลือกได้: auto/anthropic/gemini/groq/openai) ----------
     llm_provider: str = os.getenv("LLM_PROVIDER", "auto").lower()

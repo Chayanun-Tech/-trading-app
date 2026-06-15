@@ -41,6 +41,18 @@ FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 def get_provider() -> DataProvider:
     """เลือก provider ตามการตั้งค่า — fallback เป็น mock ถ้าตั้งค่าไม่ครบ."""
+    # มี OANDA token → route ทอง/เงิน/forex ไป OANDA (ตรง TradingView เป๊ะ), ที่เหลือใช้ Yahoo
+    if settings.oanda_api_token:
+        try:
+            from app.data.oanda import OandaProvider, RouterProvider
+            from app.data.yahoo import YahooProvider
+            return RouterProvider(
+                OandaProvider(settings.oanda_api_token, settings.oanda_env, settings.oanda_account_id),
+                YahooProvider(),
+            )
+        except Exception:
+            from app.data.yahoo import YahooProvider
+            return YahooProvider()
     if settings.data_provider == "yahoo":
         from app.data.yahoo import YahooProvider
         return YahooProvider()

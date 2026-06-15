@@ -1344,6 +1344,27 @@ Alternative:
 
 **ข้อจำกัดที่เหลือ (realtime หุ้น):** หุ้น US/ไทย ยังเป็น Yahoo poll 1s (ไม่ใช่ tick realtime แท้). true realtime หุ้น US = ต้องต่อ Finnhub (free key มี WS) — ยังไม่ได้ทำ รอ user ตัดสินใจ. ไทยไม่มี free realtime ที่ดี
 
+## ต่อ OANDA API — ทอง/forex ตรง TradingView เป๊ะ (2026-06-15, Claude/Opus)
+
+**ทำไม:** user เทียบทองในแอป (PAXG/GC=F) กับ TradingView OANDA แล้วยังไม่ตรง (ต่าง $6-30). ความจริง: ทอง spot ไม่มีราคากลางเดียว — จะตรง OANDA เป๊ะต้องใช้ฟีด OANDA เอง. user เลือก "ต่อ OANDA API".
+
+**OANDA v20 = บัญชี practice ฟรี (ไม่ต้องฝากเงิน) → API token → /v3 REST.** รองรับ ทอง/เงิน/forex/บาง CFD แต่**ไม่มีหุ้นรายตัว** (AAPL/PTT.BK) → จึงทำเป็น **RouterProvider**: OANDA สำหรับทอง/เงิน/forex, Yahoo สำหรับหุ้น/คริปโต.
+
+**ไฟล์:**
+- `backend/app/data/oanda.py` (ใหม่) — `OandaProvider` (get_candles/get_history/get_quote/get_quotes; account id auto-discover; header Accept-Datetime-Format:UNIX) + `RouterProvider` (route ตาม `to_oanda_instrument()`; name="yahoo" ให้ search ทำงาน) + map ทอง/เงิน/forex (XAUUSD=X→XAU_USD ฯลฯ)
+- `backend/app/config.py` — เพิ่ม `oanda_api_token / oanda_account_id / oanda_env`
+- `backend/app/main.py` `get_provider()` — **ถ้ามี OANDA_API_TOKEN → ใช้ RouterProvider อัตโนมัติ** (ก่อนเช็ค data_provider); fallback yahoo ถ้า error
+- `frontend/index.html` `binanceStreamSymbol()` — ลบ map ทอง→PAXG ออก (เหลือ PAXG-USD ตรงๆ) → ทอง XAUUSD=X ใช้ backend quote WS = ฟีด OANDA (exact) แทน Binance
+- `backend/.env.example` + `HANDBOOK.md` — เพิ่มวิธีตั้ง OANDA
+
+**กลไก realtime ทอง:** candles+quote จาก OANDA; frontend /ws/quotes poll get_quote ทุก 1s → ราคา OANDA exact อัปเดต ~1s (ยังไม่ใช่ tick stream — future: ต่อ OANDA pricing/stream ผ่าน backend WS)
+
+**py_compile + node parse ผ่าน.** ยังไม่ได้ test จริง (ต้องมี OANDA token).
+
+**user ต้องทำ:** สมัคร oanda.com practice ฟรี → Manage API Access → Generate token → ใส่ HF secret `OANDA_API_TOKEN` (+`OANDA_ENV=practice`). ระบบ route ให้เอง. **fallback ถ้าไม่ใส่ token:** ทอง = Yahoo PAXG-USD (~$6 off) เหมือน commit 5935591
+
+**commit:** (รอ push hf+origin)
+
 ## ✅ PUSH ขึ้น main สำเร็จ (2026-06-15, Claude/Opus)
 
 **ปมสิทธิ์/บัญชีจบแล้ว — push ผ่าน:**
