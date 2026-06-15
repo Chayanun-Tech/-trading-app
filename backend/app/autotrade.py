@@ -147,7 +147,12 @@ class AutoTradeManager:
             self._persist("save_bot_run", self._run_payload("stopped", stopped_at))
         return self.status()
 
-    async def tick_once(self) -> dict:
+    async def tick_once(self, config: AutoTradeConfig | None = None) -> dict:
+        # ถ้าส่ง config มา (กด Run 1 Tick โดยยังไม่ Start) → ตั้งค่าให้ทดสอบได้เลย
+        if config is not None and not self.running:
+            if config.mode == "real":
+                raise RuntimeError("Run 1 Tick ใช้ทดสอบ Paper เท่านั้น — Real mode ต้องกด Start Bot")
+            self.config = config
         if not self.config:
             raise RuntimeError("Auto trade is not configured")
         await self._tick()

@@ -467,9 +467,9 @@ async def autotrade_stop():
 
 
 @app.post("/api/autotrade/tick")
-async def autotrade_tick():
+async def autotrade_tick(req: AutoTradeConfig | None = None):
     try:
-        return await auto_trade.tick_once()
+        return await auto_trade.tick_once(req)
     except RuntimeError as exc:
         raise HTTPException(400, str(exc))
 

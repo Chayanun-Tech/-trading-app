@@ -2333,7 +2333,11 @@ async function tickAutoTrade() {
     renderChartLiveStatus();
   }
   try {
-    const res = await fetch(`${API}/api/autotrade/tick`, { method:"POST" });
+    // ส่ง config จากฟอร์มไปด้วย → ทดสอบ 1 tick ได้เลยแม้ยังไม่ได้กด Start (เฉพาะ paper)
+    const cfg = autoTradeConfigFromForm();
+    const res = await fetch(`${API}/api/autotrade/tick`, {
+      method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(cfg),
+    });
     if (!res.ok) throw new Error(await res.text());
     renderAutoTrade(await res.json());
   } catch (e) {

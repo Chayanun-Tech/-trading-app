@@ -1378,6 +1378,16 @@ Alternative:
 
 **สรุปสถานะทอง:** XAUUSD=X = PAXG spot (Yahoo candles + Binance realtime tick), ใกล้ OANDA ~$6 — ใช้เทรดได้, ดีกว่า GC=F futures (~$28) มาก
 
+## แก้ Auto Trade "Run 1 Tick" ใช้ไม่ได้ก่อน Start (2026-06-15, Claude/Opus)
+
+**ปัญหา user:** กด Run 1 Tick → `{"detail":"Auto trade is not configured"}` เพราะ tick_once() ต้องมี self.config (ตั้งตอน Start เท่านั้น) → ทดสอบ 1 tick ก่อน Start ไม่ได้ = งง
+**แก้ (3 จุด):**
+- `backend/app/autotrade.py` `tick_once(config=None)`: ถ้าส่ง config มาและบอทยังไม่ running → ตั้ง self.config ให้เลย (กัน Real mode — Run 1 Tick = paper เท่านั้น)
+- `backend/app/main.py` `/api/autotrade/tick`: รับ body `AutoTradeConfig | None = None` ส่งต่อเข้า tick_once
+- `frontend/index.html` `tickAutoTrade()`: ส่ง `autoTradeConfigFromForm()` เป็น JSON body ไปด้วย → Run 1 Tick ทดสอบได้เลยจากค่าในฟอร์ม โดยไม่ต้องกด Start
+**ผล:** กด Run 1 Tick (paper) → บอทเช็กกราฟ Bitkub 1 ครั้งทันที โชว์สัญญาณ waiting/entry. py_compile+node parse ผ่าน. **รอ push hf+origin** (user รันเอง)
+**หมายเหตุ:** ป้ายช่อง Auto Trade เป็นอังกฤษล้วน user งง — อธิบายความหมายทุกช่องในแชทแล้ว; ยังไม่ได้เพิ่ม tooltip ไทยใน UI (เสนอ user ไว้ ถ้าอยากได้ค่อยทำ)
+
 ## ✅ PUSH ขึ้น main สำเร็จ (2026-06-15, Claude/Opus)
 
 **ปมสิทธิ์/บัญชีจบแล้ว — push ผ่าน:**
