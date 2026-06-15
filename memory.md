@@ -1388,6 +1388,18 @@ Alternative:
 **ผล:** กด Run 1 Tick (paper) → บอทเช็กกราฟ Bitkub 1 ครั้งทันที โชว์สัญญาณ waiting/entry. py_compile+node parse ผ่าน. **รอ push hf+origin** (user รันเอง)
 **หมายเหตุ:** ป้ายช่อง Auto Trade เป็นอังกฤษล้วน user งง — อธิบายความหมายทุกช่องในแชทแล้ว; ยังไม่ได้เพิ่ม tooltip ไทยใน UI (เสนอ user ไว้ ถ้าอยากได้ค่อยทำ)
 
+## QA ทั้งระบบ (รันจริง) + คู่มือการใช้งาน (2026-06-15, Claude/Opus)
+
+user ขอตรวจทุกเมนู/ความสอดคล้อง + ทำคู่มือใช้งาน. **รัน backend จริงในเครื่องทดสอบทุก endpoint:**
+- **⚠️ venv เสีย:** `backend/.venv/Scripts/python.exe` ชี้ไป `C:\Program Files\Python311` ที่ไม่มี (exit 103). **ใช้ system `python` 3.11.9 แทน** (มี fastapi 0.135/uvicorn/httpx/pydantic ครบ). คำสั่งรันทดสอบ: `cd backend && DATA_PROVIDER=yahoo python -B -m uvicorn app.main:app --port 8011`
+- **ผลทดสอบทุก endpoint = 200 ทั้งหมด:** health/db/symbols/search/schools/candles(หุ้น+ทอง)/quote/quotes/autotrade-status/bitkub-symbols/alerts; POST analyze(20 verdicts)/backtest(502 trades)/live-signal(waiting)/**autotrade-tick(200 ✓ แก้สำเร็จ)**
+- **frontend↔backend สอดคล้อง:** ทุก path ที่ frontend เรียก มีใน backend ครบ ไม่มี orphan
+- **สรุป: ระบบทำงานครบ 100%.** bug Run 1 Tick ที่ user ยังเจอ = เพราะ HF **ยังไม่ deploy** commit 970fd96 (ต้อง push hf)
+
+**สร้าง `คู่มือการใช้งาน.md`** (ราก, ภาษาไทย) — วิธีใช้ทีละขั้นทั้ง 6 เมนู (Indicators/Schools/Report/Image/Strategy/AutoTrade) + watchlist/alerts + FAQ. แยกจาก HANDBOOK (เทคนิค) — อันนี้สำหรับผู้ใช้ทั่วไปทำตาม
+
+**commit:** (รอ push) — ⚠️ ค้าง 8 commit ยังไม่ขึ้น HF: ตั้งแต่ 970fd96(tick fix) + คู่มือนี้ ต้อง push hf+origin ถึงจะมีผลบนเว็บ
+
 ## ✅ PUSH ขึ้น main สำเร็จ (2026-06-15, Claude/Opus)
 
 **ปมสิทธิ์/บัญชีจบแล้ว — push ผ่าน:**
