@@ -17,3 +17,6 @@ backend/.env
 
 # Logs
 *.log
+
+# Large local training datasets
+data/candles/

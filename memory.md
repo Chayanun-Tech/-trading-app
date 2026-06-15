@@ -1456,3 +1456,54 @@ Verification:
 
 Follow-up:
 - User reported the browser still showed the old layout after local testing. Added `NO_CACHE_HEADERS` to `backend/app/main.py` for `/` and `/config.js` so the served single-file frontend is not cached during deploy/dev reloads.
+
+## Historical training data downloader (2026-06-16, Codex)
+
+User wants very large chart history for bot training. Added `backend/scripts/download_history.py`, a stdlib + httpx CLI downloader for OHLCV candles:
+- `--source bitkub` downloads Bitkub TradingView history for THB pairs such as `ETH_THB`.
+- `--source binance` downloads Binance public monthly spot kline ZIPs for symbols such as `ETHUSDT`.
+- Output schema is `symbol,timeframe,time,open,high,low,close,volume,source`.
+- Output path is `data/candles/{source}/{symbol}/{timeframe}.csv`; `.meta.json` is written beside each dataset.
+- Existing CSVs are read, merged by candle timestamp, sorted, and rewritten so reruns append/update without duplicates.
+- Added `data/candles/` to `.gitignore` because large training datasets should stay local.
+- Added usage notes in `backend/scripts/HISTORY_DATA.md`.
+
+Verification:
+- `python -m py_compile backend/scripts/download_history.py` passed.
+- Bitkub sample downloaded `ETH_THB 1h 2024-01-01..2024-01-02` = 48 rows.
+- Binance sample downloaded `ETHUSDT 1h 2024-01` = 744 rows.
+- Loaded initial larger training set locally under `data/candles/`:
+  - Bitkub BTC_THB/ETH_THB/SOL_THB for 1h, 4h, 1d from 2021-01-01 to 2026-06-16. SOL starts later due to no older Bitkub data.
+  - Binance BTCUSDT/ETHUSDT/SOLUSDT for 1h, 4h, 1d from 2021-01-01 to 2026-05 monthly files. Current 2026-06 monthly files were missing, which is expected.
+- Fixed Binance timestamp normalization for 2025+ public data using microseconds.
+
+## Trained math model gate for Auto Trade (2026-06-16, Codex)
+
+User wants the bot to train from large historical data and use the trained edge in real operation. Implemented a first production-safe version as a learned probability gate, not as an unchecked order engine.
+
+Files added/changed:
+- Added `backend/app/math_model.py`: loads `models/math_edge_model.json`, builds indicator/price/volume features, and predicts `prob_up` / `prob_down` with a dependency-light logistic model.
+- Added `backend/scripts/train_math_model.py`: trains standardized logistic regression from `data/candles/**/*.csv`.
+- Added `models/math_edge_model.json`: current trained model artifact.
+- Updated `backend/app/autotrade.py`: `AutoTradeConfig` now has `use_trained_model` and `trained_model_min_prob`; when the school system says `entry` but model `prob_up` is below the gate, the bot changes the signal to `waiting`, clears `trade`, and opens no order/position.
+- Added `GET /api/model/status` in `backend/app/main.py`.
+- Updated `frontend/index.html`: Auto Bot panel now shows `Use trained math model gate`, `Model min probability`, model metrics, live `prob_up`, and `Model Block/Pass` in the bot status and chart overlay.
+
+Current training command that completed:
+```powershell
+.\.venv\Scripts\python.exe backend\scripts\train_math_model.py --data-root data\candles --patterns "**/*.csv" --out models\math_edge_model.json --horizon 6 --min-return 0.0015 --max-examples-per-file 1200 --tail-bars 12000 --epochs 120 --lr 0.1 --l2 0.004
+```
+
+Current model metrics:
+- Train: count 19,369, accuracy 51.87%, high-confidence accuracy 57.69%.
+- Test: count 4,843, accuracy 51.19%, high-confidence accuracy 55.32%.
+- Sources: 18 CSV datasets from Bitkub and Binance.
+
+Verification:
+- Python compile passed for `math_model.py`, `autotrade.py`, `main.py`, `download_history.py`, and `train_math_model.py`.
+- `/api/model/status` returns `available: true`, model id `math_edge_logistic_1781559797`, and the metrics above.
+- API tick test with `ETH_THB 1h`: school signal was long entry around 75% / 65%, but trained model `prob_up` was about 50.50% below the 53% gate, so the bot returned `status: waiting`, `trade: null`, and event `Entry blocked by trained math model`.
+- Browser UI test at `http://127.0.0.1:8000/?v=fresh-layout`: Auto Bot panel shows `Trained Model`, test accuracy/high-confidence metrics, live probability, `Model Block`, and no orders/positions were opened after `Run 1 Tick`.
+
+Important caution:
+- This is the first trained filter, not a profit guarantee. The measured edge is small, so keep using Paper mode first and treat the model as an extra risk gate alongside school consensus, trend filter, RR, SL/TP, and daily loss limits.

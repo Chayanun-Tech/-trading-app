@@ -1,0 +1,194 @@
+{
+  "model_id": "math_edge_logistic_1781559797",
+  "model_type": "standardized_logistic_regression",
+  "trained_at": 1781559797,
+  "feature_names": [
+    "ret_1",
+    "ret_3",
+    "ret_12",
+    "ret_24",
+    "vol_12",
+    "vol_24",
+    "range_pct",
+    "body_pct",
+    "close_pos",
+    "ema20_dist",
+    "ema50_dist",
+    "sma200_dist",
+    "rsi_scaled",
+    "macd_scaled",
+    "macd_hist_scaled",
+    "volume_z20"
+  ],
+  "means": {
+    "ret_1": 7.96323014323446e-05,
+    "ret_3": 0.0003214780153005539,
+    "ret_12": 0.001611935550425248,
+    "ret_24": 0.0028686314078599793,
+    "vol_12": 0.018665331733979832,
+    "vol_24": 0.01965319266437182,
+    "range_pct": 0.03136361691767815,
+    "body_pct": -0.00033775734718528107,
+    "close_pos": 0.009248554040327997,
+    "ema20_dist": -0.0026892725972340525,
+    "ema50_dist": -0.00772277147467396,
+    "sma200_dist": -0.03449661990526408,
+    "rsi_scaled": 0.010013774588259645,
+    "macd_scaled": -0.002133604314140118,
+    "macd_hist_scaled": 9.793859624433937e-05,
+    "volume_z20": 0.0056011301081229994
+  },
+  "scales": {
+    "ret_1": 0.02620412075701352,
+    "ret_3": 0.04645898363435343,
+    "ret_12": 0.0948734531617177,
+    "ret_24": 0.14038942342816982,
+    "vol_12": 0.01609087766883181,
+    "vol_24": 0.01585676080343819,
+    "range_pct": 0.03401019542987437,
+    "body_pct": 0.02657588436001584,
+    "close_pos": 0.2898985974781908,
+    "ema20_dist": 0.0628409485497118,
+    "ema50_dist": 0.10824527042516784,
+    "sma200_dist": 0.25593601117955406,
+    "rsi_scaled": 0.2588357754558637,
+    "macd_scaled": 0.035110413943337596,
+    "macd_hist_scaled": 0.009581339855702468,
+    "volume_z20": 1.0812910752235472
+  },
+  "weights": {
+    "ret_1": 0.006684673170096302,
+    "ret_3": -0.015776860281022022,
+    "ret_12": 0.029633236778543376,
+    "ret_24": 0.05635866363540141,
+    "vol_12": -0.028960575174454318,
+    "vol_24": -0.01726749100869948,
+    "range_pct": 0.022489951361818736,
+    "body_pct": 0.005857091679743344,
+    "close_pos": -0.02494529740729497,
+    "ema20_dist": -0.004960362336283948,
+    "ema50_dist": -0.021452193933516214,
+    "sma200_dist": -0.026769679973762922,
+    "rsi_scaled": -0.033772880241130926,
+    "macd_scaled": 0.0035051287234836763,
+    "macd_hist_scaled": -0.009214806640040514,
+    "volume_z20": 0.022913944910651258
+  },
+  "intercept": 0.015446596159013424,
+  "label": {
+    "horizon_bars": 6,
+    "min_abs_return": 0.0015,
+    "positive": "future close after horizon is above current close by min_return"
+  },
+  "metrics": {
+    "train": {
+      "count": 19369,
+      "accuracy": 0.5187,
+      "positive_rate": 0.5041,
+      "avg_prob_up": 0.5039,
+      "high_conf_count": 208,
+      "high_conf_accuracy": 0.5769
+    },
+    "test": {
+      "count": 4843,
+      "accuracy": 0.5119,
+      "positive_rate": 0.5009,
+      "avg_prob_up": 0.5039,
+      "high_conf_count": 47,
+      "high_conf_accuracy": 0.5532
+    }
+  },
+  "sources": [
+    {
+      "path": "data/candles/binance/BTCUSDT/1d.csv",
+      "candles": 1977,
+      "examples": 1694
+    },
+    {
+      "path": "data/candles/binance/BTCUSDT/1h.csv",
+      "candles": 12000,
+      "examples": 1086
+    },
+    {
+      "path": "data/candles/binance/BTCUSDT/4h.csv",
+      "candles": 11862,
+      "examples": 1198
+    },
+    {
+      "path": "data/candles/binance/ETHUSDT/1d.csv",
+      "candles": 1977,
+      "examples": 1720
+    },
+    {
+      "path": "data/candles/binance/ETHUSDT/1h.csv",
+      "candles": 12000,
+      "examples": 1160
+    },
+    {
+      "path": "data/candles/binance/ETHUSDT/4h.csv",
+      "candles": 11862,
+      "examples": 1224
+    },
+    {
+      "path": "data/candles/binance/SOLUSDT/1d.csv",
+      "candles": 1977,
+      "examples": 1725
+    },
+    {
+      "path": "data/candles/binance/SOLUSDT/1h.csv",
+      "candles": 12000,
+      "examples": 1205
+    },
+    {
+      "path": "data/candles/binance/SOLUSDT/4h.csv",
+      "candles": 11862,
+      "examples": 1246
+    },
+    {
+      "path": "data/candles/bitkub/BTC_THB/1d.csv",
+      "candles": 1992,
+      "examples": 1708
+    },
+    {
+      "path": "data/candles/bitkub/BTC_THB/1h.csv",
+      "candles": 12000,
+      "examples": 1084
+    },
+    {
+      "path": "data/candles/bitkub/BTC_THB/4h.csv",
+      "candles": 11950,
+      "examples": 1198
+    },
+    {
+      "path": "data/candles/bitkub/ETH_THB/1d.csv",
+      "candles": 1992,
+      "examples": 1731
+    },
+    {
+      "path": "data/candles/bitkub/ETH_THB/1h.csv",
+      "candles": 12000,
+      "examples": 1173
+    },
+    {
+      "path": "data/candles/bitkub/ETH_THB/4h.csv",
+      "candles": 11949,
+      "examples": 1235
+    },
+    {
+      "path": "data/candles/bitkub/SOL_THB/1d.csv",
+      "candles": 1602,
+      "examples": 1353
+    },
+    {
+      "path": "data/candles/bitkub/SOL_THB/1h.csv",
+      "candles": 12000,
+      "examples": 1171
+    },
+    {
+      "path": "data/candles/bitkub/SOL_THB/4h.csv",
+      "candles": 9614,
+      "examples": 1301
+    }
+  ],
+  "disclaimer": "Research model only. Use with paper trading and risk controls; historical accuracy does not guarantee future returns."
+}

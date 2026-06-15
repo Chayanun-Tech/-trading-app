@@ -162,6 +162,15 @@
   .tiny { font-size:11px; color:var(--muted); }
   .chart-status { color:var(--muted); font-size:11px; padding:0 4px; }
   .alert-item { display:flex; justify-content:space-between; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .model-card {
+    border:1px solid rgba(34,211,238,.32); border-left:3px solid var(--cyan); border-radius:8px;
+    background:rgba(8,16,24,.7); padding:9px 10px; margin-top:10px;
+  }
+  .model-card.off { border-color:var(--border); border-left-color:var(--muted); }
+  .model-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:7px; }
+  .model-head b { font-size:13px; }
+  .model-meter { height:8px; border-radius:999px; overflow:hidden; background:#111827; border:1px solid var(--border); margin:6px 0; }
+  .model-meter span { display:block; height:100%; background:linear-gradient(90deg, var(--red), var(--amber), var(--green)); }
   .toast-stack {
     position:fixed; top:12px; right:12px; z-index:9999; display:flex; flex-direction:column;
     gap:8px; width:min(390px, calc(100vw - 24px)); pointer-events:none;
@@ -476,6 +485,7 @@
         <div class="field"><label>Risk:Reward</label><input id="bot_rr" type="number" min="1.5" max="10" step="0.1" value="1.5" /></div>
         <div class="field"><label>ATR x stop</label><input id="bot_atr" type="number" min="0.2" max="10" step="0.1" value="1.5" /></div>
         <div class="field"><label>School weight gate</label><input id="bot_mdw" type="number" min="0.5" max="12" step="0.5" value="2" /></div>
+        <div class="field"><label>Model min probability</label><input id="bot_model_min" type="number" min="50" max="95" step="1" value="53" /></div>
         <div class="field"><label>Real confirm</label><input id="bot_confirm" placeholder="I UNDERSTAND REAL ORDERS" /></div>
       </div>
       <datalist id="botPairList"></datalist>
@@ -484,6 +494,11 @@
         <div class="quick" id="botTopPairs" style="padding:0; border:0; gap:6px;"></div>
       </div>
       <label class="checkrow" style="margin-top:8px;"><span>Trend Filter</span><input id="bot_trend" type="checkbox" checked /></label>
+      <label class="checkrow"><span>Use trained math model gate</span><input id="bot_use_model" type="checkbox" checked /></label>
+      <div id="botModelStatus" class="model-card off">
+        <div class="model-head"><b>Trained Model</b><span class="pill">checking</span></div>
+        <div class="note">Loading model status...</div>
+      </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
         <button class="primary" onclick="startAutoTrade()">Start Bot</button>
         <button onclick="stopAutoTrade()">Stop</button>
@@ -647,6 +662,7 @@ let livePositionLines = [];
 let activeLiveTrade = null;
 let latestLiveSignal = null;
 let latestAutoTradeState = null;
+let latestModelStatus = null;
 let autoTradeTimer = null;
 let botLastDrawnPosId = null;
 
@@ -1213,6 +1229,74 @@ function setBotSymbol(symbol) {
   }
 }
 
+function pctText(value, digits = 1) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "-";
+  return `${(n * 100).toFixed(digits)}%`;
+}
+
+function pctInputToProb(id, fallback) {
+  const raw = parseFloat($(id)?.value);
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.min(Math.max(raw / 100, 0.5), 0.95);
+}
+
+function renderModelStatus(status = latestModelStatus, signal = null) {
+  const box = $("botModelStatus");
+  if (!box) return;
+  const modelSig = signal?.trained_model || null;
+  const enabled = $("bot_use_model")?.checked !== false;
+  const minProb = pctInputToProb("bot_model_min", 0.53);
+  const probUp = Number(modelSig?.prob_up);
+  const hasLivePrediction = Number.isFinite(probUp);
+  const available = Boolean(status?.available);
+  box.classList.toggle("off", !enabled || !available);
+
+  if (!enabled) {
+    box.innerHTML = `
+      <div class="model-head"><b>Trained Model</b><span class="pill">off</span></div>
+      <div class="note">Model gate is disabled. Bot will use school consensus and risk rules only.</div>`;
+    return;
+  }
+
+  if (!available) {
+    box.innerHTML = `
+      <div class="model-head"><b>Trained Model</b><span class="pill">missing</span></div>
+      <div class="note">No trained model file found yet. Train with backend/scripts/train_math_model.py.</div>`;
+    return;
+  }
+
+  const metrics = status.metrics || {};
+  const liveLine = hasLivePrediction
+    ? `Live prob_up ${pctText(probUp, 2)} ${probUp >= minProb ? "passes" : "blocks"} the ${pctText(minProb, 0)} gate.`
+    : `Waiting for the next bot tick to calculate live probability. Gate: ${pctText(minProb, 0)}.`;
+  const highConf = metrics.test?.high_conf_accuracy ?? metrics.high_conf_accuracy;
+  const testAcc = metrics.test?.accuracy ?? metrics.accuracy;
+  const width = hasLivePrediction ? Math.round(probUp * 100) : Math.round(minProb * 100);
+
+  box.innerHTML = `
+    <div class="model-head">
+      <b>Trained Model</b>
+      <span class="pill">${escapeHtml(status.model_type || "logistic")}</span>
+    </div>
+    <div class="model-meter"><span style="width:${Math.min(Math.max(width, 0), 100)}%;"></span></div>
+    <div class="note">
+      ${escapeHtml(liveLine)}<br>
+      Test accuracy ${testAcc != null ? pctText(testAcc, 2) : "-"} · high confidence ${highConf != null ? pctText(highConf, 2) : "-"} · sources ${escapeHtml(status.sources_count ?? "-")}
+    </div>`;
+}
+
+async function loadModelStatus() {
+  try {
+    const res = await fetch(`${API}/api/model/status`);
+    if (!res.ok) throw new Error(await res.text());
+    latestModelStatus = await res.json();
+  } catch (e) {
+    latestModelStatus = { available:false, error:errorMessage(e) };
+  }
+  renderModelStatus(latestModelStatus, latestAutoTradeState?.latest_signal || null);
+}
+
 async function init() {
   preventImplicitButtonSubmit();
   dockDetailPanels();
@@ -1226,6 +1310,9 @@ async function init() {
   setupCharts();
   bindSearch();
   hydrateLiveControls();
+  await loadModelStatus();
+  $("bot_use_model")?.addEventListener("change", () => renderModelStatus(latestModelStatus, latestAutoTradeState?.latest_signal || null));
+  $("bot_model_min")?.addEventListener("input", () => renderModelStatus(latestModelStatus, latestAutoTradeState?.latest_signal || null));
   await loadChart();
   await refreshWatchlist();
   refreshAlerts();
@@ -1236,6 +1323,7 @@ async function init() {
   watchTimer = setInterval(refreshWatchlist, 5000);
   priceCountdownTimer = setInterval(updateCurrentPriceLine, 1000);
   setInterval(refreshTriggered, 8000);
+  setInterval(loadModelStatus, 60000);
   autoTradeTimer = setInterval(refreshAutoTrade, 5000);
   resetChartRefreshTimer();
   renderChartLiveStatus();
@@ -2140,6 +2228,13 @@ function renderAutoBotChartStatus(bot) {
   const latestOrder = (bot.orders || [])[bot.orders.length - 1];
   const latestEvent = (bot.events || [])[bot.events.length - 1];
   const modeText = cfg.mode === "real" ? "REAL" : "PAPER";
+  const modelProb = Number(sig?.trained_model?.prob_up);
+  const modelGate = Number(cfg.trained_model_min_prob ?? 0.53);
+  const modelText = cfg.use_trained_model === false
+    ? "Off"
+    : Number.isFinite(modelProb)
+      ? `${pctText(modelProb, 1)} / ${pctText(modelGate, 0)}`
+      : "Waiting";
   const side = trade?.side || sig?.side || latestPosition?.side || "-";
   const note = latestPosition
     ? `มี position เปิดอยู่: ${latestPosition.side || "long"} entry ${latestPosition.entry} | TP ${latestPosition.take_profit} | SL ${latestPosition.stop_loss}`
@@ -2159,6 +2254,7 @@ function renderAutoBotChartStatus(bot) {
       <span>คู่เทรด</span><b>${escapeHtml(cfg.symbol || "-")} / ${escapeHtml(cfg.timeframe || "-")}</b>
       <span>สถานะ AI</span><b>${escapeHtml(botSignalLabel(sig))}</b>
       <span>ความแรง</span><b>${escapeHtml(botDecisionProb(sig, cfg))}</b>
+      <span>Model</span><b class="${Number.isFinite(modelProb) && modelProb < modelGate ? "down" : ""}">${escapeHtml(modelText)}</b>
       <span>Position</span><b class="${openPositions.length ? "up" : ""}">${openPositions.length ? `${openPositions.length} open` : "รอสัญญาณ"}</b>
       <span>Risk/RR</span><b>${escapeHtml(cfg.risk_pct ?? "-")}% · 1:${escapeHtml(cfg.rr_ratio ?? "-")}</b>
       <span>Order ล่าสุด</span><b>${latestOrder ? `${escapeHtml(latestOrder.side)} ${escapeHtml(latestOrder.status)}` : "-"}</b>
@@ -2549,6 +2645,8 @@ function autoTradeConfigFromForm() {
     enabled_schools: getActiveSchools(),
     weights: getSchoolWeights(),
     real_confirm_text: $("bot_confirm").value || null,
+    use_trained_model: $("bot_use_model")?.checked !== false,
+    trained_model_min_prob: pctInputToProb("bot_model_min", 0.53),
   };
 }
 
@@ -2657,9 +2755,14 @@ function renderAutoTrade(s) {
   const cfg = s.config || {};
   const sig = s.latest_signal || {};
   const trade = sig.trade || {};
+  const modelSig = sig.trained_model || null;
+  const modelProb = Number(modelSig?.prob_up);
+  const modelGate = Number(cfg.trained_model_min_prob ?? 0.53);
+  const modelAvailable = modelSig?.available !== false && Number.isFinite(modelProb);
   const positions = s.positions || [];
   const orders = s.orders || [];
   const events = s.events || [];
+  renderModelStatus(latestModelStatus, sig);
   if ($("chartStatus") && s.running) {
     $("chartStatus").textContent = `Auto Bot: ${cfg.symbol || "-"} ${cfg.timeframe || "-"} · ${s.latest_signal?.status || "waiting"}`;
   } else if ($("chartStatus")?.textContent.startsWith("Auto Bot")) {
@@ -2693,11 +2796,14 @@ function renderAutoTrade(s) {
       ${stat("Signal", sig.status || "-")}
       ${stat("Side", sig.side || "-")}
       ${stat("Prob", sig.up_probability != null ? `${sig.up_probability}% / ${sig.live_entry_threshold || sig.entry_threshold}%` : "-")}
+      ${stat("Model", cfg.use_trained_model === false ? "Off" : (modelAvailable ? (modelProb >= modelGate ? "Pass" : "Block") : "Waiting"), modelAvailable && modelProb < modelGate ? "down" : "up")}
+      ${stat("Model Prob", modelAvailable ? `${pctText(modelProb, 2)} / ${pctText(modelGate, 0)}` : "-")}
       ${stat("P/L THB", s.realized_pnl_thb ?? 0, Number(s.realized_pnl_thb || 0) >= 0 ? "up" : "down")}
     </div>
     ${cfg.mode === "real" ? `<div class="note" style="border:1px solid #ef4444; padding:8px; border-radius:8px; margin-bottom:10px;">Real mode จะยิงคำสั่ง Bitkub จริงได้เฉพาะเมื่อ backend เปิด BITKUB_REAL_TRADING_ENABLED=true และใส่ confirm text ถูกต้อง</div>` : ""}
     <div class="note" style="margin-bottom:8px;">
       ${sig.status === "entry" ? `Entry ${escapeHtml(trade.entry)} / TP ${escapeHtml(trade.take_profit)} / SL ${escapeHtml(trade.stop_loss)}` : escapeHtml((sig.watch_plan || sig.reasons || ["รอสัญญาณ"])[0])}
+      ${modelAvailable ? `<br>Trained model: prob_up ${escapeHtml(pctText(modelProb, 2))} / gate ${escapeHtml(pctText(modelGate, 0))}` : ""}
       ${s.last_error ? `<br><span class="down">Error: ${escapeHtml(s.last_error)}</span>` : ""}
     </div>
     <h3>Positions</h3>

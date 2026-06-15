@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.backtest import live_signal
 from app.bitkub import BitkubClient
+from app.math_model import predict as predict_math_model
 
 
 class AutoTradeConfig(BaseModel):
@@ -38,6 +39,8 @@ class AutoTradeConfig(BaseModel):
     enabled_schools: list[str] | None = None
     weights: dict | None = None
     real_confirm_text: str | None = None
+    use_trained_model: bool = True
+    trained_model_min_prob: float = Field(default=0.53, ge=0.5, le=0.95)
 
 
 class AutoTradeManager:
@@ -189,6 +192,27 @@ class AutoTradeManager:
             risk_pct=cfg.risk_pct,
         )
         signal["symbol"] = cfg.symbol
+        if cfg.use_trained_model:
+            model_signal = predict_math_model(candles)
+            if model_signal:
+                signal["trained_model"] = model_signal
+                model_prob = float(model_signal.get("prob_up") or 0.0)
+                if signal.get("status") == "entry" and model_prob < cfg.trained_model_min_prob:
+                    signal["status"] = "waiting"
+                    signal["trade"] = None
+                    signal.setdefault("reasons", []).append(
+                        f"Trained model blocked entry: prob_up {model_prob:.2%} < "
+                        f"{cfg.trained_model_min_prob:.2%}"
+                    )
+                    signal.setdefault("watch_plan", []).append(
+                        f"Wait for trained model probability >= {cfg.trained_model_min_prob:.2%}"
+                    )
+                    self._event("info", "Entry blocked by trained math model", model_signal)
+            else:
+                signal["trained_model"] = {
+                    "available": False,
+                    "message": "No trained model found or not enough features; school consensus is used alone.",
+                }
         self.latest_signal = signal
         self.updated_at = int(time.time())
         price = float(signal.get("last_price") or candles[-1].close)

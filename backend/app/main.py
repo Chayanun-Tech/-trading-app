@@ -24,6 +24,7 @@ from app.data.base import DataProvider
 from app.db import DatabaseStore
 from app.engine import build_report
 from app.indicators import compute_indicators
+from app.math_model import DEFAULT_MODEL_PATH, load_model
 from app.schemas import (AlertRule, AnalyzeRequest, BacktestRequest, CandlesResponse,
                          LiveSignalRequest, MultiSchoolReport)
 from app.schools import evaluate_python_schools
@@ -500,6 +501,23 @@ async def bitkub_ticker(symbol: str | None = None):
 @app.get("/api/autotrade/status")
 async def autotrade_status():
     return auto_trade.status()
+
+
+@app.get("/api/model/status")
+async def model_status():
+    model = load_model()
+    if not model:
+        return {"available": False, "path": str(DEFAULT_MODEL_PATH)}
+    return {
+        "available": True,
+        "path": str(DEFAULT_MODEL_PATH),
+        "model_id": model.get("model_id"),
+        "trained_at": model.get("trained_at"),
+        "model_type": model.get("model_type"),
+        "label": model.get("label"),
+        "metrics": model.get("metrics"),
+        "sources_count": len(model.get("sources") or []),
+    }
 
 
 @app.post("/api/autotrade/start")
