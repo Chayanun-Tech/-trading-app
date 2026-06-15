@@ -1285,6 +1285,52 @@ Alternative:
 3. ได้เว็บจริง: frontend `https://chayanun-tech.github.io/-trading-app/`, backend `https://<ชื่อ>.onrender.com`
    - หมายเหตุ: repo มีขีดนำหน้า → Pages URL จะมี `/-trading-app/`
 
+## 🚀 DEPLOY สำเร็จ — ขึ้นออนไลน์เต็มระบบ (2026-06-15, Claude/Opus)
+
+**เปลี่ยนแผน host: จาก Render → Hugging Face Spaces** (เพราะ Render บังคับผูกบัตรก่อน deploy Blueprint; HF ฟรีไม่ต้องใช้บัตร)
+
+**สถาปัตยกรรมจริงที่ deploy:** Supabase(DB) + **Hugging Face Spaces(Docker, FastAPI+frontend รวมคอนเทนเนอร์เดียว)** + GitHub(source)
+
+### เว็บจริง (LIVE)
+- **Frontend+Backend:** https://chayanun2541-ai-trade-assistant.hf.space
+- **Space:** https://huggingface.co/spaces/Chayanun2541/ai-trade-assistant (Docker SDK, public, CPU basic free)
+- **GitHub source:** https://github.com/Chayanun-Tech/-trading-app (branch main)
+
+### ไฟล์ที่เพิ่มสำหรับ HF (commit 9d27698)
+- `Dockerfile` (ราก) — python:3.11-slim, build backend/requirements, copy backend+frontend, รันบน port 7860 (HF app_port), user uid 1000
+- `README.md` — เพิ่ม YAML frontmatter ของ HF (sdk:docker, app_port:7860) ที่หัวไฟล์
+- `backend/app/main.py` — เพิ่ม route `GET /config.js` เสิร์ฟ frontend/config.js (กัน 404; API="" same-origin)
+
+### วิธี deploy HF (ทำซ้ำได้)
+1. สร้าง HF Space (Docker/Blank/Public/CPU free)
+2. local: `git remote add hf https://huggingface.co/spaces/Chayanun2541/ai-trade-assistant` → `git push hf HEAD:main --force` (username=Chayanun2541, password=HF access token แบบ **Write** จาก huggingface.co/settings/tokens)
+3. HF build Docker อัตโนมัติ → Running
+4. Space Settings → Variables and secrets:
+   - **Variable** `DATA_PROVIDER=yahoo` (ไม่ใส่=provider:mock ข้อมูลจำลอง!)
+   - **Secret** `GEMINI_API_KEY`, `GROQ_API_KEY` (ใส่แล้ว ใช้ได้), `DATABASE_URL` (ยังไม่ใส่ — แอปทำงานได้ แค่ไม่ persist ลง Supabase)
+5. ทุกครั้งที่เพิ่ม var/secret → Space restart เอง
+
+### ยืนยันใช้งานจริง (จากภาพ user)
+- provider:yahoo ✓, AI:gemini-2.0-flash ✓, Yahoo **ไม่โดนบล็อก**จาก HF cloud IP ✓
+- ราคาจริง: BTC 1m ~65,834 (แท่งตรงกับ EMA/BB), AAPL 291, NVDA 205, ทอง GC=F 4,330 ✓
+- crypto realtime ผ่าน Binance WS ทำงาน ("Binance tick") ✓
+
+### เรื่องบัญชี/git (กันสับสนรอบหน้า)
+- เครื่องนี้ git login = `chayanun250841` (collaborator Write บน repo); repo เป็นของ org Chayanun-Tech (เจ้าของ=chayanunju@scphpl.ac.th)
+- remote: `origin`=GitHub(Chayanun-Tech/-trading-app), `hf`=HF Space, `old-chayanun250841`=repo เก่า
+- **การ push external repo ทั้งหมด user ต้องรันเองในเทอร์มินัล** (auto-mode hard block การ push code ขึ้น public repo)
+
+### เหลือทำต่อ (optional — เคยคุยไว้)
+1. **DATABASE_URL** ใส่ใน HF secret → เปิด persistence ลง Supabase (Session pooler string อยู่ใน backend/.env)
+2. **หุ้น/ทอง realtime แท้ (tick-level):** Yahoo เป็น polling 1s เท่านั้น ไม่ใช่ realtime จริง → ต้องต่อ Finnhub (หุ้น US) หรือ Twelve Data (ครบทุก asset) เมื่อ user มี key. crypto เรียลไทม์แล้วผ่าน Binance WS
+3. push commit 9d27698 ขึ้น GitHub origin/main ด้วย (ตอนนี้ origin ยังอยู่ที่ 5cba538; HF มี 9d27698)
+
+## เพิ่มคู่มือรวม HANDBOOK.md (2026-06-15, Claude/Opus)
+
+ผู้ใช้ขอเอกสารกันลืม "โครงสร้างทุกอย่าง + รหัสผ่าน + ลิงก์" ที่คนภายนอกอ่านแล้วเข้าใจ → สร้าง **`HANDBOOK.md`** (ราก) ครอบคลุม 12 หัวข้อ: แอปคืออะไร, architecture diagram, ลิงก์สำคัญทั้งหมด, บัญชี/เจ้าของ, คีย์เก็บที่ไหน+เอามาจากไหน (ไม่เขียนค่าจริงเพราะ repo public), แหล่งข้อมูลราคา, โครงสร้างไฟล์, วิธีรัน local, วิธี push อัปเดต (hf+origin), troubleshooting, โหมดเทรดจริง, roadmap.
+- **ไม่เขียน secret value จริงลงไฟล์** (repo เป็น public) — บอกแค่ที่เก็บ (backend/.env + HF secrets) และเว็บออกคีย์ใหม่
+- ลิงก์สรุปในไฟล์: แอป https://chayanun2541-ai-trade-assistant.hf.space, Space/Supabase/GitHub dashboards, เว็บออกคีย์ (Gemini/Groq/HF token/Supabase pooler)
+
 ## ✅ PUSH ขึ้น main สำเร็จ (2026-06-15, Claude/Opus)
 
 **ปมสิทธิ์/บัญชีจบแล้ว — push ผ่าน:**
