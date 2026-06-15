@@ -567,3 +567,11 @@ async def index():
     if idx.exists():
         return FileResponse(idx)
     return {"message": "AI Trade Assistant API. ดู /docs สำหรับ API"}
+
+
+@app.get("/config.js")
+async def frontend_config():
+    cfg = FRONTEND_DIR / "config.js"
+    if cfg.exists():
+        return FileResponse(cfg, media_type="application/javascript")
+    return JSONResponse({}, media_type="application/javascript")

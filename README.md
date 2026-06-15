@@ -1,3 +1,13 @@
+---
+title: AI Trade Assistant
+emoji: 📈
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # AI Trade Assistant — วิเคราะห์กราฟหลายสำนัก
 
 แอปช่วยเทรดที่ประเมินกราฟ **แยกตามทุกศาสตร์การวิเคราะห์** (Price Action, แท่งเทียน, Chart Patterns,

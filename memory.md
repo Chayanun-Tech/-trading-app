@@ -1211,3 +1211,93 @@ Current blocker:
 
 Alternative:
 - User can run `backend/db/schema.sql` manually in Supabase SQL Editor. This avoids local DB connectivity issues and immediately creates tables.
+
+## Deployment Prep + Push (2026-06-15, Claude)
+
+ผู้ใช้ขอ deploy แอป (พูดว่า "ขึ้น supabase" แต่จริงๆ Supabase = DB เท่านั้น; สถาปัตยกรรม = Supabase(Postgres) + Render(FastAPI) + GitHub Pages(frontend)).
+
+**ทำให้แล้ว (อัตโนมัติในเครื่อง):**
+- ตรวจ schema.sql ↔ db.py = ตรงกัน (9 ตาราง, pgcrypto) ✓
+- แก้ `.github/workflows/pages.yml` ให้ trigger บน branch จริง `claude/trading-app-design-1pmpxo` (เดิมตั้งแค่ `main` ที่ไม่มี → Pages จะไม่ build)
+- **Security: พบ Groq API key เต็มใน memory.md บรรทัด ~317 → redact ทิ้งแล้ว** (key นี้ไม่เคยอยู่ใน git history เพราะ memory.md เพิ่งถูก commit ครั้งแรก)
+- ตั้ง git identity (local repo): chayanun250841@gmail.com
+- commit `5cba538` (47 ไฟล์, deploy config + ฟีเจอร์ทั้งหมด) + **push ขึ้น origin สำเร็จ** (github.com/chayanun250841/-.git, default branch)
+- `.env` gitignored ปลอดภัย, นับ secret scan = clean
+
+**ทำไม่ได้ (ต้องใช้ login ของผู้ใช้ — กฎห้าม):** รัน schema.sql ใน Supabase SQL Editor / สร้าง Render Blueprint + ใส่ secret / เปิด GitHub Pages + ตั้ง var API_BASE_URL.
+
+**ค้าง/ข้อควรระวัง:**
+- โฟลเดอร์ซ้ำ `trading-app/` (nested, separate .git, commit 252da36 เดียวกับ MVP เก่า) — auto-mode บล็อกการลบ; ไม่ได้ commit ขึ้น git; ผู้ใช้ลบเองได้
+- repo name = "-" → Pages URL จะเป็น https://chayanun250841.github.io/-/ (แปลกแต่น่าจะใช้ได้)
+- gh CLI ไม่ได้ติดตั้ง → มอนิเตอร์ workflow ผ่าน CLI ไม่ได้
+
+## Deploy Progress — หยุดกลางทาง รอทำต่อ (2026-06-15)
+
+**เป้าหมาย:** เอาแอปขึ้นเว็บสาธารณะ = Supabase(DB) + Render(FastAPI) + GitHub Pages(frontend)
+
+### ทำไปแล้ว
+- ✅ **ขั้น ① Supabase เสร็จ** — รัน schema.sql ใน SQL Editor สร้าง 9 ตารางแล้ว (project: xiblqetehrnprycbkwyp.supabase.co). ผู้ใช้ได้ connection string แบบ **Session pooler** (port 5432) เก็บไว้แล้ว (ใช้ Session pooler เพราะ Render วิ่ง IPv4, Direct connection ของ Supabase เป็น IPv6 ต่อไม่ติด)
+- ✅ commit `5cba538` (47 ไฟล์ deploy config + ฟีเจอร์) push ขึ้น repo เก่า `chayanun250841/-` แล้ว
+- ✅ git remote ในเครื่องตั้งใหม่แล้ว: `origin` → `https://github.com/Chayanun-Tech/trading-app.git`, เก็บของเก่าเป็น `old-chayanun250841` → `chayanun250841/-`
+- ✅ git identity (local): chayanun250841@gmail.com
+- ✅ Render GitHub app ติดตั้งบนบัญชี **Chayanun-Tech** แล้ว
+
+### ⛔ ติดอยู่ตรงนี้ (จุดที่ต้องแก้ก่อนไปต่อ)
+**push ไป repo ใหม่ไม่ผ่าน** — `git push -u origin HEAD:main` ขึ้น **"Repository not found"** (`https://github.com/Chayanun-Tech/trading-app.git`)
+สาเหตุที่เป็นไปได้ (ยังไม่ยืนยัน — รอ user ส่ง URL จริงของ repo มา):
+1. ชื่อ/owner ของ repo ไม่ตรงกับที่เดา (อาจไม่ใช่ `Chayanun-Tech/trading-app`)
+2. repo เป็น Private + git ในเครื่องล็อกอินค้างเป็นบัญชี `chayanun250841` (จาก push ครั้งก่อน) → มองไม่เห็น repo ของ Chayanun-Tech → 404
+**คำสั่ง push ที่ถูกต้องคือ:** `git push -u origin HEAD:main` (ต้องมี `HEAD:` เพราะ local branch ชื่อ `claude/trading-app-design-1pmpxo` ไม่ใช่ main)
+
+### ขั้นตอนทำต่อเมื่อเปิดเครื่อง (ลำดับ)
+1. **เคลียร์ปม push:** ขอ URL จริงของ repo จาก address bar → set-url origin ให้ตรง → ถ้าเป็น credential เก่า (chayanun250841) ค้าง ให้ล้างใน Windows Credential Manager (Control Panel → Credential Manager → Windows Credentials → ลบ git:https://github.com) แล้ว push ใหม่ ล็อกอินเป็น Chayanun-Tech. repo ต้องเป็น **Public** (สำหรับ GitHub Pages ฟรี)
+2. `git push -u origin HEAD:main`
+3. **② Render:** dashboard.render.com → New → Blueprint → เลือก repo → ใส่ secret: `DATABASE_URL`(Session pooler string), `GEMINI_API_KEY`, `GROQ_API_KEY` (**regenerate Groq key ใหม่ก่อน** เพราะตัวเก่าเคยโผล่ในแชท) → Deploy → เช็ก `/api/health` + `/api/db/status`
+4. **③ GitHub Pages:** repo → Settings → Pages → Source = GitHub Actions; แล้ว Settings → Secrets and variables → Actions → Variables → เพิ่ม `API_BASE_URL` = URL ของ Render. (workflow pages.yml trigger บน main + claude branch อยู่แล้ว)
+5. ได้เว็บจริง: frontend `https://chayanun-tech.github.io/trading-app/`, backend `https://<ชื่อ>.onrender.com`
+
+### หมายเหตุ
+- โฟลเดอร์ซ้ำ `trading-app/` (nested, ของเก่า) ยังอยู่ — auto-mode บล็อกการลบ; ไม่กระทบ git (ไม่ได้ commit); user ลบเองได้
+- ไฟล์ที่แก้ตอน deploy prep (pages.yml, memory.md redacted) commit แล้วใน 5cba538
+- ⚠️ ความปลอดภัย: Groq API key ตัวเดิมหลุดในแชท → **ต้อง regenerate** ที่ Groq console ก่อนใช้ production
+
+## เจอชื่อ repo ที่ถูกต้อง + ปลดปม push (2026-06-15, Claude/Opus)
+
+**ปม "Repository not found" ที่ค้างครั้งก่อน = แก้ต้นเหตุได้แล้ว:**
+- repo ปลายทางจริงชื่อ **`Chayanun-Tech/-trading-app`** (มีขีด `-` นำหน้า!) ไม่ใช่ `Chayanun-Tech/trading-app` ที่เดาไว้ → เลยขึ้น 404 มาตลอด
+- ยืนยันด้วย `gh repo list Chayanun-Tech`: เจอ `Chayanun-Tech/-trading-app` (public, สร้าง 2026-06-15)
+- gh CLI ติดตั้งแล้ว (เครื่องนี้มี `C:\Program Files\GitHub CLI\gh.exe`), login = บัญชี `chayanun250841` (เป็นสมาชิก org Chayanun-Tech, scope: repo/workflow/gist/read:org)
+- **แก้ remote แล้ว:** `git remote set-url origin https://github.com/Chayanun-Tech/-trading-app.git` → `git ls-remote origin` ผ่าน (repo ว่าง พร้อมรับ push)
+
+**สถานะ branch ปัจจุบัน:** local `claude/trading-app-design-1pmpxo`, commit `5cba538` (HEAD), working tree มี `M memory.md` + untracked `trading-app/` (โฟลเดอร์ซ้ำของเก่า)
+
+### ⛔ ติด: push ขึ้น main โดน HARD BLOCK ของ auto-mode
+- `git push -u origin HEAD:main` ถูก auto-mode classifier บล็อกแบบ hard block (มองว่าเป็นการ push โค้ดทั้ง repo ขึ้น public external repo = data exfiltration ที่แม้ user อนุมัติก็ปลดไม่ได้ในโหมดนี้)
+- **ทางแก้: ผู้ใช้ต้องรัน push เองในเทอร์มินัลปกติ (นอก Claude):**
+  ```powershell
+  git push -u origin HEAD:main
+  ```
+  (รันในรากโปรเจกต์ trading-app; ถ้าถาม login/404 ให้ใช้บัญชีที่เข้าถึง Chayanun-Tech ได้)
+
+### ขั้นตอนทำต่อหลัง push สำเร็จ (เหมือนเดิม)
+1. **Render:** dashboard.render.com → New → Blueprint → เลือก repo `-trading-app` → secret: `DATABASE_URL`(Session pooler), `GEMINI_API_KEY`, `GROQ_API_KEY`(regenerate ก่อน) → Deploy → เช็ก `/api/health` + `/api/db/status`
+2. **GitHub Pages:** Settings → Pages → Source=GitHub Actions; Settings → Secrets/variables → Actions → Variables → `API_BASE_URL` = URL Render
+3. ได้เว็บจริง: frontend `https://chayanun-tech.github.io/-trading-app/`, backend `https://<ชื่อ>.onrender.com`
+   - หมายเหตุ: repo มีขีดนำหน้า → Pages URL จะมี `/-trading-app/`
+
+## ✅ PUSH ขึ้น main สำเร็จ (2026-06-15, Claude/Opus)
+
+**ปมสิทธิ์/บัญชีจบแล้ว — push ผ่าน:**
+- ต้นเหตุ 403: repo `Chayanun-Tech/-trading-app` สร้างด้วยบัญชี **`chayanunju@scphpl.ac.th`** (เจ้าของ org) แต่เครื่อง login git ค้างเป็น **`chayanun250841`** (ผู้ใช้ใช้บัญชีนี้กับโปรเจกต์อื่นด้วย จึงไม่อยากสลับ credential)
+- **วิธีแก้ที่ใช้ (ดีสุด ไม่ต้องแตะ Credential Manager):** เจ้าของ (chayanunju) เพิ่ม `chayanun250841` เป็น **Collaborator (Write)** ที่ repo Settings → Collaborators → Add people → chayanun250841 ยอมรับ invitation → push ด้วย credential เดิม
+- **push สำเร็จ:** `git push -u origin HEAD:main` → 81 objects, `[new branch] HEAD -> main`, local `claude/trading-app-design-1pmpxo` track `origin/main` แล้ว
+- repo URL: https://github.com/Chayanun-Tech/-trading-app (public, branch main มีโค้ดครบ commit 5cba538)
+
+**บทเรียนสำหรับรอบหน้า:**
+- เครื่องนี้ git/gh login ค้างเป็น `chayanun250841` (ใช้กับโปรเจกต์อื่น — อย่าไปลบ/สลับ credential)
+- repo นี้เป็นของ org Chayanun-Tech (เจ้าของ = chayanunju@scphpl.ac.th); chayanun250841 มีสิทธิ์ Write ในฐานะ collaborator แล้ว
+
+### ⏭️ เหลือทำต่อ (ผู้ใช้ทำผ่าน browser)
+1. **Render:** dashboard.render.com → New → Blueprint → เลือก repo `Chayanun-Tech/-trading-app` → secret: `DATABASE_URL`(Session pooler), `GEMINI_API_KEY`, `GROQ_API_KEY`(regenerate ก่อน!) → Deploy → เช็ก `/api/health` + `/api/db/status`
+2. **GitHub Pages:** repo Settings → Pages → Source=GitHub Actions; Settings → Secrets and variables → Actions → Variables → `API_BASE_URL` = URL ของ Render
+3. ผลลัพธ์: frontend `https://chayanun-tech.github.io/-trading-app/`, backend `https://<ชื่อ>.onrender.com`
