@@ -1439,3 +1439,20 @@ Verification:
 After adding global red error toasts, the user saw a red `Script error.` toast with no useful details. This is typically a browser generic/cross-origin script error or ResizeObserver noise, not an actionable app error. Updated `frontend/index.html` so the global `window.error` handler ignores generic `Script error.` events with no filename/line/error object and ignores ResizeObserver loop noise, while still showing real app script errors with filename/line when available.
 
 Verification: inline JS parse passed; local `http://127.0.0.1:8000?v=script-error-filter` loaded with `toastCount: 0` and active quote status.
+## Compact dashboard layout redesign (2026-06-15, Codex)
+
+User felt the UI was too crowded and required too much vertical scrolling. Redesigned `frontend/index.html` layout without changing backend/API behavior:
+- Desktop app now uses a fixed-height dashboard (`height: calc(100dvh - 50px)`) with chart workspace on the left and a scrollable right rail.
+- Left side is a flex column: toolbar, quick assets, drawing strip, large chart, compact subcharts, compact 8-column summary.
+- Added `detailDock` at top of the right rail and `dockDetailPanels()` to move existing tabs/panels (`Report`, `Strategy`, `Image`, `Schools`, `Indicators`, `Auto Bot`) into that right rail at startup. This keeps existing IDs and event handlers intact.
+- Right control tabs are a 2-column grid with shorter labels to avoid horizontal scrolling.
+- Quick asset strip remains horizontally scrollable but hides the noisy scrollbar.
+- Mobile/tablet media queries keep normal vertical flow so small screens can still scroll naturally.
+
+Verification:
+- JS inline parse passed.
+- Local dashboard at `http://127.0.0.1:8000?v=dashboard-layout-2` loaded with `toastCount: 0`.
+- Browser check confirmed `.tabs` parent is `detailDock`, chart canvas renders, chart height ~329px on 1280x720, and page scroll height equals viewport height on desktop.
+
+Follow-up:
+- User reported the browser still showed the old layout after local testing. Added `NO_CACHE_HEADERS` to `backend/app/main.py` for `/` and `/config.js` so the served single-file frontend is not cached during deploy/dev reloads.

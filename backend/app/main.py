@@ -37,6 +37,11 @@ app.add_middleware(
 )
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
 
 
 def get_provider() -> DataProvider:
@@ -621,7 +626,7 @@ async def _shutdown():
 async def index():
     idx = FRONTEND_DIR / "index.html"
     if idx.exists():
-        return FileResponse(idx)
+        return FileResponse(idx, headers=NO_CACHE_HEADERS)
     return {"message": "AI Trade Assistant API. ดู /docs สำหรับ API"}
 
 
@@ -629,5 +634,5 @@ async def index():
 async def frontend_config():
     cfg = FRONTEND_DIR / "config.js"
     if cfg.exists():
-        return FileResponse(cfg, media_type="application/javascript")
-    return JSONResponse({}, media_type="application/javascript")
+        return FileResponse(cfg, media_type="application/javascript", headers=NO_CACHE_HEADERS)
+    return JSONResponse({}, media_type="application/javascript", headers=NO_CACHE_HEADERS)

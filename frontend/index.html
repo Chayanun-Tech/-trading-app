@@ -32,8 +32,8 @@
   h1 { font-size:16px; margin:0; letter-spacing:0; white-space:nowrap; }
   h3 { font-size:14px; margin:0 0 10px; }
   .badge { color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:3px 8px; font-size:12px; }
-  .app { display:grid; grid-template-columns:minmax(0,1fr) 360px; min-height:calc(100vh - 50px); min-height:calc(100dvh - 50px); }
-  .left { min-width:0; border-right:1px solid var(--border); }
+  .app { display:grid; grid-template-columns:minmax(0,1fr) 380px; height:calc(100vh - 50px); height:calc(100dvh - 50px); overflow:hidden; }
+  .left { min-width:0; border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; overflow:hidden; }
   .right { min-width:0; background:#0d131a; overflow:auto; max-height:calc(100vh - 50px); max-height:calc(100dvh - 50px); }
   .toolbar {
     display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px;
@@ -55,15 +55,16 @@
   .symbol { font-weight:700; }
   .name { color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .market { color:var(--muted); font-size:11px; border:1px solid var(--border); border-radius:999px; padding:1px 6px; }
-  .quick { display:flex; gap:6px; flex-wrap:wrap; padding:8px 12px; border-bottom:1px solid var(--border); }
-  .quick button { font-size:12px; min-height:28px; padding:4px 8px; }
+  .quick { display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; padding:7px 12px; border-bottom:1px solid var(--border); scrollbar-width:none; -ms-overflow-style:none; }
+  .quick::-webkit-scrollbar { display:none; }
+  .quick button { font-size:12px; min-height:28px; padding:4px 8px; white-space:nowrap; flex:0 0 auto; }
   .toolstrip { display:flex; align-items:center; gap:6px; padding:8px 12px; border-bottom:1px solid var(--border); background:#0c1219; flex-wrap:wrap; }
   .toolstrip button.active { border-color:var(--accent); color:#93c5fd; }
   .toolstrip select { min-height:30px; padding:4px 8px; font-size:12px; flex:0 0 auto; }
   .toolstrip .live-toggle { min-height:30px; padding:4px 9px; font-size:12px; font-weight:650; }
   .toolstrip .live-toggle.off { border-color:#4b5563; color:#9ca3af; }
   .chart-title { margin-left:auto; color:var(--muted); font-size:12px; }
-  .chart-wrap { position:relative; height:clamp(420px, 58vh, 620px); border-bottom:1px solid var(--border); }
+  .chart-wrap { position:relative; flex:1 1 auto; min-height:330px; border-bottom:1px solid var(--border); }
   #chart { width:100%; height:100%; }
   .chart-live-status {
     position:absolute; top:12px; left:12px; z-index:5; width:min(330px, calc(100% - 24px));
@@ -118,7 +119,7 @@
     white-space:nowrap; color:#e8edf2;
   }
   .subcharts { display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid var(--border); }
-  .subchart { height:170px; border-right:1px solid var(--border); position:relative; }
+  .subchart { height:128px; border-right:1px solid var(--border); position:relative; }
   .subchart:last-child { border-right:0; }
   .sub-title { position:absolute; top:8px; left:10px; z-index:2; color:var(--muted); font-size:12px; }
   #rsiChart, #macdChart { width:100%; height:100%; }
@@ -129,14 +130,19 @@
   .field input[type="color"] { width:100%; height:34px; padding:3px; }
   .checkrow { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; }
   .checkrow input { min-height:auto; }
-  .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; padding:12px; border-bottom:1px solid var(--border); }
-  .stat { background:#0d131a; border:1px solid var(--border); border-radius:8px; padding:8px; min-width:0; }
-  .stat span { color:var(--muted); font-size:12px; display:block; }
-  .stat b { font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
-  .tabs { display:flex; gap:6px; padding:12px 12px 0; }
+  .summary { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:6px; padding:8px 10px; border-bottom:1px solid var(--border); flex:0 0 auto; }
+  .stat { background:#0d131a; border:1px solid var(--border); border-radius:7px; padding:6px 7px; min-width:0; }
+  .stat span { color:var(--muted); font-size:11px; display:block; }
+  .stat b { font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+  .detail-dock { border-bottom:1px solid var(--border); background:#0c1219; }
+  .detail-dock-title { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px 2px; }
+  .detail-dock-title h3 { margin:0; }
+  .tabs { display:flex; gap:6px; padding:8px 12px; overflow-x:auto; scrollbar-width:thin; }
   .tab { flex:0 0 auto; }
   .tab.active { background:var(--accent); border-color:var(--accent); }
-  .panel-body { padding:12px; }
+  .detail-dock .tabs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); overflow:visible; }
+  .detail-dock .tab { min-width:0; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .panel-body { padding:12px; max-height:42vh; overflow:auto; border-top:1px solid var(--border); }
   .table-scroll { max-height:520px; overflow:auto; border:1px solid var(--border); border-radius:8px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:8px; border-bottom:1px solid var(--border); vertical-align:top; }
@@ -169,12 +175,13 @@
   .toast-title { font-weight:700; margin-bottom:2px; }
   .hidden { display:none !important; }
   @media (max-width:1100px) {
-    .app { grid-template-columns:1fr; }
-    .left { border-right:0; }
+    .app { grid-template-columns:1fr; height:auto; min-height:calc(100vh - 50px); min-height:calc(100dvh - 50px); overflow:visible; }
+    .left { border-right:0; min-height:0; overflow:visible; }
     .right { max-height:none; }
     .subcharts { grid-template-columns:1fr; }
     .subchart { border-right:0; border-bottom:1px solid var(--border); }
-    .summary { grid-template-columns:1fr 1fr; }
+    .summary { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .panel-body { max-height:none; }
   }
   @media (max-width:760px) {
     header {
@@ -205,11 +212,12 @@
     }
     .quick button, .toolstrip button, .toolstrip select, .tab { flex:0 0 auto; white-space:nowrap; }
     .chart-title { margin-left:0; flex:0 0 auto; }
-    .chart-wrap { height:56vh; min-height:330px; }
+    .chart-wrap { height:52vh; min-height:320px; flex:none; }
     .chart-live-status { top:8px; left:8px; width:min(300px, calc(100% - 16px)); font-size:11px; padding:8px; }
     .position-box { right:40px; width:min(190px, 45vw); min-width:132px; font-size:10px; }
     .subchart { height:156px; }
     .summary, .section, .panel-body { padding:8px; }
+    .summary { grid-template-columns:1fr 1fr; }
     .grid2, .grid3 { grid-template-columns:1fr; }
     .watch-head, .watch-row {
       grid-template-columns:minmax(86px,1fr) 76px 62px 32px;
@@ -225,7 +233,7 @@
     .chart-wrap { height:52vh; min-height:300px; }
     .chart-live-status .status-grid { grid-template-columns:1fr; gap:3px; }
     .position-box { right:28px; width:min(160px, 54vw); }
-    .summary { grid-template-columns:1fr; }
+    .summary { grid-template-columns:1fr 1fr; }
     .watch-head, .watch-row {
       grid-template-columns:minmax(70px,1fr) 68px 56px 28px;
       gap:4px;
@@ -304,12 +312,12 @@
     <div class="summary" id="summary"></div>
 
     <div class="tabs">
-      <button class="tab active" id="tabReport" onclick="showTab('report')">Multi-school report</button>
-      <button class="tab" id="tabStrategy" onclick="showTab('strategy')">⚔️ ท่าไม้ตาย</button>
-      <button class="tab" id="tabImage" onclick="showTab('image')">Image analysis</button>
+      <button class="tab active" id="tabReport" onclick="showTab('report')">Report</button>
+      <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
+      <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
       <button class="tab" id="tabSchools" onclick="showTab('schools')">Schools</button>
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
-      <button class="tab" id="tabAuto" onclick="showTab('auto')">Auto Trade</button>
+      <button class="tab" id="tabAuto" onclick="showTab('auto')">Auto Bot</button>
     </div>
 
     <div id="reportPanel" class="panel-body">
@@ -487,6 +495,13 @@
   </section>
 
   <aside class="right">
+    <div id="detailDock" class="detail-dock">
+      <div class="detail-dock-title">
+        <h3>Control panels</h3>
+        <span class="tiny">Tools</span>
+      </div>
+    </div>
+
     <div class="section">
       <h3>Watchlist</h3>
       <div class="grid2">
@@ -673,6 +688,17 @@ function preventImplicitButtonSubmit() {
     if (!btn) return;
     if (!btn.hasAttribute("type")) btn.type = "button";
   }, true);
+}
+function dockDetailPanels() {
+  const dock = $("detailDock");
+  const tabs = document.querySelector(".tabs");
+  if (!dock || !tabs || tabs.parentElement === dock) return;
+  const panelIds = ["reportPanel", "imagePanel", "schoolsPanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
+  dock.appendChild(tabs);
+  panelIds.forEach(id => {
+    const panel = $(id);
+    if (panel) dock.appendChild(panel);
+  });
 }
 function indicatorParams() {
   const params = {};
@@ -1189,6 +1215,7 @@ function setBotSymbol(symbol) {
 
 async function init() {
   preventImplicitButtonSubmit();
+  dockDetailPanels();
   const h = await fetch(API + "/api/health").then(r => r.json());
   $("providerBadge").textContent = "provider: " + h.data_provider;
   $("aiBadge").textContent = "AI: " + (h.ai_enabled ? `${h.ai_provider} (${h.model})` : "rule-based");
