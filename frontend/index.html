@@ -1915,13 +1915,14 @@ function botSignalLabel(sig) {
   return "รอ A+ setup";
 }
 
-function botLeadProb(sig) {
+function botDecisionProb(sig, cfg = {}) {
   if (!sig) return "-";
   const up = Number(sig.up_probability || 0);
   const down = Number(sig.down_probability || 0);
   const gate = sig.live_entry_threshold || sig.entry_threshold || "-";
-  const lead = Math.max(up, down);
-  return `${lead}% / ${gate}%`;
+  if ((cfg.direction || "long") === "long") return `Long ${up}% / ${gate}%`;
+  if (cfg.direction === "short") return `Short ${down}% / ${gate}%`;
+  return `${up >= down ? "Long" : "Short"} ${Math.max(up, down)}% / ${gate}%`;
 }
 
 function renderAutoBotChartStatus(bot) {
@@ -1951,7 +1952,7 @@ function renderAutoBotChartStatus(bot) {
     <div class="status-grid">
       <span>คู่เทรด</span><b>${escapeHtml(cfg.symbol || "-")} / ${escapeHtml(cfg.timeframe || "-")}</b>
       <span>สถานะ AI</span><b>${escapeHtml(botSignalLabel(sig))}</b>
-      <span>ความแรง</span><b>${escapeHtml(botLeadProb(sig))}</b>
+      <span>ความแรง</span><b>${escapeHtml(botDecisionProb(sig, cfg))}</b>
       <span>Position</span><b class="${openPositions.length ? "up" : ""}">${openPositions.length ? `${openPositions.length} open` : "รอสัญญาณ"}</b>
       <span>Risk/RR</span><b>${escapeHtml(cfg.risk_pct ?? "-")}% · 1:${escapeHtml(cfg.rr_ratio ?? "-")}</b>
       <span>Order ล่าสุด</span><b>${latestOrder ? `${escapeHtml(latestOrder.side)} ${escapeHtml(latestOrder.status)}` : "-"}</b>
