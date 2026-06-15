@@ -2327,12 +2327,14 @@ function copyTradePlan(text) {
 }
 
 function autoTradeConfigFromForm() {
+  const poll = Math.max(5, parseInt($("bot_poll").value) || 30);
+  $("bot_poll").value = poll;
   return {
     exchange: "bitkub",
     mode: $("bot_mode").value,
     symbol: $("bot_symbol").value.trim().toUpperCase().replace("/", "_").replace("-", "_") || "BTC_THB",
     timeframe: $("bot_timeframe").value,
-    poll_interval_sec: parseInt($("bot_poll").value) || 30,
+    poll_interval_sec: poll,
     quote_budget_thb: parseFloat($("bot_budget").value) || 10000,
     risk_pct: parseFloat($("bot_risk").value) || 5,
     max_daily_loss_pct: parseFloat($("bot_daily_loss").value) || 3,
@@ -2348,6 +2350,23 @@ function autoTradeConfigFromForm() {
     weights: getSchoolWeights(),
     real_confirm_text: $("bot_confirm").value || null,
   };
+}
+
+function parseApiErrorMessage(raw) {
+  const text = String(raw || "");
+  try {
+    const data = JSON.parse(text);
+    const detail = data.detail;
+    if (Array.isArray(detail)) {
+      return detail.map(item => {
+        const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "field";
+        if (field === "poll_interval_sec") return "Poll every sec ต้องไม่น้อยกว่า 5 วินาที";
+        return `${field}: ${item.msg || "invalid value"}`;
+      }).join(" / ");
+    }
+    if (typeof detail === "string") return detail;
+  } catch (_) {}
+  return text || "Request failed";
 }
 
 async function startAutoTrade() {
@@ -2370,7 +2389,7 @@ async function startAutoTrade() {
       method:"POST", headers:{ "Content-Type":"application/json" },
       body:JSON.stringify(cfg),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(parseApiErrorMessage(await res.text()));
     renderAutoTrade(await res.json());
     showTab("auto");
   } catch (e) {
@@ -2405,7 +2424,7 @@ async function tickAutoTrade() {
     const res = await fetch(`${API}/api/autotrade/tick`, {
       method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(cfg),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(parseApiErrorMessage(await res.text()));
     renderAutoTrade(await res.json());
   } catch (e) {
     box.innerHTML = `<div class="down">Tick failed: ${escapeHtml(e.message || e)}</div>`;
