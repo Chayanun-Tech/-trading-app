@@ -40,10 +40,11 @@ _HISTORY_MAP = {
 
 
 # สัญลักษณ์ที่ Yahoo ไม่รองรับ → map ไปตัวที่ใช้ได้จริง (เช่น ทอง/เงิน spot ที่ Yahoo ไม่มี)
-# ผู้ใช้พิมพ์/กด XAUUSD=X (ทองคำ) จะถูก route ไป GC=F (Gold Futures) อัตโนมัติ
+# ผู้ใช้พิมพ์/กด XAUUSD=X (ทองคำ) → route ไป PAXG-USD (PAX Gold = ทอง spot, 1 PAXG = 1 oz)
+# ราคา PAXG เกาะ XAUUSD spot (ต่าง ~$1-3) และ Binance สตรีมเรียลไทม์ได้ — ใกล้ความจริงกว่า GC=F (futures, ต่าง ~$25)
 _SYMBOL_ALIASES = {
-    "XAUUSD=X": "GC=F", "XAUUSD": "GC=F", "XAU=X": "GC=F", "GOLD=X": "GC=F",
-    "XAU/USD": "GC=F", "GOLD": "GC=F",
+    "XAUUSD=X": "PAXG-USD", "XAUUSD": "PAXG-USD", "XAU=X": "PAXG-USD", "GOLD=X": "PAXG-USD",
+    "XAU/USD": "PAXG-USD", "GOLD": "PAXG-USD",
     "XAGUSD=X": "SI=F", "XAGUSD": "SI=F", "XAG=X": "SI=F", "SILVER": "SI=F",
 }
 

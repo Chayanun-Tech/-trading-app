@@ -1331,6 +1331,19 @@ Alternative:
 - **ไม่เขียน secret value จริงลงไฟล์** (repo เป็น public) — บอกแค่ที่เก็บ (backend/.env + HF secrets) และเว็บออกคีย์ใหม่
 - ลิงก์สรุปในไฟล์: แอป https://chayanun2541-ai-trade-assistant.hf.space, Space/Supabase/GitHub dashboards, เว็บออกคีย์ (Gemini/Groq/HF token/Supabase pooler)
 
+## แก้ทอง: GC=F (futures) → PAXG-USD (spot) + realtime Binance (2026-06-15, Claude/Opus)
+
+**ปัญหา user:** ทองในแอปโชว์ 4,332 แต่ TradingView OANDA spot 4,304 ต่าง ~$28 → เทรดตามไม่ได้
+**สาเหตุ:** `XAUUSD=X` ถูก map → `GC=F` (Gold **Futures**) ซึ่งมี basis ต่างจาก spot ~$25-35 ตลอด (คนละ instrument)
+**แก้ (2 ไฟล์):**
+- `backend/app/data/yahoo.py` `_SYMBOL_ALIASES`: เปลี่ยนทองทั้งหมด (XAUUSD=X/XAUUSD/XAU=X/GOLD=X/XAU/USD/GOLD) จาก `GC=F` → **`PAXG-USD`** (PAX Gold = โทเคนทอง spot 1:1 oz). เงิน XAGUSD ยังเป็น SI=F เหมือนเดิม
+- `frontend/index.html` `binanceStreamSymbol()`: เพิ่ม map `XAUUSD=X / XAUUSD / PAXG-USD → PAXGUSDT` → ทองสตรีมเรียลไทม์จาก Binance WS เหมือนคริปโต
+**ยืนยัน:** Yahoo PAXG-USD=4,298 (ใกล้ OANDA spot 4,304 ต่าง ~$6) vs GC=F=4,333 ต่าง $35 → PAXG เกาะ spot ดีกว่ามาก. py_compile + node parse ผ่าน
+**ผล:** ทองตอนนี้ = spot จริง + realtime tick (Binance). ปุ่ม "GC=F Gold" ยังมีไว้ดู futures ได้, ปุ่ม "XAUUSD=X Gold" = spot
+**commit:** (รอ push hf + origin)
+
+**ข้อจำกัดที่เหลือ (realtime หุ้น):** หุ้น US/ไทย ยังเป็น Yahoo poll 1s (ไม่ใช่ tick realtime แท้). true realtime หุ้น US = ต้องต่อ Finnhub (free key มี WS) — ยังไม่ได้ทำ รอ user ตัดสินใจ. ไทยไม่มี free realtime ที่ดี
+
 ## ✅ PUSH ขึ้น main สำเร็จ (2026-06-15, Claude/Opus)
 
 **ปมสิทธิ์/บัญชีจบแล้ว — push ผ่าน:**

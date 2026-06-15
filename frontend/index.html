@@ -696,6 +696,8 @@ function binanceStreamSymbol(symbol) {
     "LINK-USD":"LINKUSDT", "DOT-USD":"DOTUSDT", "LTC-USD":"LTCUSDT", "UNI-USD":"UNIUSDT",
     "AAVE-USD":"AAVEUSDT", "NEAR-USD":"NEARUSDT", "ATOM-USD":"ATOMUSDT", "OP-USD":"OPUSDT",
     "ARB-USD":"ARBUSDT",
+    // ทองคำ spot: XAUUSD=X / PAXG-USD → สตรีม PAXG (PAX Gold) เรียลไทม์จาก Binance
+    "XAUUSD=X":"PAXGUSDT", "XAUUSD":"PAXGUSDT", "PAXG-USD":"PAXGUSDT",
   };
   if (direct[s]) return direct[s].toLowerCase();
   const m = s.match(/^([A-Z0-9]+)-USD$/);
