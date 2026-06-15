@@ -697,8 +697,12 @@ function lastPricePoint() {
 function timeframeSeconds(value = tf()) {
   return ({ "1m":60, "5m":300, "15m":900, "1h":3600, "4h":14400, "1d":86400 })[value] || 3600;
 }
+function isBitkubPair(symbol) {
+  return String(symbol || "").toUpperCase().endsWith("_THB");
+}
 function binanceStreamSymbol(symbol) {
   const s = symbol.toUpperCase();
+  if (isBitkubPair(s)) return null;
   const direct = {
     "BTC-USD":"BTCUSDT", "ETH-USD":"ETHUSDT", "SOL-USD":"SOLUSDT", "BNB-USD":"BNBUSDT",
     "XRP-USD":"XRPUSDT", "DOGE-USD":"DOGEUSDT", "ADA-USD":"ADAUSDT", "AVAX-USD":"AVAXUSDT",
@@ -1510,6 +1514,13 @@ function applyRealtimePrice(price, timestampSec, volume = 0, source = "Realtime"
   const bucket = Math.floor((timestampSec || Date.now() / 1000) / step) * step;
   const candles = latestChartData.candles;
   let last = candles[candles.length - 1];
+  if (isBitkubPair(currentSymbol)) {
+    const ref = Number(last.close || last.open || 0);
+    if (ref > 0) {
+      const ratio = price / ref;
+      if (ratio < 0.5 || ratio > 1.5) return;
+    }
+  }
   let index = candles.length - 1;
   let target;
 
