@@ -81,6 +81,23 @@ auto_trade = AutoTradeManager(
 _symbol_search_cache: dict[str, tuple[float, list[dict]]] = {}
 
 
+def _is_bitkub(symbol: str) -> bool:
+    """คู่เทรด Bitkub ลงท้าย _THB (เช่น BTC_THB) → ดึงจาก Bitkub ไม่ใช่ provider หลัก."""
+    return (symbol or "").upper().endswith("_THB")
+
+
+async def _candles_for(symbol: str, timeframe: str, limit: int):
+    if _is_bitkub(symbol):
+        return await bitkub_client.candles(symbol, timeframe, limit)
+    return await provider.get_candles(symbol, timeframe, limit)
+
+
+async def _quote_for(symbol: str):
+    if _is_bitkub(symbol):
+        return await bitkub_client.quote(symbol)
+    return await provider.get_quote(symbol)
+
+
 class MemoryUpsert(BaseModel):
     key: str = Field(min_length=1, max_length=160)
     category: str = Field(default="general", min_length=1, max_length=80)
@@ -274,7 +291,7 @@ async def candles(
 ):
     if timeframe not in settings.timeframes:
         raise HTTPException(400, f"timeframe ไม่รองรับ: {timeframe}")
-    data = await provider.get_candles(symbol, timeframe, limit)
+    data = await _candles_for(symbol, timeframe, limit)
     if not data:
         raise HTTPException(404, f"ไม่พบข้อมูลของ {symbol}")
     ind = compute_indicators(data, _indicator_params(
@@ -286,7 +303,7 @@ async def candles(
 
 @app.get("/api/quote")
 async def quote(symbol: str):
-    return await provider.get_quote(symbol)
+    return await _quote_for(symbol)
 
 
 @app.get("/api/quotes")
@@ -295,25 +312,42 @@ async def quotes(symbols: str):
     if not syms:
         return []
     syms = syms[:40]
-    get_quotes = getattr(provider, "get_quotes", None)
-    if get_quotes:
-        try:
-            rows = await get_quotes(syms)
-            by_symbol = {row.symbol.upper(): row.model_dump() for row in rows}
-            return [
-                by_symbol.get(sym.upper(), {"symbol": sym, "error": "quote not found"})
-                for sym in syms
-            ]
-        except Exception:
-            pass
+    by_symbol: dict[str, dict] = {}
+    # คู่ Bitkub (_THB) ดึงทีละตัวจาก Bitkub
+    bitkub_syms = [s for s in syms if _is_bitkub(s)]
+    other_syms = [s for s in syms if not _is_bitkub(s)]
 
-    async def one(sym: str):
+    async def one_bitkub(sym: str):
         try:
-            return (await provider.get_quote(sym)).model_dump()
+            return (await bitkub_client.quote(sym)).model_dump()
         except Exception as exc:  # noqa: BLE001
             return {"symbol": sym, "error": str(exc)}
 
-    return await asyncio.gather(*(one(sym) for sym in syms))
+    if bitkub_syms:
+        for row in await asyncio.gather(*(one_bitkub(s) for s in bitkub_syms)):
+            by_symbol[row["symbol"].upper()] = row
+
+    if other_syms:
+        get_quotes = getattr(provider, "get_quotes", None)
+        rows = None
+        if get_quotes:
+            try:
+                rows = await get_quotes(other_syms)
+            except Exception:
+                rows = None
+        if rows is not None:
+            for row in rows:
+                by_symbol[row.symbol.upper()] = row.model_dump()
+        else:
+            async def one(sym: str):
+                try:
+                    return (await provider.get_quote(sym)).model_dump()
+                except Exception as exc:  # noqa: BLE001
+                    return {"symbol": sym, "error": str(exc)}
+            for row in await asyncio.gather(*(one(s) for s in other_syms)):
+                by_symbol[row["symbol"].upper()] = row
+
+    return [by_symbol.get(s.upper(), {"symbol": s, "error": "quote not found"}) for s in syms]
 
 
 @app.post("/api/analyze", response_model=MultiSchoolReport)
@@ -321,7 +355,7 @@ async def analyze_route(req: AnalyzeRequest):
     """โหมดข้อมูล: ดึง OHLCV → ประเมินทุกศาสตร์ → ตารางความน่าจะเป็น."""
     if req.timeframe not in settings.timeframes:
         raise HTTPException(400, f"timeframe ไม่รองรับ: {req.timeframe}")
-    data = await provider.get_candles(req.symbol, req.timeframe, 300)
+    data = await _candles_for(req.symbol, req.timeframe, 300)
     if not data:
         raise HTTPException(404, f"ไม่พบข้อมูลของ {req.symbol}")
     ind = compute_indicators(data, req.indicator_params)
@@ -375,13 +409,15 @@ async def backtest_route(req: BacktestRequest):
         raise HTTPException(400, f"timeframe ไม่รองรับ: {req.timeframe}")
 
     get_history = getattr(provider, "get_history", None)
-    if get_history:
+    if _is_bitkub(req.symbol):
+        data = await bitkub_client.candles(req.symbol, req.timeframe, 2000)
+    elif get_history:
         try:
             data = await get_history(req.symbol, req.timeframe)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"ดึงข้อมูลย้อนหลังไม่สำเร็จ: {exc}")
     else:
-        data = await provider.get_candles(req.symbol, req.timeframe, 2000)
+        data = await _candles_for(req.symbol, req.timeframe, 2000)
 
     if not data:
         raise HTTPException(404, f"ไม่พบข้อมูลย้อนหลังของ {req.symbol}")
@@ -412,7 +448,7 @@ async def live_signal_route(req: LiveSignalRequest):
     if req.timeframe not in settings.timeframes:
         raise HTTPException(400, f"timeframe ไม่รองรับ: {req.timeframe}")
 
-    data = await provider.get_candles(req.symbol, req.timeframe, 400)
+    data = await _candles_for(req.symbol, req.timeframe, 400)
     if not data:
         raise HTTPException(404, f"ไม่พบข้อมูลของ {req.symbol}")
 
@@ -519,7 +555,7 @@ async def ws_quotes(ws: WebSocket, symbol: str = "AAPL", interval: float = 1.0):
     delay = min(max(interval, 0.5), 30.0)
     try:
         while True:
-            q = await provider.get_quote(symbol)
+            q = await _quote_for(symbol)
             await ws.send_json(q.model_dump())
             await asyncio.sleep(delay)
     except WebSocketDisconnect:
@@ -535,7 +571,7 @@ async def _alert_loop():
     while True:
         try:
             for sym in alerts.symbols_with_rules():
-                data = await provider.get_candles(sym, "1h", 60)
+                data = await _candles_for(sym, "1h", 60)
                 if not data:
                     continue
                 ind = compute_indicators(data)

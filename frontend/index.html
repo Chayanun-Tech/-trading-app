@@ -616,9 +616,18 @@ let activeLiveTrade = null;
 let latestLiveSignal = null;
 let latestAutoTradeState = null;
 let autoTradeTimer = null;
+let botLastDrawnPosId = null;
 
 function $(id) { return document.getElementById(id); }
 function tf() { return $("timeframe").value; }
+function preventImplicitButtonSubmit() {
+  document.querySelectorAll("button:not([type])").forEach(btn => { btn.type = "button"; });
+  document.addEventListener("click", event => {
+    const btn = event.target.closest?.("button");
+    if (!btn) return;
+    if (!btn.hasAttribute("type")) btn.type = "button";
+  }, true);
+}
 function indicatorParams() {
   const keys = ["ema_fast","ema_mid","ema_slow","rsi_period","bb_period","bb_mult","stoch_k","stoch_d","macd_fast","macd_slow","macd_signal"];
   const params = {};
@@ -1022,6 +1031,7 @@ function setBotSymbol(symbol) {
 }
 
 async function init() {
+  preventImplicitButtonSubmit();
   const h = await fetch(API + "/api/health").then(r => r.json());
   $("providerBadge").textContent = "provider: " + h.data_provider;
   $("aiBadge").textContent = "AI: " + (h.ai_enabled ? `${h.ai_provider} (${h.model})` : "rule-based");
@@ -2061,7 +2071,7 @@ function clearLivePositionOverlay() {
 function clearLivePosition() {
   clearLivePositionLines();
   clearLivePositionOverlay();
-  if (liveMode && candleSeries) candleSeries.setMarkers([]);
+  if (candleSeries) candleSeries.setMarkers([]);
 }
 
 function updateLivePositionOverlay() {
@@ -2132,6 +2142,44 @@ function drawLivePosition(trade, signal = null) {
   mk(trade.entry, "#e2e8f0", "● Entry");
   mk(trade.stop_loss, "#ef4444", "🛑 SL");
   updateLivePositionOverlay();
+}
+
+function syncBotPositionOnChart(state) {
+  // วาด position ที่บอทเปิดบนกราฟ (entry/TP/SL + จุดเข้า) แบบเรียลไทม์
+  // เฉพาะเมื่อบอทกำลังรัน และไม่ได้อยู่โหมด Go Live / Backtest
+  if (liveMode || backtestMode) return;
+  const cfg = (state && state.config) || {};
+  const open = ((state && state.positions) || []).filter(p => p.status === "open");
+  if (!state || !state.running || !cfg.symbol || open.length === 0) {
+    if (botLastDrawnPosId !== null) { clearLivePosition(); botLastDrawnPosId = null; }
+    return;
+  }
+  const p = open[open.length - 1];
+  const targetSymbol = String(cfg.symbol || p.symbol || "").trim().toUpperCase();
+  const targetTimeframe = String(cfg.timeframe || tf()).trim();
+  const drawKey = `${p.id || targetSymbol}|${targetSymbol}|${targetTimeframe}`;
+  const entry = Number(p.entry);
+  const take = Number(p.take_profit);
+  const stop = Number(p.stop_loss);
+  const draw = () => drawLivePosition({
+    side: p.side || "long",
+    entry,
+    take_profit: take,
+    stop_loss: stop,
+    reward_per_unit: Number.isFinite(entry) && Number.isFinite(take) ? Math.abs(take - entry).toFixed(4) : "",
+    risk_per_unit: Number.isFinite(entry) && Number.isFinite(stop) ? Math.abs(entry - stop).toFixed(4) : "",
+  }, { as_of_time: p.signal_time });
+  if (currentSymbol.toUpperCase() !== targetSymbol || tf() !== targetTimeframe) {
+    // position เปิดใหม่ → สลับกราฟไปคู่และ timeframe ของบอทครั้งเดียว
+    if (drawKey !== botLastDrawnPosId) {
+      botLastDrawnPosId = drawKey;
+      if (targetTimeframe) $("timeframe").value = targetTimeframe;
+      selectSymbol(targetSymbol).then(draw);
+    }
+    return;
+  }
+  botLastDrawnPosId = drawKey;
+  draw();
 }
 
 async function refreshLiveSignal() {
@@ -2363,6 +2411,7 @@ async function refreshAutoTrade() {
 function renderAutoTrade(s) {
   latestAutoTradeState = s;
   renderChartLiveStatus();
+  syncBotPositionOnChart(s);
   const cfg = s.config || {};
   const sig = s.latest_signal || {};
   const trade = sig.trade || {};

@@ -70,17 +70,26 @@ class BitkubClient:
             res = await client.get(f"{self.base_url}/api/v3/market/ticker", params=params)
             res.raise_for_status()
             payload = res.json()
+        norm = _normalize_symbol(symbol) if symbol else ""
+        # v3 ticker คืนเป็น list: [{"symbol":"BTC_THB","last":"...","percent_change":"..."}]
+        if isinstance(payload, list):
+            if symbol:
+                return next((r for r in payload if str(r.get("symbol", "")).upper() == norm.upper()),
+                            payload[0] if payload else {})
+            return payload
         if symbol and isinstance(payload, dict):
-            norm = _normalize_symbol(symbol)
             return payload.get(norm) or payload.get(norm.lower()) or payload
         return payload if isinstance(payload, dict) else {}
 
     async def quote(self, symbol: str) -> Quote:
         norm = _normalize_symbol(symbol)
         row = await self.ticker(norm)
+        if isinstance(row, list):
+            row = next((r for r in row if str(r.get("symbol", "")).upper() == norm.upper()),
+                       row[0] if row else {})
         last = float(row.get("last") or row.get("last_price") or row.get("close") or 0)
         change = float(row.get("change") or 0)
-        change_pct = float(row.get("percentChange") or row.get("change_percent") or 0)
+        change_pct = float(row.get("percent_change") or row.get("percentChange") or row.get("change_percent") or 0)
         return Quote(symbol=norm, price=last, change=change, change_percent=change_pct, time=int(time.time()))
 
     async def candles(self, symbol: str, timeframe: str = "1h", limit: int = 400) -> list[Candle]:
