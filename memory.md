@@ -1416,3 +1416,21 @@ user ขอตรวจทุกเมนู/ความสอดคล้อ�
 1. **Render:** dashboard.render.com → New → Blueprint → เลือก repo `Chayanun-Tech/-trading-app` → secret: `DATABASE_URL`(Session pooler), `GEMINI_API_KEY`, `GROQ_API_KEY`(regenerate ก่อน!) → Deploy → เช็ก `/api/health` + `/api/db/status`
 2. **GitHub Pages:** repo Settings → Pages → Source=GitHub Actions; Settings → Secrets and variables → Actions → Variables → `API_BASE_URL` = URL ของ Render
 3. ผลลัพธ์: frontend `https://chayanun-tech.github.io/-trading-app/`, backend `https://<ชื่อ>.onrender.com`
+## Indicator persistence + global red errors + TV-like price axis (2026-06-15, Codex)
+
+User asked for three UI-wide fixes:
+- Indicator settings must remember the latest user-selected values.
+- Any system error should surface as a red notification.
+- Price Y-axis/current price should feel closer to TradingView, including current price label and countdown to next candle by timeframe.
+
+Implemented in `frontend/index.html`:
+- Added red toast stack (`notifyError`) and wired major fetch/action/error paths: chart load/update, quote/watchlist/alerts/schools/live signal/auto trade/backtest/search/startup/realtime websocket.
+- Added localStorage persistence for indicator numeric params and visibility toggles. Numeric params now save on input/change and whenever chart params are read; toggles save when indicators render.
+- Added custom price formatting with comma/thousand separators and adaptive decimals.
+- Replaced default last-value label with a custom current-price price line whose right-side label includes symbol, formatted price, and candle countdown (`m:ss` or `h:mm:ss`).
+
+Verification:
+- JS inline script parse passed with Node `vm.Script`.
+- Local app at `http://127.0.0.1:8000` loaded successfully.
+- Browser test: changed `EMA fast` to 34 and RSI toggle off, reloaded, both persisted.
+- Screenshot confirmed chart renders and current price label shows countdown (example: `AAPL 87.4900 45:31`).

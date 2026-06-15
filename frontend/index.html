@@ -156,6 +156,17 @@
   .tiny { font-size:11px; color:var(--muted); }
   .chart-status { color:var(--muted); font-size:11px; padding:0 4px; }
   .alert-item { display:flex; justify-content:space-between; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .toast-stack {
+    position:fixed; top:12px; right:12px; z-index:9999; display:flex; flex-direction:column;
+    gap:8px; width:min(390px, calc(100vw - 24px)); pointer-events:none;
+  }
+  .toast {
+    pointer-events:auto; border:1px solid var(--border); border-left:4px solid var(--muted);
+    background:rgba(11,17,24,.96); color:var(--text); border-radius:8px; padding:10px 12px;
+    box-shadow:0 16px 42px rgba(0,0,0,.45); font-size:12px; line-height:1.45;
+  }
+  .toast.error { border-color:rgba(239,68,68,.55); border-left-color:var(--red); background:rgba(127,29,29,.96); }
+  .toast-title { font-weight:700; margin-bottom:2px; }
   .hidden { display:none !important; }
   @media (max-width:1100px) {
     .app { grid-template-columns:1fr; }
@@ -235,6 +246,7 @@
   <span class="badge" id="aiBadge">AI: ...</span>
   <span class="badge" id="activeBadge">AAPL 1h</span>
 </header>
+<div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
 
 <main class="app">
   <section class="left">
@@ -570,6 +582,8 @@ const defaultIndicatorToggles = {
   showEmaFast:true, showEmaMid:true, showEmaSlow:false, showBB:true,
   showRSI:true, showStoch:false, showMACD:true, showVolume:true,
 };
+const indicatorSettingKeys = Object.keys(defaultIndicatorSettings);
+const indicatorToggleKeys = Object.keys(defaultIndicatorToggles);
 let chartStyle = { ...defaultChartStyle, ...JSON.parse(localStorage.getItem("chartStyle") || "{}") };
 let currentSymbol = "AAPL";
 let mode = "data";
@@ -594,6 +608,8 @@ let autoRefreshEnabled = localStorage.getItem("autoRefreshEnabled") !== "false";
 let refreshIntervalValue = localStorage.getItem("refreshInterval") || "auto";
 let quoteTimer = null;
 let watchTimer = null;
+let priceCountdownTimer = null;
+let currentPriceLine = null;
 let realtimeSocket = null;
 let realtimeStreamKey = "";
 let realtimeReconnectTimer = null;
@@ -621,6 +637,25 @@ let botLastDrawnPosId = null;
 
 function $(id) { return document.getElementById(id); }
 function tf() { return $("timeframe").value; }
+function notifyError(message, title = "Error") {
+  const stack = $("toastStack");
+  if (!stack) return;
+  const key = `${title}:${message}`;
+  const now = Date.now();
+  notifyError.recent = notifyError.recent || {};
+  if (notifyError.recent[key] && now - notifyError.recent[key] < 7000) return;
+  notifyError.recent[key] = now;
+  const toast = document.createElement("div");
+  toast.className = "toast error";
+  toast.innerHTML = `<div class="toast-title">${escapeHtml(title)}</div><div>${escapeHtml(message || "Unknown error")}</div>`;
+  stack.appendChild(toast);
+  setTimeout(() => toast.remove(), 9000);
+}
+function errorMessage(e) {
+  return e?.message || String(e || "Unknown error");
+}
+window.addEventListener("error", e => notifyError(e.message, "Script error"));
+window.addEventListener("unhandledrejection", e => notifyError(errorMessage(e.reason), "Unhandled error"));
 function preventImplicitButtonSubmit() {
   document.querySelectorAll("button:not([type])").forEach(btn => { btn.type = "button"; });
   document.addEventListener("click", event => {
@@ -630,9 +665,9 @@ function preventImplicitButtonSubmit() {
   }, true);
 }
 function indicatorParams() {
-  const keys = ["ema_fast","ema_mid","ema_slow","rsi_period","bb_period","bb_mult","stoch_k","stoch_d","macd_fast","macd_slow","macd_signal"];
   const params = {};
-  keys.forEach(k => { const v = $(k).value; if (v !== "") params[k] = v; });
+  indicatorSettingKeys.forEach(k => { const v = $(k).value; if (v !== "") params[k] = v; });
+  saveIndicatorSettings();
   return params;
 }
 function queryString(params) {
@@ -697,6 +732,43 @@ function lastPricePoint() {
 }
 function timeframeSeconds(value = tf()) {
   return ({ "1m":60, "5m":300, "15m":900, "1h":3600, "4h":14400, "1d":86400 })[value] || 3600;
+}
+function pricePrecision(price) {
+  const p = Math.abs(Number(price) || 0);
+  if (p >= 1000) return 2;
+  if (p >= 1) return 4;
+  return 8;
+}
+function formatAxisPrice(price) {
+  const value = Number(price);
+  if (!Number.isFinite(value)) return "-";
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: pricePrecision(value),
+    maximumFractionDigits: pricePrecision(value),
+  });
+}
+function priceFormatForSymbol() {
+  const last = latestChartData?.candles?.at(-1)?.close || 1;
+  const precision = pricePrecision(last);
+  return {
+    type:"custom",
+    minMove:1 / Math.pow(10, precision),
+    formatter:formatAxisPrice,
+  };
+}
+function formatCountdown(seconds) {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+function currentCandleCountdown() {
+  const last = latestChartData?.candles?.at(-1);
+  if (!last) return "";
+  const closesAt = last.time + timeframeSeconds();
+  return formatCountdown(closesAt - Math.floor(Date.now() / 1000));
 }
 function isBitkubPair(symbol) {
   return String(symbol || "").toUpperCase().endsWith("_THB");
@@ -767,6 +839,7 @@ function startRealtimeStream() {
     };
     realtimeSocket.onerror = () => {
       if (currentSymbol.toUpperCase() === symbol) $("chartStatus").textContent = "Stream error: Binance · fallback quote";
+      notifyError(`Binance realtime stream failed for ${symbol}. Falling back to quote stream.`, "Realtime stream error");
       openQuoteWebSocket(symbol, key);
     };
     realtimeSocket.onclose = () => {
@@ -800,6 +873,7 @@ function openQuoteWebSocket(symbol, key) {
   };
   realtimeSocket.onerror = () => {
     if (currentSymbol.toUpperCase() === symbol) $("chartStatus").textContent = "Stream error: quote websocket";
+    notifyError(`Quote websocket failed for ${symbol}. REST quote refresh will continue.`, "Realtime stream error");
   };
   realtimeSocket.onclose = () => {
     if (currentSymbol.toUpperCase() !== symbol || realtimeStreamKey !== `${symbol}|${tf()}` || backtestMode) return;
@@ -866,6 +940,41 @@ function chartBaseOptions() {
 function saveChartStyle() {
   localStorage.setItem("chartStyle", JSON.stringify(chartStyle));
 }
+function savedIndicatorSettings() {
+  try { return { ...defaultIndicatorSettings, ...JSON.parse(localStorage.getItem("indicatorSettings") || "{}") }; }
+  catch (_) { return { ...defaultIndicatorSettings }; }
+}
+function savedIndicatorToggles() {
+  try { return { ...defaultIndicatorToggles, ...JSON.parse(localStorage.getItem("indicatorToggles") || "{}") }; }
+  catch (_) { return { ...defaultIndicatorToggles }; }
+}
+function saveIndicatorSettings() {
+  const values = {};
+  indicatorSettingKeys.forEach(id => { if ($(id)) values[id] = $(id).value; });
+  localStorage.setItem("indicatorSettings", JSON.stringify(values));
+}
+function saveIndicatorToggles() {
+  const values = {};
+  indicatorToggleKeys.forEach(id => { if ($(id)) values[id] = $(id).checked; });
+  localStorage.setItem("indicatorToggles", JSON.stringify(values));
+}
+function hydrateIndicatorControls() {
+  const settings = savedIndicatorSettings();
+  const toggles = savedIndicatorToggles();
+  indicatorSettingKeys.forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    el.value = settings[id] ?? defaultIndicatorSettings[id];
+    el.addEventListener("input", saveIndicatorSettings);
+    el.addEventListener("change", saveIndicatorSettings);
+  });
+  indicatorToggleKeys.forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    el.checked = Boolean(toggles[id]);
+    el.addEventListener("change", saveIndicatorToggles);
+  });
+}
 function hydrateStyleControls() {
   Object.entries(chartStyle).forEach(([key, value]) => {
     const el = $("style_" + key) || (key === "chartType" ? $("chart_type") : null);
@@ -881,7 +990,8 @@ function createPriceSeries() {
     priceLines = [];
     chart.removeSeries(candleSeries);
   }
-  const common = { priceLineVisible:true, lastValueVisible:true };
+  currentPriceLine = null;
+  const common = { priceLineVisible:false, lastValueVisible:false, priceFormat:priceFormatForSymbol() };
   if (chartStyle.chartType === "bar") {
     candleSeries = chart.addBarSeries({
       ...common,
@@ -923,7 +1033,10 @@ function createPriceSeries() {
       wickDownColor:chartStyle.wickDownColor,
     });
   }
-  if (latestChartData) candleSeries.setData(priceData());
+  if (latestChartData) {
+    candleSeries.setData(priceData());
+    updateCurrentPriceLine();
+  }
 }
 function applyPriceSeriesStyle() {
   if (!candleSeries) return;
@@ -989,10 +1102,12 @@ function resetIndicatorSettings() {
   Object.entries(defaultIndicatorSettings).forEach(([id, val]) => {
     if ($(id)) $(id).value = val;
   });
+  localStorage.setItem("indicatorSettings", JSON.stringify(defaultIndicatorSettings));
   // 3) สวิตช์เปิด/ปิดอินดิเคเตอร์กลับค่าเริ่มต้น
   Object.entries(defaultIndicatorToggles).forEach(([id, on]) => {
     if ($(id)) $(id).checked = on;
   });
+  localStorage.setItem("indicatorToggles", JSON.stringify(defaultIndicatorToggles));
   // 4) วาดกราฟใหม่ตามชนิด/สีที่รีเซ็ต แล้วโหลดข้อมูลใหม่ด้วย period เริ่มต้น
   createPriceSeries();
   applyChartStyle();
@@ -1007,9 +1122,11 @@ function setChartType(type) {
 }
 function renderPriceSeries() {
   if (!latestChartData || !candleSeries) return;
+  candleSeries.applyOptions({ priceFormat:priceFormatForSymbol() });
   candleSeries.setData(priceData());
   renderVolume();
   updateLivePositionOverlay();
+  updateCurrentPriceLine();
 }
 function renderVolume() {
   if (!latestChartData || !volumeSeries) return;
@@ -1019,6 +1136,26 @@ function renderVolume() {
     color:c.close >= c.open ? hexToRgba(chartStyle.upColor, .24) : hexToRgba(chartStyle.downColor, .24),
   }));
   volumeSeries.setData($("showVolume").checked ? volume : []);
+}
+
+function updateCurrentPriceLine() {
+  if (!candleSeries || !latestChartData?.candles?.length) return;
+  const last = latestChartData.candles.at(-1);
+  const price = Number(last.close);
+  if (!Number.isFinite(price)) return;
+  if (currentPriceLine) {
+    try { candleSeries.removePriceLine(currentPriceLine); } catch (_) {}
+    currentPriceLine = null;
+  }
+  const up = price >= Number(last.open || price);
+  currentPriceLine = candleSeries.createPriceLine({
+    price,
+    color:up ? chartStyle.upColor : chartStyle.downColor,
+    lineWidth:1,
+    lineStyle:2,
+    axisLabelVisible:true,
+    title:`${currentSymbol} ${formatAxisPrice(price)} ${currentCandleCountdown()}`,
+  });
 }
 
 function hydrateBotPairs() {
@@ -1048,6 +1185,7 @@ async function init() {
   $("quickAssets").innerHTML = quickAssets.map(([s,m]) => `<button onclick="selectSymbol('${s}')">${s} <span class="tiny">${m}</span></button>`).join("");
   hydrateBotPairs();
   hydrateStyleControls();
+  hydrateIndicatorControls();
   setupCharts();
   bindSearch();
   hydrateLiveControls();
@@ -1059,6 +1197,7 @@ async function init() {
   loadSchools();
   quoteTimer = setInterval(refreshQuote, 1000);
   watchTimer = setInterval(refreshWatchlist, 5000);
+  priceCountdownTimer = setInterval(updateCurrentPriceLine, 1000);
   setInterval(refreshTriggered, 8000);
   autoTradeTimer = setInterval(refreshAutoTrade, 5000);
   resetChartRefreshTimer();
@@ -1162,6 +1301,7 @@ async function searchSymbols() {
     renderSearchResults();
   } catch (e) {
     if (token !== searchToken) return;
+    notifyError(errorMessage(e), "Search failed");
     searchRows = [];
     searchIndex = -1;
     $("searchResults").innerHTML = `<div class="result-row"><div><div class="symbol">Search unavailable</div><div class="name">Yahoo Finance did not respond.</div></div></div>`;
@@ -1232,6 +1372,10 @@ function selectSearchResult(symbol) {
 }
 
 function clearAllSeries() {
+  if (currentPriceLine && candleSeries) {
+    try { candleSeries.removePriceLine(currentPriceLine); } catch (_) {}
+    currentPriceLine = null;
+  }
   if (candleSeries) { candleSeries.setData([]); candleSeries.setMarkers([]); }
   [emaFastSeries, emaMidSeries, emaSlowSeries, bbUpperSeries, bbMidSeries, bbLowerSeries,
    rsiSeries, stochKSeries, stochDSeries, macdLineSeries, macdSignalSeries, macdHistSeries,
@@ -1378,6 +1522,7 @@ async function loadChart(options = {}) {
         $("summary").innerHTML = `<div class="stat" style="grid-column:1 / -1;"><span>ผิดพลาด</span><b class="down">${reason}</b></div>`;
       }
       $("chartStatus").textContent = "Live: load failed";
+      notifyError(reason, "Chart load failed");
       closeRealtimeStream();
       return;
     }
@@ -1403,6 +1548,7 @@ async function loadChart(options = {}) {
     startRealtimeStream();
     refreshQuote();
   } catch (e) {
+    notifyError(errorMessage(e), "Chart update failed");
     if (!options.silent) {
       $("summary").innerHTML = `<div class="stat" style="grid-column:1 / -1;"><span>ผิดพลาด</span><b class="down">เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — ตรวจว่า backend ทำงานอยู่</b></div>`;
     }
@@ -1414,6 +1560,7 @@ async function loadChart(options = {}) {
 }
 
 function renderIndicators() {
+  saveIndicatorToggles();
   if (!latestChartData) return;
   const s = latestChartData.indicators.series;
   setLine(emaFastSeries, lineData(s.ema20), $("showEmaFast").checked);
@@ -1453,6 +1600,7 @@ async function refreshQuote() {
     updateQuoteBadge(q);
     applyLiveQuote(q, "REST quote");
   } catch (e) {
+    notifyError(errorMessage(e), "Quote update failed");
   } finally {
     quoteInFlight = false;
   }
@@ -1487,6 +1635,7 @@ function drawRealtimeCandle(index, candle) {
       color:candle.close >= candle.open ? hexToRgba(chartStyle.upColor, .24) : hexToRgba(chartStyle.downColor, .24),
     });
   }
+  updateCurrentPriceLine();
   renderSummary(latestChartData.indicators.summary);
 }
 
@@ -1685,7 +1834,7 @@ async function runDataAnalysis() {
     });
     if (!res.ok) throw new Error(await res.text());
     renderReport(await res.json());
-  } catch (e) { $("result").innerHTML = `<div class="down">${e.message || e}</div>`; }
+  } catch (e) { notifyError(errorMessage(e), "Analysis failed"); $("result").innerHTML = `<div class="down">${e.message || e}</div>`; }
 }
 
 function renderReport(r) {
@@ -1727,7 +1876,7 @@ async function runImageAnalysis() {
     const res = await fetch(`${API}/api/analyze-image`, { method:"POST", body:fd });
     if (!res.ok) throw new Error(await res.text());
     renderReport(await res.json());
-  } catch (e) { $("result").innerHTML = `<div class="down">${e.message || e}</div>`; }
+  } catch (e) { notifyError(errorMessage(e), "Image analysis failed"); $("result").innerHTML = `<div class="down">${e.message || e}</div>`; }
 }
 
 function saveWatchlist() {
@@ -1772,6 +1921,7 @@ async function refreshWatchlist() {
     }).join("");
     $("watchUpdated").textContent = "Updated " + new Date().toLocaleTimeString();
   } catch (e) {
+    notifyError(errorMessage(e), "Watchlist update failed");
     $("watchUpdated").textContent = "Update failed: " + new Date().toLocaleTimeString();
   } finally {
     watchInFlight = false;
@@ -1781,12 +1931,17 @@ async function refreshWatchlist() {
 async function addAlert() {
   const value = parseFloat($("alertValue").value);
   if (Number.isNaN(value)) return;
-  await fetch(`${API}/api/alerts`, {
-    method:"POST", headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({ symbol:currentSymbol, kind:$("alertKind").value, value, timeframe:tf() }),
-  });
-  $("alertValue").value = "";
-  refreshAlerts();
+  try {
+    const res = await fetch(`${API}/api/alerts`, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ symbol:currentSymbol, kind:$("alertKind").value, value, timeframe:tf() }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    $("alertValue").value = "";
+    refreshAlerts();
+  } catch (e) {
+    notifyError(errorMessage(e), "Add alert failed");
+  }
 }
 
 async function refreshAlerts() {
@@ -1795,13 +1950,19 @@ async function refreshAlerts() {
     $("alertList").innerHTML = rules.length ? rules.map(r => `
       <div class="alert-item"><span>${r.symbol} ${r.kind} ${r.value}</span><button onclick="delAlert('${r.id}')">Delete</button></div>`).join("") : `<div class="note">None</div>`;
   } catch (e) {
+    notifyError(errorMessage(e), "Alerts unavailable");
     $("alertList").innerHTML = `<div class="note">Alerts unavailable</div>`;
   }
 }
 
 async function delAlert(id) {
-  await fetch(`${API}/api/alerts/${id}`, { method:"DELETE" });
-  refreshAlerts();
+  try {
+    const res = await fetch(`${API}/api/alerts/${id}`, { method:"DELETE" });
+    if (!res.ok) throw new Error(await res.text());
+    refreshAlerts();
+  } catch (e) {
+    notifyError(errorMessage(e), "Delete alert failed");
+  }
 }
 
 async function refreshTriggered() {
@@ -1809,6 +1970,7 @@ async function refreshTriggered() {
     const items = await fetch(`${API}/api/alerts/triggered`).then(r => r.json());
     $("triggeredList").innerHTML = items.length ? items.map(x => `<div class="alert-item up">${x.message}</div>`).join("") : "None";
   } catch (e) {
+    notifyError(errorMessage(e), "Triggered alerts unavailable");
     $("triggeredList").innerHTML = "Unavailable";
   }
 }
@@ -1830,7 +1992,7 @@ async function loadSchools() {
 
     renderSchoolControls();
     $("schoolList").innerHTML = allSchools.map(s => `<div class="alert-item"><span>${s.display_name}</span><span class="pill">${s.evaluator}</span></div>`).join("");
-  } catch (e) {}
+  } catch (e) { notifyError(errorMessage(e), "Schools unavailable"); }
 }
 
 function renderSchoolControls() {
@@ -2222,6 +2384,7 @@ async function refreshLiveSignal() {
     renderLiveSignal(await res.json());
   } catch (e) {
     clearLivePosition();
+    notifyError(errorMessage(e), "Live signal failed");
     latestLiveSignal = { status: "error", message: e.message || String(e) };
     renderChartLiveStatus(latestLiveSignal);
     $("liveSignalBox").innerHTML = `<div class="down">เชื่อมต่อไม่ได้: ${escapeHtml(e.message || e)}</div>
@@ -2393,6 +2556,7 @@ async function startAutoTrade() {
     renderAutoTrade(await res.json());
     showTab("auto");
   } catch (e) {
+    notifyError(errorMessage(e), "Start bot failed");
     box.innerHTML = `<div class="down">Start failed: ${escapeHtml(e.message || e)}</div>`;
     latestAutoTradeState = { ...latestAutoTradeState, running:false, last_error:e.message || String(e) };
     renderChartLiveStatus();
@@ -2404,6 +2568,7 @@ async function stopAutoTrade() {
     const res = await fetch(`${API}/api/autotrade/stop`, { method:"POST" });
     renderAutoTrade(await res.json());
   } catch (e) {
+    notifyError(errorMessage(e), "Stop bot failed");
     $("autoTradeStatus").innerHTML = `<div class="down">Stop failed: ${escapeHtml(e.message || e)}</div>`;
   }
 }
@@ -2427,6 +2592,7 @@ async function tickAutoTrade() {
     if (!res.ok) throw new Error(parseApiErrorMessage(await res.text()));
     renderAutoTrade(await res.json());
   } catch (e) {
+    notifyError(errorMessage(e), "Bot tick failed");
     box.innerHTML = `<div class="down">Tick failed: ${escapeHtml(e.message || e)}</div>`;
   }
 }
@@ -2438,6 +2604,7 @@ async function refreshAutoTrade() {
     if (!res.ok) throw new Error(await res.text());
     renderAutoTrade(await res.json());
   } catch (e) {
+    notifyError(errorMessage(e), "Bot status unavailable");
     $("autoTradeStatus").innerHTML = `<div class="note">Bot status unavailable</div>`;
     if (latestAutoTradeState?.running) {
       latestAutoTradeState = { ...latestAutoTradeState, last_error:"Bot status unavailable" };
@@ -2573,6 +2740,7 @@ async function runBacktest() {
   } catch (e) {
     let msg = e.message || String(e);
     try { msg = JSON.parse(msg).detail || msg; } catch (_) {}
+    notifyError(msg, "Backtest failed");
     box.innerHTML = `<div class="down">รัน Backtest ไม่สำเร็จ: ${escapeHtml(msg)}</div>`;
   } finally {
     if (btn) btn.disabled = false;
@@ -2794,7 +2962,12 @@ function renderCDC() {
   if (candleSeries) candleSeries.setMarkers(markers);
 }
 
-init();
+init().catch(e => {
+  notifyError(errorMessage(e), "App startup failed");
+  const message = escapeHtml(errorMessage(e));
+  if ($("chartStatus")) $("chartStatus").textContent = "App startup failed";
+  if ($("summary")) $("summary").innerHTML = `<div class="stat" style="grid-column:1 / -1;"><span>ผิดพลาด</span><b class="down">${message}</b></div>`;
+});
 </script>
 </body>
 </html>
