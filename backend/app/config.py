@@ -145,6 +145,26 @@ class Settings:
         {"symbol": "^SET.BK", "name": "SET Index", "market": "TH"},
     ]
 
+    bitkub_pairs = [
+        {"symbol": "BTC_THB", "name": "Bitcoin THB", "market": "BITKUB"},
+        {"symbol": "ETH_THB", "name": "Ethereum THB", "market": "BITKUB"},
+        {"symbol": "SOL_THB", "name": "Solana THB", "market": "BITKUB"},
+        {"symbol": "XRP_THB", "name": "XRP THB", "market": "BITKUB"},
+        {"symbol": "BNB_THB", "name": "BNB THB", "market": "BITKUB"},
+        {"symbol": "ADA_THB", "name": "Cardano THB", "market": "BITKUB"},
+        {"symbol": "DOGE_THB", "name": "Dogecoin THB", "market": "BITKUB"},
+        {"symbol": "LINK_THB", "name": "Chainlink THB", "market": "BITKUB"},
+        {"symbol": "DOT_THB", "name": "Polkadot THB", "market": "BITKUB"},
+        {"symbol": "AVAX_THB", "name": "Avalanche THB", "market": "BITKUB"},
+        {"symbol": "ATOM_THB", "name": "Cosmos THB", "market": "BITKUB"},
+        {"symbol": "ARB_THB", "name": "Arbitrum THB", "market": "BITKUB"},
+        {"symbol": "OP_THB", "name": "Optimism THB", "market": "BITKUB"},
+        {"symbol": "NEAR_THB", "name": "NEAR THB", "market": "BITKUB"},
+        {"symbol": "UNI_THB", "name": "Uniswap THB", "market": "BITKUB"},
+        {"symbol": "AAVE_THB", "name": "Aave THB", "market": "BITKUB"},
+        {"symbol": "USDT_THB", "name": "Tether THB", "market": "BITKUB"},
+    ]
+
 
 @lru_cache
 def get_settings() -> Settings:

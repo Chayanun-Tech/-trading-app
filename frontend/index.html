@@ -240,7 +240,7 @@
   <section class="left">
     <div class="toolbar">
       <div class="searchbox">
-        <input id="searchInput" placeholder="Search symbols: AAPL, PTT.BK, BTC-USD, GC=F" autocomplete="off" />
+        <input id="searchInput" placeholder="Search symbols: BTC_THB, BTC-THB, AAPL, GC=F" autocomplete="off" />
         <button class="primary" onclick="searchSymbols()">Search</button>
         <div class="results" id="searchResults"></div>
       </div>
@@ -515,6 +515,7 @@
 const API = (window.API_BASE_URL || "").replace(/\/$/, "");
 const quickAssets = [
   ["AAPL","US"],["NVDA","US"],["TSLA","US"],["PTT.BK","TH"],["KBANK.BK","TH"],
+  ["BTC_THB","Bitkub"],["ETH_THB","Bitkub"],["SOL_THB","Bitkub"],
   ["BTC-USD","Crypto"],["ETH-USD","Crypto"],["SOL-USD","Crypto"],["GC=F","Gold"],["XAUUSD=X","Gold"]
 ];
 const bitkubTopPairs = [
@@ -699,6 +700,11 @@ function timeframeSeconds(value = tf()) {
 }
 function isBitkubPair(symbol) {
   return String(symbol || "").toUpperCase().endsWith("_THB");
+}
+function normalizeSymbolInput(symbol) {
+  const s = String(symbol || "").trim().toUpperCase();
+  if (s.endsWith("-THB") || s.endsWith("/THB")) return s.replace(/[-/]THB$/, "_THB");
+  return s;
 }
 function binanceStreamSymbol(symbol) {
   const s = symbol.toUpperCase();
@@ -1142,7 +1148,7 @@ function bindSearch() {
 }
 
 async function searchSymbols() {
-  const q = $("searchInput").value.trim();
+  const q = normalizeSymbolInput($("searchInput").value);
   if (!q) {
     hideSearchResults();
     return;
@@ -1216,9 +1222,10 @@ function moveSearchIndex(delta) {
 
 function selectSearchResult(symbol) {
   hideSearchResults();
-  selectSymbol(symbol);
-  if (!watchlist.includes(symbol)) {
-    watchlist.unshift(symbol);
+  const normalized = normalizeSymbolInput(symbol);
+  selectSymbol(normalized);
+  if (!watchlist.includes(normalized)) {
+    watchlist.unshift(normalized);
     saveWatchlist();
     refreshWatchlist();
   }
@@ -1235,7 +1242,7 @@ function clearAllSeries() {
 async function selectSymbol(symbol) {
   backtestMode = false;
   closeRealtimeStream();
-  currentSymbol = symbol.trim().toUpperCase();
+  currentSymbol = normalizeSymbolInput(symbol);
   if (liveMode) {
     latestLiveSignal = null;
     clearLivePosition();

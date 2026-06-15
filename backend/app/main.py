@@ -86,6 +86,10 @@ def _is_bitkub(symbol: str) -> bool:
     return (symbol or "").upper().endswith("_THB")
 
 
+def _normalize_search_term(term: str) -> str:
+    return term.lower().strip().replace("-", "_").replace("/", "_")
+
+
 async def _candles_for(symbol: str, timeframe: str, limit: int):
     if _is_bitkub(symbol):
         return await bitkub_client.candles(symbol, timeframe, limit)
@@ -134,13 +138,13 @@ def _indicator_params(
 
 
 def _fallback_symbol_search(term: str, limit: int) -> list[dict]:
-    needle = term.lower().strip()
-    items = settings.sample_symbols
+    needle = _normalize_search_term(term)
+    items = settings.bitkub_pairs + settings.sample_symbols
     if not needle:
         return items[:limit]
 
     def rank(item: dict) -> tuple[int, str]:
-        symbol = item["symbol"].lower()
+        symbol = _normalize_search_term(item["symbol"])
         name = item["name"].lower()
         market = item["market"].lower()
         if symbol == needle:
@@ -162,7 +166,8 @@ def _fallback_symbol_search(term: str, limit: int) -> list[dict]:
 
 
 def _rank_symbol_result(item: dict, needle: str, source_rank: int) -> tuple[int, int, int, str]:
-    symbol = item["symbol"].lower()
+    needle = _normalize_search_term(needle)
+    symbol = _normalize_search_term(item["symbol"])
     name = item.get("name", "").lower()
     market = item.get("market", "").upper()
 
@@ -179,7 +184,9 @@ def _rank_symbol_result(item: dict, needle: str, source_rank: int) -> tuple[int,
     else:
         text_rank = 9
 
-    if item["symbol"].endswith(".BK") or market in {"TH", "SET", "SET.BK"}:
+    if market == "BITKUB" or item["symbol"].upper().endswith("_THB"):
+        market_rank = 0
+    elif item["symbol"].endswith(".BK") or market in {"TH", "SET", "SET.BK"}:
         market_rank = 0
     elif market in {"NYQ", "NYS", "NAS", "NMS", "ASE", "PCX", "US"}:
         market_rank = 1
@@ -240,6 +247,7 @@ async def search_symbols(q: str = "", limit: int = Query(20, ge=1, le=100)):
     """Search symbols from local presets and Yahoo Finance, with a short cache."""
     term = q.strip()
     fallback = _fallback_symbol_search(term, limit)
+    norm_term = _normalize_search_term(term)
     if not term or provider.name != "yahoo":
         return fallback
 
@@ -258,9 +266,9 @@ async def search_symbols(q: str = "", limit: int = Query(20, ge=1, le=100)):
     seen = {item["symbol"] for item in found}
     for item in fallback:
         if item["symbol"] not in seen:
-            combined.append((item, 0))
+            combined.append((item, -1 if item.get("market") == "BITKUB" else 0))
             seen.add(item["symbol"])
-    combined.sort(key=lambda pair: _rank_symbol_result(pair[0], term.lower(), pair[1]))
+    combined.sort(key=lambda pair: _rank_symbol_result(pair[0], norm_term, pair[1]))
     result = [item for item, _ in combined[:limit]]
     _symbol_search_cache[cache_key] = (time.time(), result)
     return result
