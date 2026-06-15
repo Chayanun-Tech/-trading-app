@@ -1434,3 +1434,8 @@ Verification:
 - Local app at `http://127.0.0.1:8000` loaded successfully.
 - Browser test: changed `EMA fast` to 34 and RSI toggle off, reloaded, both persisted.
 - Screenshot confirmed chart renders and current price label shows countdown (example: `AAPL 87.4900 45:31`).
+## Script error toast false positive fix (2026-06-15, Codex)
+
+After adding global red error toasts, the user saw a red `Script error.` toast with no useful details. This is typically a browser generic/cross-origin script error or ResizeObserver noise, not an actionable app error. Updated `frontend/index.html` so the global `window.error` handler ignores generic `Script error.` events with no filename/line/error object and ignores ResizeObserver loop noise, while still showing real app script errors with filename/line when available.
+
+Verification: inline JS parse passed; local `http://127.0.0.1:8000?v=script-error-filter` loaded with `toastCount: 0` and active quote status.

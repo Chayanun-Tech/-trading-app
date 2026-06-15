@@ -654,7 +654,17 @@ function notifyError(message, title = "Error") {
 function errorMessage(e) {
   return e?.message || String(e || "Unknown error");
 }
-window.addEventListener("error", e => notifyError(e.message, "Script error"));
+function isNoiseScriptError(e) {
+  const msg = String(e?.message || "");
+  const genericCrossOrigin = msg === "Script error." && !e?.error && !e?.filename && !e?.lineno && !e?.colno;
+  const resizeObserverLoop = msg.includes("ResizeObserver loop");
+  return genericCrossOrigin || resizeObserverLoop;
+}
+window.addEventListener("error", e => {
+  if (isNoiseScriptError(e)) return;
+  const location = e.filename ? ` (${e.filename.split("/").pop()}:${e.lineno || 0})` : "";
+  notifyError(`${errorMessage(e.error || e.message)}${location}`, "Script error");
+});
 window.addEventListener("unhandledrejection", e => notifyError(errorMessage(e.reason), "Unhandled error"));
 function preventImplicitButtonSubmit() {
   document.querySelectorAll("button:not([type])").forEach(btn => { btn.type = "button"; });
