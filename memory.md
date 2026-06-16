@@ -1536,3 +1536,27 @@ User requests (3) + "เช็คระบบทั้งหมดให้ไ�
 - Note: `/api/autotrade/tick` expects `trained_model_min_prob` as a FRACTION ≤0.95; the frontend converts via `pctInputToProb("bot_model_min",0.53)` so the UI is correct (raw 53 → 422, not a UI bug).
 
 **State for next session:** A Claude-Preview-managed uvicorn (yahoo) is running on :8000 (replaced the old manually-run system-python server PID 15156 that was killed during testing). Backend change in config.py needs a restart to take effect (already restarted). The nested untracked `trading-app/` dir and `รหัส HF.txt` in the worktree are still uncommitted/uncleaned — not touched this session.
+
+Deployed: commit `126b1ec` pushed to `hf/main` (live HuggingFace Space) + `origin/main` (GitHub backup) on 2026-06-16.
+
+## Bigger chart layout (compact surrounding strips) (2026-06-16, Claude/Opus)
+
+User: "ช่องกราฟมันเล็กไปเมื่อเทียบกับสัดส่วนทั้งหมด". The desktop left column is a flex stack: toolbar → workspace-strip → quick → toolstrip → **chart-wrap (flex:1)** → subcharts(RSI/MACD) → summary. The chart only gets leftover space, so I shrank the fixed-height chrome and let the chart grow. All in `frontend/index.html` CSS (desktop rules ~line 74-158):
+- `.workspace-strip` padding 10→6px; `.workspace-card` changed from 2-line block (label above value) to a single inline `flex` row (label + value baseline) → strip height ~62px → **42px**. Card text now reads e.g. `Workspace AAPL / 1h`.
+- `.subchart` height 128→**104px**; `.subcharts` padding 10→8px.
+- `.chart-wrap` min-height 330→**380px**, top margin 10→8px.
+- `.quick` / `.toolstrip` / `.summary` padding trimmed to 5-6px.
+- Net: ~85px reclaimed by the chart. Verified on preview (1440×900): chart-wrap = **438px = 53% of the left panel** (was smaller), canvas renders, 0 console errors. No features removed; only the live `Schools`/etc. behavior untouched.
+- Idea offered but NOT done yet (user can ask): a collapse/expand toggle for the RSI/MACD subcharts so the price chart can go near-fullscreen.
+
+Deployed: this layout change is in commit pushed to hf/main + origin/main on 2026-06-16 (see push log below / git log).
+
+## IMPORTANT — moving to a new machine (2026-06-16)
+
+User said "จะย้ายเครื่องทำ" (moving to a different computer). To continue there:
+1. **`git clone https://github.com/Chayanun-Tech/-trading-app.git`** (origin). Remotes `hf` (HuggingFace Space, live site) and `origin` (GitHub) — re-add if needed: `git remote add hf https://huggingface.co/spaces/Chayanun2541/ai-trade-assistant`. Deploy by pushing `HEAD:main` to both (see `deploy.bat`, double-click on Windows). Auth uses Git Credential Manager (login popup on first push).
+2. **`backend/.env` is gitignored — it will NOT come with the clone.** Must recreate it on the new machine with the real keys. Minimum: `DATA_PROVIDER=yahoo`, `LLM_PROVIDER=auto`, plus `GEMINI_API_KEY`, `GROQ_API_KEY` (fallback), and Bitkub keys only if doing real trading. **Save `.env` as UTF-8 WITHOUT BOM** — a BOM corrupts the first key (`DATA_PROVIDER`) and silently falls back to mock (this bit us; config.py now loads `.env` by absolute path so cwd no longer matters, but BOM still would). Template: `backend/.env.example`.
+3. Python venv: `cd backend; python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r requirements.txt`.
+4. Run: from `backend/`, `.\.venv\Scripts\python.exe -B -m uvicorn app.main:app --host 127.0.0.1 --port 8000` → open `http://127.0.0.1:8000/`.
+5. On HuggingFace the live deploy reads provider/keys from **Space Secrets** (not the repo `.env`), so the BOM issue does not affect prod — but keep the local `.env` clean anyway.
+6. The big local untracked items (`trading-app/` nested dir, `รหัส HF.txt`, `backend/.venv`, `data/candles/` training data, `models/` may be partially gitignored) do not travel via git — recheck `.gitignore` and re-download training data with `backend/scripts/download_history.py` if retraining the math model.

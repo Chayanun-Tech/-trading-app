@@ -72,22 +72,22 @@
   .bot-searchbox { flex:1 1 auto; min-width:0; width:100%; }
   .bot-searchbox .results { right:0; top:38px; }
   .workspace-strip {
-    display:grid; grid-template-columns:1.3fr .9fr .9fr .9fr; gap:8px; padding:10px;
+    display:grid; grid-template-columns:1.3fr .9fr .9fr .9fr; gap:8px; padding:6px 10px;
     border-bottom:1px solid var(--border); background:#090f16;
   }
-  .workspace-card { border:1px solid rgba(148,163,184,.17); border-radius:8px; background:#0e1620; padding:8px 9px; min-width:0; }
-  .workspace-card span { display:block; color:var(--muted); font-size:11px; }
-  .workspace-card b { display:block; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .quick { display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; padding:7px 10px; border-bottom:1px solid var(--border); scrollbar-width:none; -ms-overflow-style:none; background:#0b1118; }
+  .workspace-card { display:flex; align-items:baseline; gap:7px; border:1px solid rgba(148,163,184,.17); border-radius:7px; background:#0e1620; padding:5px 9px; min-width:0; }
+  .workspace-card span { color:var(--muted); font-size:10px; flex:0 0 auto; }
+  .workspace-card b { font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .quick { display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; padding:5px 10px; border-bottom:1px solid var(--border); scrollbar-width:none; -ms-overflow-style:none; background:#0b1118; }
   .quick::-webkit-scrollbar { display:none; }
   .quick button { font-size:12px; min-height:28px; padding:4px 8px; white-space:nowrap; flex:0 0 auto; }
-  .toolstrip { display:flex; align-items:center; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border); background:#0d141c; flex-wrap:wrap; }
+  .toolstrip { display:flex; align-items:center; gap:6px; padding:6px 10px; border-bottom:1px solid var(--border); background:#0d141c; flex-wrap:wrap; }
   .toolstrip button.active { border-color:var(--accent); color:#93c5fd; }
   .toolstrip select { min-height:30px; padding:4px 8px; font-size:12px; flex:0 0 auto; }
   .toolstrip .live-toggle { min-height:30px; padding:4px 9px; font-size:12px; font-weight:650; }
   .toolstrip .live-toggle.off { border-color:#4b5563; color:#9ca3af; }
   .chart-title { margin-left:auto; color:var(--muted); font-size:12px; }
-  .chart-wrap { position:relative; flex:1 1 auto; min-height:330px; margin:10px 10px 0; border:1px solid rgba(148,163,184,.18); border-radius:8px; overflow:hidden; background:#070a0d; }
+  .chart-wrap { position:relative; flex:1 1 auto; min-height:380px; margin:8px 10px 0; border:1px solid rgba(148,163,184,.18); border-radius:8px; overflow:hidden; background:#070a0d; }
   #chart { width:100%; height:100%; }
   .chart-live-status {
     position:absolute; top:12px; left:12px; z-index:5; width:min(330px, calc(100% - 24px));
@@ -141,8 +141,8 @@
     border:1px solid var(--border); border-radius:4px; padding:2px 5px;
     white-space:nowrap; color:#e8edf2;
   }
-  .subcharts { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:10px; border-bottom:1px solid var(--border); }
-  .subchart { height:128px; border:1px solid rgba(148,163,184,.18); border-radius:8px; overflow:hidden; position:relative; }
+  .subcharts { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:8px 10px; border-bottom:1px solid var(--border); }
+  .subchart { height:104px; border:1px solid rgba(148,163,184,.18); border-radius:8px; overflow:hidden; position:relative; }
   .subchart:last-child { border-right:0; }
   .sub-title { position:absolute; top:8px; left:10px; z-index:2; color:var(--muted); font-size:12px; }
   #rsiChart, #macdChart { width:100%; height:100%; }
@@ -155,7 +155,7 @@
   .field input[type="color"] { width:100%; height:34px; padding:3px; }
   .checkrow { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; }
   .checkrow input { min-height:auto; }
-  .summary { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:7px; padding:10px; border-bottom:1px solid var(--border); flex:0 0 auto; background:#090f16; }
+  .summary { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:7px; padding:6px 10px; border-bottom:1px solid var(--border); flex:0 0 auto; background:#090f16; }
   .stat { background:#101821; border:1px solid rgba(148,163,184,.17); border-radius:8px; padding:7px 8px; min-width:0; }
   .stat span { color:var(--muted); font-size:11px; display:block; }
   .stat b { font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
