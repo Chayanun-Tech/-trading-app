@@ -18,7 +18,7 @@
   }
   button, input, select, textarea {
     font:inherit; color:var(--text); background:#0a1118; border:1px solid var(--border);
-    border-radius:6px; padding:7px 9px; min-height:34px;
+    border-radius:6px; padding:7px 9px; min-height:34px; max-width:100%;
   }
   button { cursor:pointer; }
   button:hover { border-color:#3b4b5f; }
@@ -37,8 +37,18 @@
   .badge { color:#c7d2e1; border:1px solid rgba(148,163,184,.23); border-radius:999px; padding:4px 9px; font-size:12px; background:#0f1720; }
   .badge-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; min-width:0; }
   .app { display:grid; grid-template-columns:minmax(0,1fr) minmax(330px,360px); gap:10px; height:calc(100vh - 62px); height:calc(100dvh - 62px); padding:10px; overflow:hidden; }
+  body.controls-collapsed .app { grid-template-columns:minmax(0,1fr); }
   .left { min-width:0; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(9,15,22,.94); display:flex; flex-direction:column; min-height:0; overflow:hidden; }
   .right { min-width:0; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:#0d141d; overflow:auto; max-height:calc(100vh - 82px); max-height:calc(100dvh - 82px); }
+  body.controls-collapsed .right { display:none; }
+  .right.wide {
+    position:fixed; top:76px; right:18px; bottom:18px; z-index:2200;
+    width:min(920px, calc(100vw - 36px)); max-height:none; box-shadow:0 24px 80px rgba(0,0,0,.58);
+  }
+  .right.wide .detail-dock .tabs { grid-template-columns:repeat(6,minmax(0,1fr)); }
+  .right.wide .panel-body { max-height:calc(100vh - 235px); }
+  .right.wide .grid3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .right.wide .grid2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .toolbar {
     display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px;
     border-bottom:1px solid var(--border); background:#0c131c;
@@ -137,6 +147,8 @@
   .section { padding:12px; border-bottom:1px solid var(--border); }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .grid2 > *, .grid3 > * { min-width:0; }
+  .right:not(.wide) .panel-body .grid2, .right:not(.wide) .panel-body .grid3 { grid-template-columns:1fr; }
   .field { display:flex; flex-direction:column; gap:4px; }
   .field input[type="color"] { width:100%; height:34px; padding:3px; }
   .checkrow { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; }
@@ -148,6 +160,17 @@
   .detail-dock { border-bottom:1px solid var(--border); background:#0c1219; }
   .detail-dock-title { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px 2px; }
   .detail-dock-title h3 { margin:0; }
+  .panel-actions { display:flex; gap:6px; align-items:center; }
+  .panel-actions button { min-height:28px; padding:4px 8px; font-size:12px; }
+  .control-backdrop {
+    position:fixed; inset:0; z-index:2100; background:rgba(2,6,12,.58);
+    backdrop-filter:blur(3px);
+  }
+  .controls-fab {
+    position:fixed; right:14px; bottom:14px; z-index:2300;
+    background:var(--accent); border-color:var(--accent); color:white; font-weight:700;
+    box-shadow:0 14px 42px rgba(0,0,0,.45);
+  }
   .tabs { display:flex; gap:6px; padding:8px 10px; overflow-x:auto; scrollbar-width:thin; background:#0b1118; }
   .tab { flex:0 0 auto; }
   .tab.active { background:var(--accent); border-color:var(--accent); }
@@ -198,6 +221,9 @@
     .app { grid-template-columns:1fr; height:auto; min-height:calc(100vh - 62px); min-height:calc(100dvh - 62px); overflow:visible; }
     .left { min-height:0; overflow:visible; }
     .right { max-height:none; }
+    .right.wide { top:68px; right:10px; left:10px; bottom:10px; width:auto; }
+    .right.wide .detail-dock .tabs { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .right.wide .panel-body { max-height:calc(100vh - 230px); }
     .subcharts { grid-template-columns:1fr; }
     .summary { grid-template-columns:repeat(4,minmax(0,1fr)); }
     .panel-body { max-height:none; }
@@ -215,6 +241,10 @@
       font-size:11px; padding:2px 7px;
     }
     .app { padding:8px; min-height:calc(100vh - 88px); min-height:calc(100dvh - 88px); }
+    .right.wide { top:90px; right:8px; left:8px; bottom:8px; }
+    .right.wide .detail-dock .tabs { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .right.wide .grid2, .right.wide .grid3 { grid-template-columns:1fr; }
+    .right.wide .panel-body { max-height:calc(100vh - 248px); }
     .toolbar {
       display:grid; grid-template-columns:1fr 82px; align-items:stretch;
       gap:6px; padding:8px;
@@ -283,6 +313,8 @@
   </div>
 </header>
 <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+<div id="controlBackdrop" class="control-backdrop hidden" onclick="setControlDockMode('normal')"></div>
+<button id="openControlsFab" class="controls-fab hidden" onclick="setControlDockMode('normal')">Controls</button>
 
 <main class="app">
   <section class="left">
@@ -541,7 +573,10 @@
     <div id="detailDock" class="detail-dock">
       <div class="detail-dock-title">
         <h3>Control panels</h3>
-        <span class="tiny">Tools</span>
+        <div class="panel-actions">
+          <button id="controlWideBtn" onclick="toggleControlDockWide()" title="Open control panels in a wider floating window">Wide</button>
+          <button onclick="setControlDockMode('collapsed')" title="Hide control panels">Hide</button>
+        </div>
       </div>
     </div>
 
@@ -693,6 +728,7 @@ let latestAutoTradeState = null;
 let latestModelStatus = null;
 let autoTradeTimer = null;
 let botLastDrawnPosId = null;
+let controlDockMode = localStorage.getItem("controlDockMode") || "normal";
 
 function $(id) { return document.getElementById(id); }
 function tf() { return $("timeframe").value; }
@@ -743,6 +779,33 @@ function dockDetailPanels() {
     const panel = $(id);
     if (panel) dock.appendChild(panel);
   });
+}
+function setControlDockMode(mode) {
+  controlDockMode = ["normal", "wide", "collapsed"].includes(mode) ? mode : "normal";
+  localStorage.setItem("controlDockMode", controlDockMode);
+  applyControlDockMode();
+}
+function toggleControlDockWide() {
+  setControlDockMode(controlDockMode === "wide" ? "normal" : "wide");
+}
+function applyControlDockMode() {
+  const aside = document.querySelector(".right");
+  if (!aside) return;
+  const isWide = controlDockMode === "wide";
+  const isCollapsed = controlDockMode === "collapsed";
+  document.body.classList.toggle("controls-collapsed", isCollapsed);
+  aside.classList.toggle("wide", isWide);
+  $("controlBackdrop")?.classList.toggle("hidden", !isWide);
+  $("openControlsFab")?.classList.toggle("hidden", !isCollapsed);
+  if ($("controlWideBtn")) $("controlWideBtn").textContent = isWide ? "Dock" : "Wide";
+  setTimeout(() => resizeCharts(), 80);
+}
+function resizeCharts() {
+  if (!chart || !rsiChart || !macdChart || !$("chart") || !$("rsiChart") || !$("macdChart")) return;
+  chart.applyOptions({ width:$("chart").clientWidth, height:$("chart").clientHeight });
+  rsiChart.applyOptions({ width:$("rsiChart").clientWidth, height:$("rsiChart").clientHeight });
+  macdChart.applyOptions({ width:$("macdChart").clientWidth, height:$("macdChart").clientHeight });
+  updateLivePositionOverlay();
 }
 function indicatorParams() {
   const params = {};
@@ -1363,6 +1426,7 @@ async function init() {
   hydrateStyleControls();
   hydrateIndicatorControls();
   setupCharts();
+  applyControlDockMode();
   bindSearch();
   hydrateLiveControls();
   await loadModelStatus();
@@ -1421,12 +1485,6 @@ function setupCharts() {
   cdcSlowSeries = chart.addLineSeries({ color:"#3b82f6", lineWidth:1, title:"CDC EMA26", lastValueVisible:false, priceLineVisible:false });
 
   chart.subscribeClick(onChartClick);
-  const resizeCharts = () => {
-    chart.applyOptions({ width:$("chart").clientWidth, height:$("chart").clientHeight });
-    rsiChart.applyOptions({ width:$("rsiChart").clientWidth, height:$("rsiChart").clientHeight });
-    macdChart.applyOptions({ width:$("macdChart").clientWidth, height:$("macdChart").clientHeight });
-    updateLivePositionOverlay();
-  };
   const ro = new ResizeObserver(resizeCharts);
   [$("chart"), $("rsiChart"), $("macdChart")].forEach(el => ro.observe(el));
   window.addEventListener("orientationchange", () => setTimeout(resizeCharts, 250));
