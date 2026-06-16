@@ -216,7 +216,7 @@ class AutoTradeManager:
         self.latest_signal = signal
         self.updated_at = int(time.time())
         price = float(signal.get("last_price") or candles[-1].close)
-        self._update_paper_positions(price)
+        await self._update_positions(price)
         if signal.get("status") == "entry" and signal.get("trade"):
             await self._maybe_open_long(signal)
 
@@ -299,40 +299,63 @@ class AutoTradeManager:
         self.last_entry_candle_time = signal.get("as_of_time")
         self._event("trade", f"Opened {cfg.mode} long {cfg.symbol}", order)
 
-    def _update_paper_positions(self, price: float) -> None:
+    async def _update_positions(self, price: float) -> None:
         for pos in self._open_positions():
             qty = float(pos["qty"])
             pnl = (price - float(pos["entry"])) * qty
             pos["last_price"] = round(price, 4)
             pos["unrealized_pnl_thb"] = round(pnl, 2)
-            self._persist("save_position", pos, self.run_id)
             close_reason = None
             if price >= float(pos["take_profit"]):
                 close_reason = "take_profit"
             elif price <= float(pos["stop_loss"]):
                 close_reason = "stop_loss"
-            if close_reason:
-                pos["status"] = "closed"
-                pos["closed_at"] = int(time.time())
-                pos["close_price"] = round(price, 4)
-                pos["close_reason"] = close_reason
-                pos["realized_pnl_thb"] = round(pnl, 2)
-                self.realized_pnl_thb += pnl
-                order = {
-                    "id": str(uuid.uuid4()),
-                    "time": int(time.time()),
-                    "mode": pos["mode"],
-                    "exchange": "bitkub",
-                    "symbol": pos["symbol"],
-                    "side": "sell",
-                    "type": "exit",
-                    "price": round(price, 4),
-                    "qty": pos["qty"],
-                    "notional_thb": round(price * qty, 2),
-                    "status": "paper_filled",
-                    "reason": close_reason,
-                }
-                self.orders.append(order)
-                self._persist("save_order", order, self.run_id)
+            if not close_reason:
                 self._persist("save_position", pos, self.run_id)
-                self._event("trade", f"Closed paper long {pos['symbol']} by {close_reason}", pos)
+                continue
+
+            # Real positions must be closed with a real exchange sell before we book PnL.
+            # A market ask guarantees the exit (critical for stop-loss); a failed sell leaves the
+            # position open so the next tick retries instead of pretending we are flat.
+            exit_status = "paper_filled"
+            exchange_result = None
+            if pos["mode"] == "real":
+                try:
+                    exchange_result = await self.client.place_ask(pos["symbol"], qty, price, "market")
+                    exit_status = "sent"
+                except Exception as exc:  # noqa: BLE001
+                    self.last_error = str(exc)
+                    self._event(
+                        "error",
+                        f"Real exit order failed for {pos['symbol']} ({close_reason}); will retry next tick",
+                        {"reason": close_reason, "error": str(exc)},
+                    )
+                    self._persist("save_position", pos, self.run_id)
+                    continue
+
+            pos["status"] = "closed"
+            pos["closed_at"] = int(time.time())
+            pos["close_price"] = round(price, 4)
+            pos["close_reason"] = close_reason
+            pos["realized_pnl_thb"] = round(pnl, 2)
+            self.realized_pnl_thb += pnl
+            order = {
+                "id": str(uuid.uuid4()),
+                "time": int(time.time()),
+                "mode": pos["mode"],
+                "exchange": "bitkub",
+                "symbol": pos["symbol"],
+                "side": "sell",
+                "type": "exit",
+                "price": round(price, 4),
+                "qty": pos["qty"],
+                "notional_thb": round(price * qty, 2),
+                "status": exit_status,
+                "reason": close_reason,
+            }
+            if exchange_result is not None:
+                order["exchange_result"] = exchange_result
+            self.orders.append(order)
+            self._persist("save_order", order, self.run_id)
+            self._persist("save_position", pos, self.run_id)
+            self._event("trade", f"Closed {pos['mode']} long {pos['symbol']} by {close_reason}", pos)

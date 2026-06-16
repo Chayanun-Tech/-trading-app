@@ -504,6 +504,7 @@
       </div>
       <label class="checkrow" style="margin-top:8px;"><span>Trend Filter (Long เหนือ SMA200 / Short ใต้ SMA200)</span><input id="bt_trend" type="checkbox" checked /></label>
       <div style="margin-top:10px;"><button class="primary" style="width:100%;" onclick="runBacktest()">▶ รัน Backtest ท่าไม้ตาย</button></div>
+      <div style="margin-top:8px;"><button style="width:100%;" onclick="applyStrategyToBot()" title="คัดลอกพารามิเตอร์กลยุทธ์นี้ (timeframe, เกณฑ์เข้า, RR, ATR, น้ำหนักศาสตร์ ฯลฯ) ไปยัง Auto Bot">⤵ ใช้กลยุทธ์นี้กับ Auto Bot</button></div>
       <div id="backtestResult" class="note" style="margin-top:12px;">ยังไม่ได้รัน — กดปุ่มด้านบนเพื่อเริ่ม</div>
       <div id="liveSignalBox" class="hidden" style="margin-top:12px;"></div>
     </div>
@@ -750,6 +751,15 @@ function notifyError(message, title = "Error") {
   toast.innerHTML = `<div class="toast-title">${escapeHtml(title)}</div><div>${escapeHtml(message || "Unknown error")}</div>`;
   stack.appendChild(toast);
   setTimeout(() => toast.remove(), 9000);
+}
+function notifyOk(message, title = "สำเร็จ") {
+  const stack = $("toastStack");
+  if (!stack) return;
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.innerHTML = `<div class="toast-title">${escapeHtml(title)}</div><div>${escapeHtml(message || "")}</div>`;
+  stack.appendChild(toast);
+  setTimeout(() => toast.remove(), 7000);
 }
 function errorMessage(e) {
   return e?.message || String(e || "Unknown error");
@@ -2917,7 +2927,7 @@ function autoTradeConfigFromForm() {
     min_directional_weight: parseFloat($("bot_mdw").value) || 2,
     indicator_params: indicatorParams(),
     enabled_schools: getActiveSchools(),
-    weights: getSchoolWeights(),
+    weights: { ...(getSchoolWeights() || {}), ...(activePresetWeights || {}) },
     real_confirm_text: $("bot_confirm").value || null,
     use_trained_model: $("bot_use_model")?.checked !== false,
     trained_model_min_prob: pctInputToProb("bot_model_min", 0.53),
@@ -3207,6 +3217,45 @@ function applyPreset(name) {
   if ($("ema_slow")) $("ema_slow").value = p.emaSlow || 200;
   activePresetWeights = p.weights || null;
   $("presetNote").textContent = "✓ ตั้งค่าแล้ว: " + p.note;
+}
+
+// คัดลอกกลยุทธ์จากฝั่ง Backtest (bt_*) → Auto Bot (bot_*)
+// ศาสตร์ที่เปิด/น้ำหนัก/อินดิเคเตอร์ใช้ state ร่วมกันอยู่แล้ว และ activePresetWeights
+// จะถูก merge ใน autoTradeConfigFromForm() ตอน Start → บอทจึงใช้กลยุทธ์ชุดเดียวกับที่ backtest
+function applyStrategyToBot() {
+  $("bot_timeframe").value = $("bt_timeframe").value;
+  $("bot_entry").value = $("bt_entry").value;
+  // Auto Bot บังคับ RR ขั้นต่ำ 1.5 → ปัดขึ้นถ้ากลยุทธ์ตั้งต่ำกว่า
+  const rr = Math.max(1.5, parseFloat($("bt_rr").value) || 1.5);
+  $("bot_rr").value = rr;
+  $("bot_atr").value = $("bt_atr").value;
+  $("bot_mdw").value = $("bt_mdw").value;
+  $("bot_trend").checked = $("bt_trend").checked;
+  // ความเสี่ยง/ไม้: bot รับได้สูงสุด 10%
+  const risk = Math.min(10, Math.max(0.1, parseFloat($("bt_risk").value) || 5));
+  $("bot_risk").value = risk;
+
+  const notes = [];
+  if (rr !== (parseFloat($("bt_rr").value) || 1.5)) notes.push(`ปรับ RR เป็น ${rr} (ขั้นต่ำของบอท)`);
+
+  // คู่เทรด: Auto Bot รองรับเฉพาะ Bitkub (_THB)
+  const sym = (currentSymbol || "").toUpperCase().replace("/", "_").replace("-", "_");
+  if (sym.endsWith("_THB")) {
+    $("bot_symbol").value = sym;
+  } else {
+    notes.push(`กราฟปัจจุบัน ${sym} ไม่ใช่คู่ Bitkub — โปรดตั้งคู่เทรด _THB ในช่อง Auto Bot เอง`);
+  }
+  // ทิศทาง: spot bot เปิดได้เฉพาะ Long
+  if ($("bt_direction").value !== "long") {
+    notes.push(`กลยุทธ์เป็น ${$("bt_direction").value} แต่ Auto Bot เปิดได้เฉพาะ Long`);
+  }
+
+  showTab("auto");
+  notifyOk(
+    "คัดลอกกลยุทธ์เข้า Auto Bot แล้ว — ตรวจคู่เทรด/งบ แล้วกด Start"
+      + (notes.length ? " · " + notes.join(" · ") : ""),
+    "ใช้กลยุทธ์กับ Auto Bot"
+  );
 }
 
 async function runBacktest() {
