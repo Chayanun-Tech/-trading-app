@@ -16,6 +16,8 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # App code
 COPY backend ./backend
 COPY frontend ./frontend
+# Trained model artifact (bot gate). Without this the container shows "missing".
+COPY models ./models
 
 # HF Spaces runs as non-root uid 1000; give it ownership
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
