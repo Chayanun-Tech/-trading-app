@@ -9,6 +9,9 @@ env/
 # Env / secrets
 .env
 backend/.env
+Bitkub.txt
+รหัส HF.txt
+รหัส*.txt
 
 # OS / editor
 .DS_Store

@@ -131,7 +131,7 @@ class BitkubClient:
         return candles[-limit:]
 
     def _sign(self, timestamp: int, method: str, path: str, query: str = "", body: str = "") -> str:
-        raw = f"{timestamp} {method.upper()}{path}{query}{body}"
+        raw = f"{timestamp}{method.upper()}{path}{query}{body}"
         return hmac.new(self.api_secret.encode("utf-8"), raw.encode("utf-8"), hashlib.sha256).hexdigest()
 
     async def secure_request(self, method: str, path: str, payload: dict | None = None,

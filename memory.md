@@ -1560,3 +1560,21 @@ User said "จะย้ายเครื่องทำ" (moving to a different
 4. Run: from `backend/`, `.\.venv\Scripts\python.exe -B -m uvicorn app.main:app --host 127.0.0.1 --port 8000` → open `http://127.0.0.1:8000/`.
 5. On HuggingFace the live deploy reads provider/keys from **Space Secrets** (not the repo `.env`), so the BOM issue does not affect prod — but keep the local `.env` clean anyway.
 6. The big local untracked items (`trading-app/` nested dir, `รหัส HF.txt`, `backend/.venv`, `data/candles/` training data, `models/` may be partially gitignored) do not travel via git — recheck `.gitignore` and re-download training data with `backend/scripts/download_history.py` if retraining the math model.
+
+---
+
+## Session 2026-06-16 — Bitkub live connection + signature bug fix
+
+- **Bitkub secure API signature was broken.** `bitkub.py` `_sign()` built the payload as `f"{timestamp} {method}..."` with a **space** after timestamp. Bitkub v3 spec requires NO space (`timestamp+method+path+query+body`). Every authenticated call (balances, place-bid/ask, open-orders) returned **401 Authorization Required**. Fixed: removed the space ([bitkub.py:134]). Confirmed working — balances call now returns real account holdings. Without this fix the Real-trading bot could never place orders.
+- **venv was dead** — pointed at `C:\Program Files\Python311` which no longer exists. Recreated with `C:\Users\ASUS\AppData\Local\Programs\Python\Python311\python.exe`. (Note: machine moved; user is now `ASUS`, base path is the Google-Drive "Other computers" mirror.)
+- **Bitkub API key created** by user with correct perms: Read + Trade only, NO deposit/withdraw. Keys saved in `trading-app/Bitkub.txt` (untracked) and written into `backend/.env` (BITKUB_API_KEY/SECRET). `BITKUB_REAL_TRADING_ENABLED=false` kept for now.
+- User account currently holds ~0.00155 BTC, ~0 THB. To run the long-only bot for real they need **THB balance** as buy budget.
+- App verified running: `http://127.0.0.1:8000/` health ok, AI provider=gemini.
+
+## Session 2026-06-16 (cont.) — ROOT CAUSE: venv on Google Drive = unusably slow
+
+- **Symptom:** every external HTTP call (Bitkub, Yahoo) via httpx took 25–50s (often ConnectTimeout), so the web UI hung on "Loading...". But curl/urllib/raw socket+TLS to the same hosts were all <0.5s. Only httpx was slow, and it was slow to ALL hosts equally + intermittent (0.2s–50s).
+- **Diagnosis:** httpx trace showed ~42s elapsed BEFORE `connect_tcp` even started. Pinpointed to `httpx.create_ssl_context()` / `ssl.create_default_context(cafile=certifi.where())` taking 26–50s. Reason: **certifi's cacert.pem (and the whole `.venv`) lived on the `G:\Other computers\...` Google Drive mirror**, which hydrates files on-demand from the cloud → reading the cert file (and any venv file) blocks for tens of seconds. The app creates a NEW httpx client per request → re-reads the cert every time → every API call paid the Drive-hydration tax. Copying cacert.pem to C: → context build dropped to 0.6s.
+- **FIX (permanent):** recreated the venv on LOCAL disk at `C:\Users\ASUS\trading-venv` (project code stays on G:, only the venv moved). Updated `.claude/launch.json` `runtimeExecutable` to `C:\Users\ASUS\trading-venv\Scripts\python.exe`. After this, Bitkub `/api/candles` = 0.70s consistently.
+- **Run command now:** `cd backend; & C:\Users\ASUS\trading-venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`
+- **LESSON: never put a Python venv (or anything perf-sensitive that does many small file reads) on the Google Drive `G:\Other computers` mirror.** Keep code there if you want backup, but venv must be on a real local disk.
