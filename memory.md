@@ -1507,3 +1507,32 @@ Verification:
 
 Important caution:
 - This is the first trained filter, not a profit guarantee. The measured edge is small, so keep using Paper mode first and treat the model as an extra risk gate alongside school consensus, trend filter, RR, SL/TP, and daily loss limits.
+
+## Remove Schools panel + searchable Auto Bot pair + chart-state persistence + env fix (2026-06-16, Claude/Opus)
+
+User requests (3) + "เช็คระบบทั้งหมดให้ไม่ติดอะไร". All in `frontend/index.html` except the env fix.
+
+1. **Removed Schools panel from UI** (user picked "พาเนล Schools ทั้งหมด"):
+   - Deleted the `Schools` tab button (`#tabSchools`), the `#schoolsPanel` tab body (`#schoolControls`), and the always-visible aside `.section` with `#schoolList`.
+   - Removed `schoolsPanel` from `dockDetailPanels()` panelIds and `schools` from `showTab()` loop (+ added null-guards in showTab).
+   - Kept the schools ENGINE intact: `loadSchools()` still fetches `/api/schools` and builds `enabledSchools`/`schoolWeights` (all enabled, weight 1.0) so `getActiveSchools()`/`getSchoolWeights()` still feed analyze/backtest/live with all 20 schools. `renderSchoolControls()` now early-returns if `#schoolControls` is gone. `resetSchools()` is now dead code (harmless). The Report tab still renders the full school verdict table.
+
+2. **Auto Bot Bitkub pair is now searchable** (was a plain `<input list=datalist>` that the user couldn't search):
+   - Replaced with a `.searchbox.bot-searchbox` + `#botSearchResults` dropdown (reuses `.results/.result-row` CSS; added `.bot-searchbox .results{right:0;top:38px}`).
+   - New JS: `loadBitkubPairs()` fetches `GET /api/bitkub/symbols` once (Bitkub v3 returns `symbol:"BTC_THB"` + `name` + `status`; filter `status==active` & `_THB` → 361 active pairs), `bindBotSearch()`, `botSearch()` (client-side filter on base symbol + name, startsWith ranked first), `renderBotResults()`, `highlightBotIndex()`, `moveBotIndex()`, `hideBotResults()`, `selectBotPair()`. Keyboard up/down/enter/esc + click + outside-click-close like the chart search. `hydrateBotPairs()` keeps the top-tier quick buttons and now calls bind+load.
+
+3. **Chart state persistence** (reopen → same symbol+timeframe):
+   - `let currentSymbol = localStorage.getItem("lastSymbol") || "AAPL"`.
+   - `saveChartState()` writes `lastSymbol`+`lastTimeframe`; called in `selectSymbol()` and `onTimeframeChange()`.
+   - `init()` restores saved timeframe into `#timeframe` and sets `#searchInput` before `loadChart()`.
+
+4. **System check — found & fixed a latent bug.** `backend/app/config.py` did `load_dotenv()` (cwd-relative) AND `backend/.env` had a UTF-8 **BOM** that corrupted the FIRST key only (`﻿DATA_PROVIDER`). Result: unless uvicorn was started from `backend/`, provider silently fell back to `mock` and `DATA_PROVIDER=yahoo` was ignored. Fix: load `.env` from `Path(__file__).resolve().parents[1] / ".env"` (cwd-independent) **and** stripped the BOM from `backend/.env` (rewrote utf-8 no-BOM, content preserved). Now `/api/health` → `provider: yahoo`, AAPL real price 296.42 from any cwd. **Lesson: keep `.env` BOM-free; first key breaks otherwise.**
+
+**Verification (Claude Preview, port 8000, real yahoo provider, 0 console errors):**
+- Schools tab + aside list gone; `tabSchools`/`schoolList` = not present.
+- Bot search: 361 pairs loaded; "eth"→ETH_THB first, "sol"→SOL_THB first; select fills `#bot_symbol` + closes dropdown.
+- Persistence: set ETH-USD/15m → reload → restored ETH-USD/15m (then reset default to AAPL/1h).
+- Endpoints all 200: GET health/schools/bitkub-symbols/candles/quote/model-status; POST analyze/backtest/live-signal/autotrade-tick (tick `BTC_THB` → waiting).
+- Note: `/api/autotrade/tick` expects `trained_model_min_prob` as a FRACTION ≤0.95; the frontend converts via `pctInputToProb("bot_model_min",0.53)` so the UI is correct (raw 53 → 422, not a UI bug).
+
+**State for next session:** A Claude-Preview-managed uvicorn (yahoo) is running on :8000 (replaced the old manually-run system-python server PID 15156 that was killed during testing). Backend change in config.py needs a restart to take effect (already restarted). The nested untracked `trading-app/` dir and `รหัส HF.txt` in the worktree are still uncommitted/uncleaned — not touched this session.

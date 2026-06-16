@@ -69,6 +69,8 @@
   .symbol { font-weight:700; }
   .name { color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .market { color:var(--muted); font-size:11px; border:1px solid var(--border); border-radius:999px; padding:1px 6px; }
+  .bot-searchbox { flex:1 1 auto; min-width:0; width:100%; }
+  .bot-searchbox .results { right:0; top:38px; }
   .workspace-strip {
     display:grid; grid-template-columns:1.3fr .9fr .9fr .9fr; gap:8px; padding:10px;
     border-bottom:1px solid var(--border); background:#090f16;
@@ -382,7 +384,6 @@
       <button class="tab active" id="tabReport" onclick="showTab('report')">Report</button>
       <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
       <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
-      <button class="tab" id="tabSchools" onclick="showTab('schools')">Schools</button>
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')">Auto Bot</button>
     </div>
@@ -400,11 +401,6 @@
       <textarea id="imgNote" placeholder="Note" style="width:100%; min-height:64px; margin-top:8px;"></textarea>
       <div style="margin-top:8px;"><button class="primary" onclick="runImageAnalysis()">Analyze image</button></div>
       <img id="imgPreview" style="display:none; max-width:100%; max-height:380px; margin-top:10px; border:1px solid var(--border); border-radius:8px;" />
-    </div>
-
-    <div id="schoolsPanel" class="panel-body hidden">
-      <h3>Analysis schools <button style="float:right; min-height:28px; padding:4px 8px; font-size:12px;" onclick="resetSchools()">Reset defaults</button></h3>
-      <div id="schoolControls" style="max-height:500px; overflow-y:auto;"></div>
     </div>
 
     <div id="indicatorsPanel" class="panel-body hidden">
@@ -524,7 +520,12 @@
             <option value="real">Real - Bitkub order</option>
           </select>
         </div>
-        <div class="field"><label>Bitkub pair</label><input id="bot_symbol" value="BTC_THB" list="botPairList" /></div>
+        <div class="field"><label>Bitkub pair</label>
+          <div class="searchbox bot-searchbox">
+            <input id="bot_symbol" value="BTC_THB" autocomplete="off" placeholder="ค้นหาเหรียญ: BTC, ETH, ชื่อ..." />
+            <div class="results" id="botSearchResults"></div>
+          </div>
+        </div>
         <div class="field"><label>Timeframe</label>
           <select id="bot_timeframe">
             <option value="1m">1m</option>
@@ -546,7 +547,6 @@
         <div class="field"><label>Model min probability</label><input id="bot_model_min" type="number" min="50" max="95" step="1" value="53" /></div>
         <div class="field"><label>Real confirm</label><input id="bot_confirm" placeholder="I UNDERSTAND REAL ORDERS" /></div>
       </div>
-      <datalist id="botPairList"></datalist>
       <div style="margin-top:10px;">
         <label style="display:block; margin-bottom:6px;">Bitkub top tier pairs</label>
         <div class="quick" id="botTopPairs" style="padding:0; border:0; gap:6px;"></div>
@@ -608,10 +608,6 @@
       <div id="triggeredList" class="note">None</div>
     </div>
 
-    <div class="section">
-      <h3>Schools</h3>
-      <div id="schoolList" class="note">...</div>
-    </div>
   </aside>
 </main>
 
@@ -678,7 +674,7 @@ const defaultIndicatorToggles = {
 const indicatorSettingKeys = Object.keys(defaultIndicatorSettings);
 const indicatorToggleKeys = Object.keys(defaultIndicatorToggles);
 let chartStyle = { ...defaultChartStyle, ...JSON.parse(localStorage.getItem("chartStyle") || "{}") };
-let currentSymbol = "AAPL";
+let currentSymbol = localStorage.getItem("lastSymbol") || "AAPL";
 let mode = "data";
 let chart, rsiChart, macdChart;
 let candleSeries, volumeSeries;
@@ -696,6 +692,9 @@ let searchTimer = null;
 let searchRows = [];
 let searchIndex = -1;
 let searchToken = 0;
+let bitkubAllPairs = [];
+let botSearchRows = [];
+let botSearchIndex = -1;
 let chartTimer = null;
 let autoRefreshEnabled = localStorage.getItem("autoRefreshEnabled") !== "false";
 let refreshIntervalValue = localStorage.getItem("refreshInterval") || "auto";
@@ -732,6 +731,12 @@ let controlDockMode = localStorage.getItem("controlDockMode") || "normal";
 
 function $(id) { return document.getElementById(id); }
 function tf() { return $("timeframe").value; }
+function saveChartState() {
+  try {
+    localStorage.setItem("lastSymbol", currentSymbol);
+    localStorage.setItem("lastTimeframe", tf());
+  } catch (_) {}
+}
 function notifyError(message, title = "Error") {
   const stack = $("toastStack");
   if (!stack) return;
@@ -773,7 +778,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "imagePanel", "schoolsPanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "imagePanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -1330,14 +1335,25 @@ function updateCurrentPriceLine() {
 
 function hydrateBotPairs() {
   const buttons = $("botTopPairs");
-  const list = $("botPairList");
-  if (!buttons || !list) return;
-  buttons.innerHTML = bitkubTopPairs.map(([symbol, name]) =>
-    `<button type="button" onclick="setBotSymbol('${symbol}')" title="${escapeHtml(name)}">${symbol.replace("_THB", "")} <span class="tiny">THB</span></button>`
-  ).join("");
-  list.innerHTML = bitkubTopPairs.map(([symbol, name]) =>
-    `<option value="${escapeHtml(symbol)}">${escapeHtml(name)}</option>`
-  ).join("");
+  if (buttons) {
+    buttons.innerHTML = bitkubTopPairs.map(([symbol, name]) =>
+      `<button type="button" onclick="setBotSymbol('${symbol}')" title="${escapeHtml(name)}">${symbol.replace("_THB", "")} <span class="tiny">THB</span></button>`
+    ).join("");
+  }
+  bindBotSearch();
+  loadBitkubPairs();
+}
+
+async function loadBitkubPairs() {
+  try {
+    const rows = await fetch(`${API}/api/bitkub/symbols`).then(r => r.json());
+    bitkubAllPairs = (Array.isArray(rows) ? rows : [])
+      .filter(r => (r.status || "active") === "active" && /(_THB)$/i.test(r.symbol || ""))
+      .map(r => ({ symbol:String(r.symbol).toUpperCase(), name:r.name || r.description || r.base_asset || "" }));
+  } catch (e) {
+    // โหลดรายชื่อไม่ได้ → ใช้ top tier เป็น fallback ให้ยังค้นหาได้
+    bitkubAllPairs = bitkubTopPairs.map(([symbol, name]) => ({ symbol, name }));
+  }
 }
 
 function setBotSymbol(symbol) {
@@ -1345,6 +1361,106 @@ function setBotSymbol(symbol) {
   if ($("autoTradeStatus")) {
     $("autoTradeStatus").innerHTML = `<div class="note">Selected ${escapeHtml(symbol)}. Press Start Bot or Run 1 Tick to test this pair.</div>`;
   }
+}
+
+function normalizeBotPair(value) {
+  return String(value || "").trim().toUpperCase().replace(/[\/\-\s]+/g, "_");
+}
+
+function bindBotSearch() {
+  const input = $("bot_symbol");
+  if (!input || input.dataset.bound) return;
+  input.dataset.bound = "1";
+  input.addEventListener("input", () => botSearch(input.value));
+  input.addEventListener("focus", () => botSearch(input.value));
+  input.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") { e.preventDefault(); moveBotIndex(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); moveBotIndex(-1); }
+    else if (e.key === "Enter") {
+      if (botSearchRows.length) {
+        e.preventDefault();
+        const idx = botSearchIndex >= 0 ? botSearchIndex : 0;
+        selectBotPair(botSearchRows[idx].symbol);
+      }
+    } else if (e.key === "Escape") { hideBotResults(); }
+  });
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".bot-searchbox")) hideBotResults();
+  });
+}
+
+function botSearch(rawValue) {
+  const q = normalizeBotPair(rawValue).replace(/_THB$/, "").replace(/_/g, "");
+  const pool = bitkubAllPairs.length ? bitkubAllPairs : bitkubTopPairs.map(([symbol, name]) => ({ symbol, name }));
+  let rows;
+  if (!q) {
+    rows = pool.slice(0, 30);
+  } else {
+    rows = pool.filter(p => {
+      const base = p.symbol.replace(/_THB$/, "");
+      return base.includes(q) || (p.name || "").toUpperCase().includes(q);
+    });
+    rows.sort((a, b) => {
+      const ab = a.symbol.replace(/_THB$/, "").startsWith(q) ? 0 : 1;
+      const bb = b.symbol.replace(/_THB$/, "").startsWith(q) ? 0 : 1;
+      return ab - bb || a.symbol.localeCompare(b.symbol);
+    });
+    rows = rows.slice(0, 40);
+  }
+  botSearchRows = rows;
+  botSearchIndex = rows.length ? 0 : -1;
+  renderBotResults();
+}
+
+function renderBotResults() {
+  const box = $("botSearchResults");
+  if (!box) return;
+  box.innerHTML = "";
+  if (!botSearchRows.length) {
+    box.innerHTML = `<div class="result-row"><div><div class="symbol">ไม่พบเหรียญ</div></div></div>`;
+    box.style.display = "block";
+    return;
+  }
+  botSearchRows.forEach((item, idx) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "result-row" + (idx === botSearchIndex ? " active" : "");
+    btn.dataset.idx = idx;
+    btn.innerHTML =
+      `<div><div class="symbol">${escapeHtml(item.symbol)}</div>` +
+      `<div class="name">${escapeHtml(item.name || "")}</div></div>` +
+      `<span class="market">THB</span>`;
+    btn.addEventListener("mouseenter", () => highlightBotIndex(idx));
+    btn.addEventListener("mousedown", e => e.preventDefault());
+    btn.addEventListener("click", () => selectBotPair(item.symbol));
+    box.appendChild(btn);
+  });
+  box.style.display = "block";
+}
+
+function highlightBotIndex(idx) {
+  botSearchIndex = idx;
+  const box = $("botSearchResults");
+  if (!box) return;
+  box.querySelectorAll(".result-row").forEach(el => el.classList.toggle("active", Number(el.dataset.idx) === idx));
+}
+
+function moveBotIndex(delta) {
+  if (!botSearchRows.length) return;
+  botSearchIndex = (botSearchIndex + delta + botSearchRows.length) % botSearchRows.length;
+  highlightBotIndex(botSearchIndex);
+}
+
+function hideBotResults() {
+  const box = $("botSearchResults");
+  if (box) box.style.display = "none";
+  botSearchRows = [];
+  botSearchIndex = -1;
+}
+
+function selectBotPair(symbol) {
+  hideBotResults();
+  setBotSymbol(normalizeBotPair(symbol));
 }
 
 function pctText(value, digits = 1) {
@@ -1432,6 +1548,10 @@ async function init() {
   await loadModelStatus();
   $("bot_use_model")?.addEventListener("change", () => renderModelStatus(latestModelStatus, latestAutoTradeState?.latest_signal || null));
   $("bot_model_min")?.addEventListener("input", () => renderModelStatus(latestModelStatus, latestAutoTradeState?.latest_signal || null));
+  // คืนสถานะกราฟล่าสุด (symbol + timeframe) ที่ผู้ใช้ดูค้างไว้ก่อนปิด
+  const savedTf = localStorage.getItem("lastTimeframe");
+  if (savedTf && $("timeframe").querySelector(`option[value="${savedTf}"]`)) $("timeframe").value = savedTf;
+  if ($("searchInput")) $("searchInput").value = currentSymbol;
   await loadChart();
   await refreshWatchlist();
   refreshAlerts();
@@ -1633,6 +1753,7 @@ async function selectSymbol(symbol) {
   backtestMode = false;
   closeRealtimeStream();
   currentSymbol = normalizeSymbolInput(symbol);
+  saveChartState();
   if (liveMode) {
     latestLiveSignal = null;
     clearLivePosition();
@@ -1725,6 +1846,7 @@ function setRefreshInterval(value) {
 function onTimeframeChange() {
   backtestMode = false;
   closeRealtimeStream();
+  saveChartState();
   applyChartTimeFormat();
   if (liveMode && liveStrategyParams) {
     latestLiveSignal = null;
@@ -2062,9 +2184,11 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","strategy","image","schools","indicators","auto"].forEach(name => {
-    $(name + "Panel").classList.toggle("hidden", name !== tab);
-    $("tab" + name[0].toUpperCase() + name.slice(1)).classList.toggle("active", name === tab);
+  ["report","strategy","image","indicators","auto"].forEach(name => {
+    const panel = $(name + "Panel");
+    const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
+    if (panel) panel.classList.toggle("hidden", name !== tab);
+    if (btn) btn.classList.toggle("active", name === tab);
   });
 }
 
@@ -2265,11 +2389,12 @@ async function loadSchools() {
     });
 
     renderSchoolControls();
-    $("schoolList").innerHTML = allSchools.map(s => `<div class="alert-item"><span>${s.display_name}</span><span class="pill">${s.evaluator}</span></div>`).join("");
   } catch (e) { notifyError(errorMessage(e), "Schools unavailable"); }
 }
 
 function renderSchoolControls() {
+  const target = $("schoolControls");
+  if (!target) return;   // Schools panel ถูกถอดออกจาก UI แล้ว — แต่ยังคงตรรกะ default ไว้ให้ analyze/backtest
   const html = allSchools.map(s => {
     const checked = enabledSchools[s.id] ? "checked" : "";
     const weight = schoolWeights[s.id] || 1.0;
@@ -2287,7 +2412,7 @@ function renderSchoolControls() {
       </div>
     </div>`;
   }).join("");
-  $("schoolControls").innerHTML = html;
+  target.innerHTML = html;
 }
 
 function toggleSchool(id, enabled) {

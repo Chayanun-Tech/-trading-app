@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# โหลด .env จากโฟลเดอร์ backend/ เสมอ ไม่ว่าจะสตาร์ทเซิร์ฟเวอร์จาก cwd ไหน
+# (เดิมใช้ load_dotenv() เฉย ๆ ซึ่งหาไฟล์จาก cwd → ถ้าไม่ได้รันจาก backend/ จะตกเป็น mock + ไม่มีคีย์ LLM)
+_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(_ENV_PATH if _ENV_PATH.exists() else None)
 
 
 class Settings:
