@@ -503,6 +503,11 @@ async def autotrade_status():
     return auto_trade.status()
 
 
+@app.get("/api/autotrade/history")
+async def autotrade_history(limit: int = Query(100, ge=1, le=500)):
+    return await store.list_autotrade_history(limit)
+
+
 @app.get("/api/model/status")
 async def model_status():
     model = load_model()

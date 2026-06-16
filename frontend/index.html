@@ -504,8 +504,10 @@
         <button onclick="stopAutoTrade()">Stop</button>
         <button onclick="tickAutoTrade()">Run 1 Tick</button>
         <button onclick="refreshAutoTrade()">Refresh</button>
+        <button onclick="refreshAutoTradeHistory()">History</button>
       </div>
       <div id="autoTradeStatus" class="note" style="margin-top:12px;">Bot waiting.</div>
+      <div id="autoTradeHistory" class="note" style="margin-top:12px;">History waiting.</div>
     </div>
   </section>
 
@@ -1345,6 +1347,7 @@ async function init() {
   refreshAlerts();
   refreshTriggered();
   refreshAutoTrade();
+  refreshAutoTradeHistory();
   loadSchools();
   quoteTimer = setInterval(refreshQuote, 1000);
   watchTimer = setInterval(refreshWatchlist, 5000);
@@ -2726,6 +2729,7 @@ async function startAutoTrade() {
     });
     if (!res.ok) throw new Error(parseApiErrorMessage(await res.text()));
     renderAutoTrade(await res.json());
+    refreshAutoTradeHistory();
     showTab("auto");
   } catch (e) {
     notifyError(errorMessage(e), "Start bot failed");
@@ -2739,6 +2743,7 @@ async function stopAutoTrade() {
   try {
     const res = await fetch(`${API}/api/autotrade/stop`, { method:"POST" });
     renderAutoTrade(await res.json());
+    refreshAutoTradeHistory();
   } catch (e) {
     notifyError(errorMessage(e), "Stop bot failed");
     $("autoTradeStatus").innerHTML = `<div class="down">Stop failed: ${escapeHtml(e.message || e)}</div>`;
@@ -2763,6 +2768,7 @@ async function tickAutoTrade() {
     });
     if (!res.ok) throw new Error(parseApiErrorMessage(await res.text()));
     renderAutoTrade(await res.json());
+    refreshAutoTradeHistory();
   } catch (e) {
     notifyError(errorMessage(e), "Bot tick failed");
     box.innerHTML = `<div class="down">Tick failed: ${escapeHtml(e.message || e)}</div>`;
@@ -2783,6 +2789,88 @@ async function refreshAutoTrade() {
       renderChartLiveStatus();
     }
   }
+}
+
+function formatTradeTime(ts) {
+  if (!ts) return "-";
+  return new Date(Number(ts) * 1000).toLocaleString();
+}
+
+async function refreshAutoTradeHistory() {
+  const box = $("autoTradeHistory");
+  if (!box) return;
+  box.innerHTML = `<div class="note">Loading Auto Trade history...</div>`;
+  try {
+    const res = await fetch(`${API}/api/autotrade/history?limit=80`);
+    if (!res.ok) throw new Error(parseApiErrorMessage(await res.text()));
+    renderAutoTradeHistory(await res.json());
+  } catch (e) {
+    notifyError(errorMessage(e), "Bot history unavailable");
+    box.innerHTML = `<div class="down">History unavailable: ${escapeHtml(errorMessage(e))}</div>`;
+  }
+}
+
+function renderAutoTradeHistory(h) {
+  const box = $("autoTradeHistory");
+  if (!box) return;
+  const runs = h.runs || [];
+  const orders = h.orders || [];
+  const positions = h.positions || [];
+  const events = h.events || [];
+  const storageLabel = h.storage === "database"
+    ? "Database"
+    : h.storage === "local_file"
+      ? "Local file"
+      : "Memory";
+
+  const runRows = runs.slice(0, 8).map(r => `
+    <tr>
+      <td>${escapeHtml(formatTradeTime(r.started_at))}</td>
+      <td>${escapeHtml(r.symbol || "-")}</td>
+      <td>${escapeHtml(r.timeframe || "-")}</td>
+      <td>${escapeHtml(r.mode || "-")}</td>
+      <td>${escapeHtml(r.status || "-")}</td>
+      <td class="${Number(r.realized_pnl_thb || 0) >= 0 ? "up" : "down"}">${escapeHtml(r.realized_pnl_thb ?? 0)}</td>
+    </tr>`).join("");
+  const orderRows = orders.slice(0, 12).map(o => `
+    <tr>
+      <td>${escapeHtml(formatTradeTime(o.time))}</td>
+      <td>${escapeHtml(o.symbol || "-")}</td>
+      <td>${escapeHtml(o.side || "-")}</td>
+      <td>${escapeHtml(o.status || "-")}</td>
+      <td>${escapeHtml(o.price ?? "-")}</td>
+      <td>${escapeHtml(o.notional_thb ?? "-")}</td>
+    </tr>`).join("");
+  const positionRows = positions.slice(0, 12).map(p => `
+    <tr>
+      <td>${escapeHtml(formatTradeTime(p.opened_at))}</td>
+      <td>${escapeHtml(p.symbol || "-")}</td>
+      <td>${escapeHtml(p.status || "-")}</td>
+      <td>${escapeHtml(p.entry ?? "-")}</td>
+      <td>${escapeHtml(p.take_profit ?? "-")}</td>
+      <td>${escapeHtml(p.stop_loss ?? "-")}</td>
+      <td class="${Number(p.realized_pnl_thb ?? p.unrealized_pnl_thb ?? 0) >= 0 ? "up" : "down"}">${escapeHtml(p.realized_pnl_thb ?? p.unrealized_pnl_thb ?? 0)}</td>
+    </tr>`).join("");
+  const eventRows = events.slice(0, 10).map(e => `
+    <div class="alert-item">
+      <span>${escapeHtml(formatTradeTime(e.time))} · ${escapeHtml(e.message || "-")}</span>
+      <span class="pill">${escapeHtml(e.level || "info")}</span>
+    </div>`).join("");
+
+  box.innerHTML = `
+    <h3>Auto Trade History <span class="pill">${escapeHtml(storageLabel)}</span></h3>
+    <div class="note" style="margin-bottom:8px;">
+      Runs ${runs.length} · Orders ${orders.length} · Positions ${positions.length} · Events ${events.length}
+      ${h.path ? `<br><span class="tiny">${escapeHtml(h.path)}</span>` : ""}
+    </div>
+    <h3>Runs</h3>
+    <div class="table-scroll" style="max-height:190px;"><table><thead><tr><th>Started</th><th>Pair</th><th>TF</th><th>Mode</th><th>Status</th><th>P/L</th></tr></thead><tbody>${runRows || `<tr><td colspan="6" class="tiny">No runs saved yet</td></tr>`}</tbody></table></div>
+    <h3 style="margin-top:12px;">Saved Orders</h3>
+    <div class="table-scroll" style="max-height:220px;"><table><thead><tr><th>Time</th><th>Pair</th><th>Side</th><th>Status</th><th>Price</th><th>THB</th></tr></thead><tbody>${orderRows || `<tr><td colspan="6" class="tiny">No saved orders</td></tr>`}</tbody></table></div>
+    <h3 style="margin-top:12px;">Saved Positions</h3>
+    <div class="table-scroll" style="max-height:220px;"><table><thead><tr><th>Opened</th><th>Pair</th><th>Status</th><th>Entry</th><th>TP</th><th>SL</th><th>P/L</th></tr></thead><tbody>${positionRows || `<tr><td colspan="7" class="tiny">No saved positions</td></tr>`}</tbody></table></div>
+    <h3 style="margin-top:12px;">Saved Events</h3>
+    <div>${eventRows || `<div class="note">No saved events</div>`}</div>`;
 }
 
 function renderAutoTrade(s) {

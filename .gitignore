@@ -20,3 +20,4 @@ backend/.env
 
 # Large local training datasets
 data/candles/
+data/autotrade_history.json

@@ -63,7 +63,7 @@ class AutoTradeManager:
         self.realized_pnl_thb = 0.0
 
     def _persist(self, method: str, *args) -> None:
-        if not self.store or not getattr(self.store, "enabled", False):
+        if not self.store:
             return
         try:
             loop = asyncio.get_running_loop()
