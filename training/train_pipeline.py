@@ -59,7 +59,33 @@ def read_candles(path: Path) -> list[Candle]:
     return out
 
 
-def build_examples(candles: list[Candle], *, tp, sl, hold, stride, max_per_file) -> list[Example]:
+def primary_signal(feats: dict, name: str) -> bool:
+    """Rule-based primary filter = structured long candidates (meta-labeling).
+    Operates on the SAME features the model sees, so it reuses computed series."""
+    if name == "none":
+        return True
+    rsi = feats["rsi_scaled"]              # (rsi-50)/50
+    sma200 = feats["sma200_dist"]          # (close-sma200)/close
+    ema20 = feats["ema20_dist"]
+    macd_h = feats["macd_hist_scaled"]
+    macd = feats["macd_scaled"]
+    close_pos = feats["close_pos"]
+    volz = feats["volume_z20"]
+    if name == "trend_pullback":           # ย่อตัวในเทรนด์ขึ้น แล้วเริ่มกลับ
+        return sma200 > 0 and rsi < -0.1 and macd_h > 0
+    if name == "oversold":                 # RSI ต่ำมาก (mean reversion)
+        return rsi < -0.30
+    if name == "breakout":                 # ปิดใกล้ไฮ + โมเมนตัม + วอลุ่ม
+        return ema20 > 0 and macd > 0 and close_pos > 0.25 and volz > 0.5
+    if name == "trend_follow":             # เทรนด์ขึ้นชัด โมเมนตัมบวก
+        return sma200 > 0 and ema20 > 0 and macd_h > 0
+    raise SystemExit(f"unknown primary: {name}")
+
+
+def build_examples(candles: list[Candle], *, tp, sl, hold, stride, max_per_file,
+                   primary="none", tail_bars=0) -> list[Example]:
+    if tail_bars and len(candles) > tail_bars:
+        candles = candles[-tail_bars:]
     n = len(candles)
     if n < 260:
         return []
@@ -68,12 +94,18 @@ def build_examples(candles: list[Candle], *, tp, sl, hold, stride, max_per_file)
     last_i = n - hold - 1
     if last_i <= 220:
         return []
-    step = max(1, (last_i - 220) // max_per_file) if max_per_file > 0 else 1
-    step = max(step, stride)
+    # When a primary filter is active, scan every bar (candidates are already sparse).
+    if primary != "none":
+        step = 1
+    else:
+        step = max(1, (last_i - 220) // max_per_file) if max_per_file > 0 else 1
+        step = max(step, stride)
     out: list[Example] = []
     for i in range(220, last_i + 1, step):
         feats = features_at(candles, i, indicators)
         if not feats:
+            continue
+        if not primary_signal(feats, primary):
             continue
         outcome = label_entry(candles, i, atr, tp_atr_mult=tp, sl_atr_mult=sl, max_hold_bars=hold)
         if outcome is None:
@@ -84,6 +116,8 @@ def build_examples(candles: list[Candle], *, tp, sl, hold, stride, max_per_file)
             label=outcome.label,
             gross_return=outcome.gross_return,
         ))
+        if max_per_file > 0 and len(out) >= max_per_file:
+            break
     return out
 
 
@@ -184,6 +218,10 @@ def main() -> None:
     ap.add_argument("--tp-atr-mult", type=float, default=1.5)
     ap.add_argument("--sl-atr-mult", type=float, default=1.0)
     ap.add_argument("--max-hold-bars", type=int, default=24)
+    ap.add_argument("--primary", default="none",
+                    choices=["none", "trend_pullback", "oversold", "breakout", "trend_follow"],
+                    help="Primary signal filter = structured candidate entries (meta-labeling)")
+    ap.add_argument("--tail-bars", type=int, default=0, help="Use only last N bars per file (0=all)")
     ap.add_argument("--threshold-scan", nargs="+", type=float,
                     default=[0.45, 0.50, 0.55, 0.60, 0.65],
                     help="Probability thresholds to evaluate (precision/trades trade-off)")
@@ -215,7 +253,8 @@ def main() -> None:
         candles = read_candles(p)
         ex = build_examples(candles, tp=args.tp_atr_mult, sl=args.sl_atr_mult,
                             hold=args.max_hold_bars, stride=args.stride,
-                            max_per_file=args.max_examples_per_file)
+                            max_per_file=args.max_examples_per_file,
+                            primary=args.primary, tail_bars=args.tail_bars)
         examples.extend(ex)
         rel = p.relative_to(ROOT).as_posix()
         wins = sum(e.label for e in ex)
@@ -227,8 +266,8 @@ def main() -> None:
 
     base_win = sum(e.label for e in examples) / len(examples)
     print(f"\n[dataset] total={len(examples)} baseline_win_rate(all entries)={base_win:.3f}", flush=True)
-    print(f"[config] tp={args.tp_atr_mult}xATR sl={args.sl_atr_mult}xATR hold={args.max_hold_bars} "
-          f"cost={args.cost_pct}% scan={args.threshold_scan}\n", flush=True)
+    print(f"[config] primary={args.primary} tp={args.tp_atr_mult}xATR sl={args.sl_atr_mult}xATR "
+          f"hold={args.max_hold_bars} cost={args.cost_pct}% scan={args.threshold_scan}\n", flush=True)
 
     embargo_sec = args.embargo_bars * args.tf_seconds
     by_threshold = walk_forward(examples, folds=args.folds, embargo_sec=embargo_sec,
@@ -286,7 +325,7 @@ def main() -> None:
             "tp_atr_mult": args.tp_atr_mult, "sl_atr_mult": args.sl_atr_mult,
             "max_hold_bars": args.max_hold_bars,
         },
-        "meta": {"threshold": threshold, "primary_signal": "all_bars_v1"},
+        "meta": {"threshold": threshold, "primary_signal": args.primary},
         "validation": {"scheme": "walk_forward", "scan": scan, "chosen_threshold": chosen, "gate_passed": passed},
         "costs": {"round_trip_pct": args.cost_pct},
         "sources": sources,
