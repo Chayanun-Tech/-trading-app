@@ -735,11 +735,28 @@ function escapeJs(value) {
 }
 function lineData(series) {
   return latestChartData.candles
-    .map((c, i) => ({ time:c.time, value:series?.[i] }))
-    .filter(p => p.value !== null && p.value !== undefined);
+    .map((c, i) => ({ time:Number(c.time), value:finiteNumber(series?.[i]) }))
+    .filter(p => isValidTime(p.time) && p.value !== null);
 }
 function setLine(series, data, visible=true) {
   series.setData(visible ? data : []);
+}
+function isValidTime(value) {
+  return Number.isFinite(Number(value)) && Number(value) > 0;
+}
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+function cleanOhlcPoint(c) {
+  const time = Number(c?.time);
+  const open = finiteNumber(c?.open);
+  const high = finiteNumber(c?.high);
+  const low = finiteNumber(c?.low);
+  const close = finiteNumber(c?.close);
+  if (!isValidTime(time) || open === null || high === null || low === null || close === null) return null;
+  return { time, open, high, low, close };
 }
 function hexToRgba(hex, alpha) {
   const clean = String(hex || "#000000").replace("#", "");
@@ -767,12 +784,14 @@ function priceData() {
   if (!latestChartData) return [];
   const candles = latestChartData.candles;
   if (chartStyle.chartType === "heikinashi") {
-    return heikinAshiCandles(candles);
+    return heikinAshiCandles(candles).map(cleanOhlcPoint).filter(Boolean);
   }
   if (["line", "area", "baseline"].includes(chartStyle.chartType)) {
-    return candles.map(c => ({ time:c.time, value:c.close }));
+    return candles
+      .map(c => ({ time:Number(c.time), value:finiteNumber(c.close) }))
+      .filter(p => isValidTime(p.time) && p.value !== null);
   }
-  return candles.map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close }));
+  return candles.map(cleanOhlcPoint).filter(Boolean);
 }
 function lastPricePoint() {
   if (!latestChartData?.candles?.length) return null;
@@ -985,6 +1004,7 @@ function chartBaseOptions() {
       horzLine:{ visible:!crosshairHidden && chartStyle.crosshairHorzVisible, labelVisible:!crosshairHidden && chartStyle.crosshairHorzVisible },
     },
     rightPriceScale:{ borderColor:"#26313d" },
+    leftPriceScale:{ visible:false, borderColor:"#26313d", scaleMargins:{ top:.82, bottom:0 } },
     localization:{ locale:"th-TH", timeFormatter:formatChartTooltipTime },
     timeScale:{ borderColor:"#26313d", timeVisible:true, secondsVisible:tf() === "1m", tickMarkFormatter:formatChartTick },
   };
@@ -1182,11 +1202,18 @@ function renderPriceSeries() {
 }
 function renderVolume() {
   if (!latestChartData || !volumeSeries) return;
-  const volume = latestChartData.candles.map(c => ({
-    time:c.time,
-    value:c.volume,
-    color:c.close >= c.open ? hexToRgba(chartStyle.upColor, .24) : hexToRgba(chartStyle.downColor, .24),
-  }));
+  const volume = latestChartData.candles
+    .map(c => {
+      const time = Number(c.time);
+      const value = finiteNumber(c.volume);
+      if (!isValidTime(time) || value === null) return null;
+      return {
+        time,
+        value,
+        color:Number(c.close) >= Number(c.open) ? hexToRgba(chartStyle.upColor, .24) : hexToRgba(chartStyle.downColor, .24),
+      };
+    })
+    .filter(Boolean);
   volumeSeries.setData($("showVolume").checked ? volume : []);
 }
 
@@ -1334,8 +1361,15 @@ function setupCharts() {
   chart = LightweightCharts.createChart($("chart"), { ...base, width:$("chart").clientWidth, height:$("chart").clientHeight });
   createPriceSeries();
   volumeSeries = chart.addHistogramSeries({
-    priceFormat:{ type:"volume" }, priceScaleId:"", color:chartStyle.volumeColor,
-    scaleMargins:{ top:.82, bottom:0 }, lastValueVisible:false, priceLineVisible:false,
+    priceFormat:{ type:"volume" },
+    priceScaleId:"left",
+    color:chartStyle.volumeColor,
+    lastValueVisible:false,
+    priceLineVisible:false,
+  });
+  chart.priceScale("left").applyOptions({
+    visible:false,
+    scaleMargins:{ top:.82, bottom:0 },
   });
   emaFastSeries = chart.addLineSeries({ color:chartStyle.emaFastColor, lineWidth:1, title:"EMA fast" });
   emaMidSeries = chart.addLineSeries({ color:chartStyle.emaMidColor, lineWidth:1, title:"EMA mid" });
@@ -1754,11 +1788,14 @@ function drawRealtimeCandle(index, candle) {
     candleSeries.update(point);
   }
   if (volumeSeries && $("showVolume")?.checked) {
-    volumeSeries.update({
-      time:candle.time,
-      value:candle.volume || 0,
-      color:candle.close >= candle.open ? hexToRgba(chartStyle.upColor, .24) : hexToRgba(chartStyle.downColor, .24),
-    });
+    const volumeValue = finiteNumber(candle.volume);
+    if (isValidTime(candle.time) && volumeValue !== null) {
+      volumeSeries.update({
+        time:Number(candle.time),
+        value:volumeValue,
+        color:Number(candle.close) >= Number(candle.open) ? hexToRgba(chartStyle.upColor, .24) : hexToRgba(chartStyle.downColor, .24),
+      });
+    }
   }
   updateCurrentPriceLine();
   renderSummary(latestChartData.indicators.summary);
@@ -3080,8 +3117,12 @@ function renderCDC() {
   const { fast, slow, zones, markers } = computeCDC(candles);
 
   // Draw EMA12 (red) and EMA26 (blue)
-  cdcFastSeries.setData(candles.map((c, i) => ({ time:c.time, value:fast[i] })).filter(p => p.value !== null));
-  cdcSlowSeries.setData(candles.map((c, i) => ({ time:c.time, value:slow[i] })).filter(p => p.value !== null));
+  cdcFastSeries.setData(candles
+    .map((c, i) => ({ time:Number(c.time), value:finiteNumber(fast[i]) }))
+    .filter(p => isValidTime(p.time) && p.value !== null));
+  cdcSlowSeries.setData(candles
+    .map((c, i) => ({ time:Number(c.time), value:finiteNumber(slow[i]) }))
+    .filter(p => isValidTime(p.time) && p.value !== null));
 
   // Color bars by zone (candlestick / heikinashi / bar chart types only)
   const type = chartStyle.chartType;
