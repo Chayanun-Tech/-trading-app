@@ -419,7 +419,10 @@ async def get_fundamentals(symbol: str, *, facts: dict | None = None,
             pass
 
     if not snap:
-        raise RuntimeError("ดึงข้อมูลพื้นฐานไม่สำเร็จจากทุกแหล่ง (Yahoo/SEC/ออฟไลน์) — ลองใหม่ภายหลัง")
+        raise RuntimeError(
+            "ยังไม่มีข้อมูลพื้นฐานของหุ้นนี้บนเว็ป — มักเป็นหุ้นไทยหรือ ADR ต่างชาติ "
+            "(งบไม่อยู่ใน SEC แบบ us-gaap และเว็ปดึง Yahoo ไม่ได้). "
+            "วิธีแก้: เปิดแอปในเครื่อง พิมพ์สัญลักษณ์นี้ แล้วกดปุ่ม '🔄 อัปเดตขึ้นเว็ป' เพื่อบันทึก snapshot")
 
     for k in _SNAPSHOT_KEYS:
         snap.setdefault(k, None)
