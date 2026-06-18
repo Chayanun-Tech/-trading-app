@@ -2384,7 +2384,7 @@ async function loadFinancials(symbol, freq) {
       finCache[symbol][freq] = data;
     }
     renderFinancials();
-  } catch (e) { $("financialsView").innerHTML = `<div class="down">${e.message || e}</div>`; }
+  } catch (e) { $("financialsView").innerHTML = `<div class="note">${e.message || e}</div>`; }
 }
 
 function finCurrentData() { return (finCache[finSymbol] || {})[finFreq]; }

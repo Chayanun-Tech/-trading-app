@@ -467,8 +467,9 @@ async def financials_route(symbol: str = Query(..., description="สัญลั
         raise HTTPException(400, "freq ต้องเป็น annual หรือ quarterly")
     try:
         facts = await edgar.get_company_facts(symbol)
-    except ValueError as exc:
-        raise HTTPException(404, str(exc))
+    except ValueError:
+        raise HTTPException(404, "งบย้อนหลังลึก (SEC EDGAR) รองรับเฉพาะหุ้นสหรัฐ — "
+                                 "หุ้นไทย/ต่างประเทศดูได้เฉพาะสรุปปัจจุบัน (เกรด + เมตริก) ด้านบน")
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"ดึงข้อมูล SEC EDGAR ไม่สำเร็จ: {exc}")
     return build_financials(facts, freq)

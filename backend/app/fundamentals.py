@@ -117,6 +117,89 @@ def _fetch_sync(symbol: str) -> dict:
     }
 
 
+_YA_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+_ya_session = {"cookie": None, "crumb": None, "ts": 0.0}
+_CRUMB_TTL = 1800  # 30 นาที
+
+
+async def _yahoo_crumb(force: bool = False) -> tuple[str, str]:
+    """ขอ cookie+crumb ของ Yahoo (cache 30 นาที) สำหรับเรียก quoteSummary."""
+    import httpx
+    now = time.time()
+    if not force and _ya_session["crumb"] and now - _ya_session["ts"] < _CRUMB_TTL:
+        return _ya_session["cookie"], _ya_session["crumb"]
+    async with httpx.AsyncClient(headers=_YA_UA, timeout=20, follow_redirects=True) as c:
+        await c.get("https://fc.yahoo.com/")
+        crumb = (await c.get("https://query1.finance.yahoo.com/v1/test/getcrumb")).text
+        cookie = "; ".join(f"{k}={v}" for k, v in c.cookies.items())
+    _ya_session.update(cookie=cookie, crumb=crumb, ts=now)
+    return cookie, crumb
+
+
+def _raw(d: dict, key: str):
+    v = (d or {}).get(key)
+    if isinstance(v, dict):
+        return _to_float(v.get("raw"))
+    return _to_float(v)
+
+
+async def fetch_yahoo_fundamentals(symbol: str) -> dict:
+    """ดึงปัจจัยพื้นฐานจาก Yahoo quoteSummary ผ่าน httpx (รองรับทั้งหุ้น US และไทย .BK).
+
+    ใช้ httpx (ไม่ใช่ curl_cffi) จึงไม่ติดปัญหา path ภาษาไทย และคุม retry/cache เองได้.
+    """
+    import httpx
+    mods = "summaryProfile,price,financialData,defaultKeyStatistics,summaryDetail"
+    url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules={mods}"
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True) as c:
+        cookie, crumb = await _yahoo_crumb()
+        r = await c.get(f"{url}&crumb={crumb}", headers={**_YA_UA, "Cookie": cookie})
+        if r.status_code in (401, 403):  # crumb หมดอายุ → รีเฟรชแล้วลองใหม่ครั้งเดียว
+            cookie, crumb = await _yahoo_crumb(force=True)
+            r = await c.get(f"{url}&crumb={crumb}", headers={**_YA_UA, "Cookie": cookie})
+        r.raise_for_status()
+        result = (r.json().get("quoteSummary", {}).get("result") or [])
+    if not result:
+        raise RuntimeError(f"Yahoo ไม่มีข้อมูลพื้นฐานของ {symbol}")
+    res = result[0]
+    sp, price = res.get("summaryProfile", {}), res.get("price", {})
+    fd, ks, sd = res.get("financialData", {}), res.get("defaultKeyStatistics", {}), res.get("summaryDetail", {})
+
+    market_cap = _raw(sd, "marketCap") or _raw(price, "marketCap")
+    fcf = _raw(fd, "freeCashflow")
+    raw_de = _raw(fd, "debtToEquity")
+    dy = _raw(sd, "trailingAnnualDividendYield")
+    if dy is None:
+        dy = _raw(sd, "dividendYield")
+    if dy is not None and dy > 1:  # กันค่าเป็นเปอร์เซ็นต์ (เช่น 0.36% มาเป็น 36)
+        dy = dy / 100.0
+    return {
+        "symbol": symbol.upper(),
+        "long_name": (price.get("longName") or price.get("shortName") or symbol.upper()),
+        "sector": sp.get("sector"),
+        "industry": sp.get("industry"),
+        "summary": (sp.get("longBusinessSummary") or "")[:1500] or None,
+        "currency": fd.get("financialCurrency"),
+        "market_cap": market_cap,
+        "pe": _raw(sd, "trailingPE"),
+        "forward_pe": _raw(sd, "forwardPE") or _raw(ks, "forwardPE"),
+        "peg": _raw(ks, "pegRatio") or _raw(ks, "trailingPegRatio"),
+        "pb": _raw(ks, "priceToBook"),
+        "roe": _raw(fd, "returnOnEquity"),
+        "gross_margin": _raw(fd, "grossMargins"),
+        "operating_margin": _raw(fd, "operatingMargins"),
+        "profit_margin": _raw(fd, "profitMargins"),
+        "debt_to_equity": (raw_de / 100.0) if raw_de is not None else None,
+        "current_ratio": _raw(fd, "currentRatio"),
+        "revenue_growth": _raw(fd, "revenueGrowth"),
+        "earnings_growth": _raw(fd, "earningsGrowth"),
+        "fcf": fcf,
+        "fcf_yield": (fcf / market_cap) if (fcf is not None and market_cap) else None,
+        "dividend_yield": dy,
+        "payout_ratio": _raw(sd, "payoutRatio"),
+    }
+
+
 _SNAPSHOT_KEYS = (
     "symbol", "long_name", "sector", "industry", "summary", "market_cap",
     "pe", "forward_pe", "peg", "pb", "roe", "gross_margin", "operating_margin",
@@ -170,21 +253,28 @@ async def get_fundamentals(symbol: str, *, facts: dict | None = None,
         snap = latest_snapshot(facts)
         _apply_price_ratios(snap, price)
 
-    # เสริมด้วย yfinance (ถ้าได้) — ทับเฉพาะค่าที่ yfinance มี (ไม่ลบของ EDGAR)
-    yf_ok = False
+    # แหล่ง live: Yahoo ผ่าน httpx ก่อน (รองรับ US + ไทย, คุมได้), ตกไปใช้ yfinance ถ้าล้ม
+    live, live_src = None, None
     try:
-        yf = await asyncio.to_thread(_fetch_sync, key)
-        yf_ok = True
-        for k, v in yf.items():
+        live = await fetch_yahoo_fundamentals(key)
+        live_src = "yahoo"
+    except Exception:
+        try:
+            live = await asyncio.to_thread(_fetch_sync, key)
+            live_src = "yfinance"
+        except Exception:
+            live = None
+    if live:
+        for k, v in live.items():
             if v is not None:
                 snap[k] = v
-    except Exception:
-        if not snap:
-            raise  # ไม่มีทั้ง EDGAR และ yfinance → ปล่อย error ให้ route จัดการ
+
+    if not snap:
+        raise RuntimeError("ดึงข้อมูลพื้นฐานไม่สำเร็จจากทุกแหล่ง (Yahoo/SEC) — ลองใหม่ภายหลัง")
 
     for k in _SNAPSHOT_KEYS:
         snap.setdefault(k, None)
     snap.setdefault("symbol", key)
-    snap["_source"] = "yfinance+edgar" if (yf_ok and facts) else ("yfinance" if yf_ok else "edgar")
+    snap["_source"] = "+".join(x for x in [("edgar" if facts else None), live_src] if x) or "none"
     _cache[key] = (now, snap)
     return snap

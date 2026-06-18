@@ -31,7 +31,7 @@ def _grade(score: int) -> str:
 def aggregate_value(verdicts: list[dict], weights: dict | None = None) -> dict:
     """ถ่วงน้ำหนัก verdict ทั้งหมดเป็นคะแนนคุณค่า + ประเมินความเป็นฉันทามติ."""
     wmap = {**_WEIGHTS, **(weights or {})}
-    good_score = poor_score = 0.0
+    good_score = poor_score = fair_score = 0.0
     good_w = poor_w = fair_w = 0.0
     for v in verdicts:
         w = float(wmap.get(v["id"], 1.0))
@@ -43,10 +43,13 @@ def aggregate_value(verdicts: list[dict], weights: dict | None = None) -> dict:
             poor_score += contrib
             poor_w += w
         else:
+            fair_score += contrib
             fair_w += w
 
-    total = good_score + poor_score
-    score = 50 if total <= 0 else round(good_score / total * 100)
+    # 'fair' ดึงคะแนนเข้าหากลาง (ไม่ถูกเมิน) เพื่อให้เกรดแยกแยะได้จริง:
+    # ทุกด้าน good=100, ทุกด้าน fair=50, ทุกด้าน poor=0
+    total = good_score + fair_score + poor_score
+    score = 50 if total <= 0 else round((good_score + 0.5 * fair_score) / total * 100)
 
     directional_w = good_w + poor_w
     if directional_w <= 0:
