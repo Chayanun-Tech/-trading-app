@@ -117,14 +117,74 @@ def _fetch_sync(symbol: str) -> dict:
     }
 
 
-async def get_fundamentals(symbol: str, *, force_refresh: bool = False) -> dict:
-    """คืน snapshot ปัจจัยพื้นฐานของหุ้น (cache 12 ชม.). เรียก yfinance ใน thread."""
+_SNAPSHOT_KEYS = (
+    "symbol", "long_name", "sector", "industry", "summary", "market_cap",
+    "pe", "forward_pe", "peg", "pb", "roe", "gross_margin", "operating_margin",
+    "profit_margin", "debt_to_equity", "current_ratio", "revenue_growth",
+    "earnings_growth", "fcf", "fcf_yield", "dividend_yield", "payout_ratio",
+)
+
+
+def _apply_price_ratios(snap: dict, price: float | None) -> None:
+    """เติมอัตราส่วนที่ต้องใช้ราคา (P/E, P/B, PEG, fcf_yield, market_cap) จากค่างบ EDGAR + ราคาปัจจุบัน."""
+    shares, eps = snap.get("shares"), snap.get("eps")
+    eq, ni, fcf, div = (snap.get("total_equity"), snap.get("net_income"),
+                        snap.get("fcf"), snap.get("dividends_paid"))
+    if not price or not shares:
+        return
+    mc = price * shares
+    snap["market_cap"] = mc
+    if eq and eq > 0:
+        snap["pb"] = mc / eq
+    if ni and ni > 0:
+        snap["pe"] = mc / ni
+    elif eps and eps > 0:
+        snap["pe"] = price / eps
+    if fcf and mc:
+        snap["fcf_yield"] = fcf / mc
+    if div and mc:
+        snap["dividend_yield"] = abs(div) / mc
+    eg = snap.get("earnings_growth")
+    if snap.get("pe") and eg and eg > 0:
+        snap["peg"] = snap["pe"] / (eg * 100)
+
+
+async def get_fundamentals(symbol: str, *, facts: dict | None = None,
+                           price: float | None = None, force_refresh: bool = False) -> dict:
+    """คืน snapshot ปัจจัยพื้นฐานของหุ้น (cache 12 ชม.).
+
+    ลำดับความน่าเชื่อถือ: ฐานจาก SEC EDGAR (เสถียร) + ราคาจาก provider httpx → เติมอัตราส่วน,
+    แล้ว 'เสริม' ด้วย yfinance แบบ best-effort (sector/ค่าทางการ). ถ้า yfinance โดน rate limit
+    ก็ข้ามไป ไม่ทำให้ทั้งคำขอล้ม. ต้องมีอย่างน้อยหนึ่งแหล่งที่สำเร็จ.
+    """
     key = (symbol or "").upper().strip()
     now = time.time()
     if not force_refresh:
         cached = _cache.get(key)
         if cached and now - cached[0] < _CACHE_TTL:
             return cached[1]
-    data = await asyncio.to_thread(_fetch_sync, key)
-    _cache[key] = (now, data)
-    return data
+
+    snap: dict = {}
+    if facts:
+        from app.financials import latest_snapshot
+        snap = latest_snapshot(facts)
+        _apply_price_ratios(snap, price)
+
+    # เสริมด้วย yfinance (ถ้าได้) — ทับเฉพาะค่าที่ yfinance มี (ไม่ลบของ EDGAR)
+    yf_ok = False
+    try:
+        yf = await asyncio.to_thread(_fetch_sync, key)
+        yf_ok = True
+        for k, v in yf.items():
+            if v is not None:
+                snap[k] = v
+    except Exception:
+        if not snap:
+            raise  # ไม่มีทั้ง EDGAR และ yfinance → ปล่อย error ให้ route จัดการ
+
+    for k in _SNAPSHOT_KEYS:
+        snap.setdefault(k, None)
+    snap.setdefault("symbol", key)
+    snap["_source"] = "yfinance+edgar" if (yf_ok and facts) else ("yfinance" if yf_ok else "edgar")
+    _cache[key] = (now, snap)
+    return snap

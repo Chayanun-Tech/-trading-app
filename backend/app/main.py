@@ -423,13 +423,36 @@ async def analyze_image_route(
 
 
 # ---------- สาย VI (ปัจจัยพื้นฐาน) ----------
+async def _edgar_facts_safe(symbol: str):
+    """ดึงงบ EDGAR แบบไม่ throw (คืน None ถ้าไม่ใช่หุ้น SEC/ล้มเหลว) — ใช้เป็นฐานที่เสถียร."""
+    try:
+        return await edgar.get_company_facts(symbol)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def _equity_price_safe(symbol: str) -> float | None:
+    """ราคาปัจจุบันจาก provider (httpx, เสถียรกว่า yfinance) สำหรับคำนวณ P/E, P/B ฯลฯ."""
+    try:
+        q = await provider.get_quote(symbol)
+        return float(q.price) if q and q.price else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def _value_snapshot(symbol: str) -> dict:
+    facts = await _edgar_facts_safe(symbol)
+    price = await _equity_price_safe(symbol)
+    return await get_fundamentals(symbol, facts=facts, price=price)
+
+
 @app.get("/api/fundamentals")
 async def fundamentals_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL")):
     """ดึง snapshot ปัจจัยพื้นฐานดิบ (ใช้ดีบัก/แสดงเมตริก)."""
     if not is_equity_symbol(symbol):
         raise HTTPException(400, "สาย VI ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
     try:
-        return await get_fundamentals(symbol)
+        return await _value_snapshot(symbol)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"ดึงข้อมูลพื้นฐานไม่สำเร็จ: {exc}")
 
@@ -457,7 +480,7 @@ async def analyze_fundamentals_route(req: AnalyzeFundamentalsRequest):
     if not is_equity_symbol(req.symbol):
         raise HTTPException(400, "สาย VI ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
     try:
-        snapshot = await get_fundamentals(req.symbol)
+        snapshot = await _value_snapshot(req.symbol)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"ดึงข้อมูลพื้นฐานไม่สำเร็จ: {exc}")
 

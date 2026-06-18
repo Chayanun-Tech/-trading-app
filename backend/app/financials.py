@@ -261,3 +261,48 @@ def build_financials(facts: dict, freq: str = "annual", max_periods: int | None 
         ],
         "disclaimer": "ข้อมูลจาก SEC EDGAR (งบที่บริษัทยื่นจริง). บางแท็กอาจคลาดเคลื่อน/ขาดช่วง — ตรวจงบจริงประกอบ",
     }
+
+
+def latest_snapshot(facts: dict) -> dict:
+    """สร้าง snapshot ปัจจัยพื้นฐาน 'ล่าสุด' จาก EDGAR (เสถียร ไม่โดน rate limit เหมือน yfinance).
+
+    ใช้เป็นฐานให้สาย VI: roe/margin/growth/หนี้/สภาพคล่อง/FCF คำนวณจากงบได้เลย ไม่ต้องใช้ราคา.
+    ส่วนที่ต้องใช้ราคา (P/E, P/B, PEG, fcf_yield, market_cap) เติมทีหลังใน fundamentals.py.
+    """
+    fin = build_financials(facts, "annual")
+    n = len(fin["periods"])
+    if n == 0:
+        return {}
+    last = n - 1
+
+    def val(group_key: str, metric_key: str, i: int = last):
+        grp = next((g for g in fin["groups"] if g["key"] == group_key), None)
+        if not grp:
+            return None
+        m = next((x for x in grp["metrics"] if x["key"] == metric_key), None)
+        if not m or not (0 <= i < len(m["values"])):
+            return None
+        return m["values"][i]
+
+    rev, rev_prev = val("income", "revenue"), (val("income", "revenue", last - 1) if last >= 1 else None)
+    ni, ni_prev = val("income", "net_income"), (val("income", "net_income", last - 1) if last >= 1 else None)
+    return {
+        "symbol": fin.get("symbol"),
+        "long_name": fin.get("entity_name"),
+        "sector": None,
+        "summary": None,
+        "revenue": rev,
+        "net_income": ni,
+        "eps": val("income", "eps_diluted"),
+        "shares": val("pershare", "shares_diluted"),
+        "total_equity": val("balance", "total_equity"),
+        "fcf": val("cashflow", "free_cash_flow"),
+        "dividends_paid": val("cashflow", "dividends_paid"),
+        "roe": val("ratios", "roe"),
+        "gross_margin": val("ratios", "gross_margin"),
+        "operating_margin": val("ratios", "operating_margin"),
+        "current_ratio": val("ratios", "current_ratio"),
+        "debt_to_equity": val("ratios", "debt_to_equity"),
+        "revenue_growth": (None if not rev or not rev_prev else (rev - rev_prev) / abs(rev_prev)),
+        "earnings_growth": (None if not ni or not ni_prev else (ni - ni_prev) / abs(ni_prev)),
+    }
