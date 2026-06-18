@@ -458,7 +458,20 @@ async def get_fundamentals(symbol: str, *, facts: dict | None = None,
             sources.append("edgar")
 
         # EDGAR ของบางบริษัทมีงบครบแต่ขาด EPS/shares เพราะโครงสร้างหุ้นหลาย class.
-        # เติมเฉพาะช่องว่างด้วย Yahoo โดยยังเก็บตัวเลขงบจาก EDGAR เป็นแหล่งหลัก.
+        # อ่าน XBRL instance ของ 10-K โดยตรงก่อน เพราะ companyfacts ตัด dimensional facts.
+        if not snap.get("shares") or not snap.get("eps") or not snap.get("total_equity"):
+            try:
+                from app import edgar
+                filing_metrics = await edgar.get_latest_filing_metrics(key)
+                if filing_metrics:
+                    _merge(snap, filing_metrics, missing_only=True)
+                    sources.append("filing-xbrl")
+            except Exception:
+                pass
+        _derive_missing_per_share(snap, price)
+        _apply_price_ratios(snap, price)
+
+        # ถ้ายังขาดจึงเติมเฉพาะช่องว่างด้วย Yahoo โดยเก็บงบจาก EDGAR เป็นแหล่งหลัก.
         critical = ("shares", "eps", "market_cap", "pe", "pb", "dividend_yield")
         if any(snap.get(k) is None for k in critical):
             for name, fn in (("yahoo", fetch_yahoo_fundamentals),

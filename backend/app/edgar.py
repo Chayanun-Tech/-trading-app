@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import time
+import xml.etree.ElementTree as ET
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -108,6 +110,136 @@ async def get_submissions(symbol: str) -> dict:
     """ประวัติการยื่นเอกสารทั้งหมดของบริษัท (data.sec.gov/submissions)."""
     cik = await get_cik(symbol)
     return await _cached_json(_SUBS_URL.format(cik=cik), f"subs_{cik}.json", _SUBS_TTL)
+
+
+async def _cached_text(url: str, cache_name: str, ttl: int, timeout: float = 60) -> str:
+    cache = _CACHE_DIR / cache_name
+    if cache.exists() and time.time() - cache.stat().st_mtime < ttl:
+        try:
+            return cache.read_text(encoding="utf-8")
+        except OSError:
+            pass
+    async with httpx.AsyncClient(timeout=timeout, headers=_HEADERS) as client:
+        res = await client.get(url)
+        res.raise_for_status()
+        text = res.text
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache.write_text(text, encoding="utf-8")
+    return text
+
+
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+async def get_latest_filing_metrics(symbol: str) -> dict:
+    """อ่าน XBRL instance ของ 10-K ล่าสุดเพื่อเติม metrics ที่ companyfacts ทำหล่น.
+
+    SEC companyfacts ตัด facts ที่มี dimension ออกหลายกรณี เช่น Visa แยกหุ้น Class A/B/C
+    ทำให้ EPS และ weighted-average shares หาย แม้ข้อมูลอยู่ใน 10-K จริง ฟังก์ชันนี้อ่าน
+    instance XML โดยตรงและเลือก context ของ class หลัก/จำนวนหุ้น diluted ที่มากที่สุด.
+    """
+    cik = await get_cik(symbol)
+    submissions = await get_submissions(symbol)
+    recent = submissions.get("filings", {}).get("recent", {})
+    forms = recent.get("form", [])
+    index = next((i for i, form in enumerate(forms) if form == "10-K"), None)
+    if index is None:
+        return {}
+    accession = recent.get("accessionNumber", [])[index]
+    compact = accession.replace("-", "")
+    base = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{compact}"
+    listing = await _cached_json(f"{base}/index.json", f"filing_index_{compact}.json", _FACTS_TTL)
+    items = listing.get("directory", {}).get("item", [])
+    instance_name = next(
+        (item.get("name") for item in items
+         if str(item.get("name", "")).endswith("_htm.xml")),
+        None,
+    )
+    if not instance_name:
+        return {}
+    xml = await _cached_text(f"{base}/{instance_name}", f"filing_instance_{compact}.xml", _FACTS_TTL)
+    root = ET.fromstring(xml)
+
+    contexts: dict[str, dict] = {}
+    for node in root.iter():
+        if _local_name(node.tag) != "context":
+            continue
+        info = {"start": None, "end": None, "instant": None, "members": []}
+        for child in node.iter():
+            name = _local_name(child.tag)
+            if name in ("startDate", "endDate", "instant"):
+                info[{"startDate": "start", "endDate": "end", "instant": "instant"}[name]] = child.text
+            elif name in ("explicitMember", "typedMember"):
+                info["members"].append(child.text or "")
+        contexts[node.attrib.get("id", "")] = info
+
+    def annual_context(info: dict) -> bool:
+        try:
+            if not info.get("start") or not info.get("end"):
+                return False
+            days = (date.fromisoformat(info["end"]) - date.fromisoformat(info["start"])).days
+            return 300 <= days <= 400
+        except (TypeError, ValueError):
+            return False
+
+    def numeric_facts(concepts: tuple[str, ...]) -> list[dict]:
+        out = []
+        seen = set()
+        for node in root.iter():
+            if _local_name(node.tag) not in concepts or not node.text:
+                continue
+            try:
+                value = float(node.text.strip().replace(",", ""))
+            except ValueError:
+                continue
+            context_id = node.attrib.get("contextRef", "")
+            key = (context_id, _local_name(node.tag), value)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"concept": _local_name(node.tag), "value": value,
+                        "context_id": context_id, "context": contexts.get(context_id, {})})
+        return out
+
+    share_concepts = (
+        "WeightedAverageNumberOfDilutedSharesOutstanding",
+        "WeightedAverageNumberOfShareOutstandingBasicAndDiluted",
+        "WeightedAverageNumberOfSharesOutstandingBasic",
+    )
+    shares_facts = [fact for fact in numeric_facts(share_concepts)
+                    if fact["value"] > 0 and annual_context(fact["context"])]
+    if not shares_facts:
+        return {}
+    latest_end = max(fact["context"]["end"] for fact in shares_facts)
+    latest_shares = [fact for fact in shares_facts if fact["context"]["end"] == latest_end]
+    diluted = [fact for fact in latest_shares if "Diluted" in fact["concept"]]
+    share_fact = max(diluted or latest_shares, key=lambda fact: fact["value"])
+    shares = share_fact["value"]
+
+    eps_concepts = ("EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted",
+                    "EarningsPerShareBasic")
+    eps_facts = [fact for fact in numeric_facts(eps_concepts)
+                 if fact["value"] > 0 and fact["context"].get("end") == latest_end]
+    same_context = [fact for fact in eps_facts if fact["context_id"] == share_fact["context_id"]]
+    same_context_diluted = [fact for fact in same_context if "Diluted" in fact["concept"]]
+    diluted_eps = [fact for fact in eps_facts if "Diluted" in fact["concept"]]
+    eps_fact = (same_context_diluted or same_context or diluted_eps or eps_facts)
+    eps = eps_fact[0]["value"] if eps_fact else None
+
+    equity_concepts = ("StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+                       "StockholdersEquity")
+    equity_facts = [fact for fact in numeric_facts(equity_concepts)
+                    if fact["value"] > 0 and fact["context"].get("instant") == latest_end
+                    and not fact["context"].get("members")]
+    equity = max((fact["value"] for fact in equity_facts), default=None)
+    return {
+        "shares": shares,
+        "eps": eps,
+        "total_equity": equity,
+        "bvps": (equity / shares if equity and shares else None),
+        "_filing_period": latest_end,
+    }
 
 
 def _doc_url(cik: str, accession: str, primary_doc: str) -> str | None:
