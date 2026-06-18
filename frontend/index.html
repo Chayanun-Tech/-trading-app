@@ -207,6 +207,19 @@
   .model-head b { font-size:13px; }
   .model-meter { height:8px; border-radius:999px; overflow:hidden; background:#111827; border:1px solid var(--border); margin:6px 0; }
   .model-meter span { display:block; height:100%; background:linear-gradient(90deg, var(--red), var(--amber), var(--green)); }
+  .iv-analysis-list { display:grid; gap:10px; margin-top:16px; }
+  .iv-analysis-card { border:1px solid var(--border); border-radius:8px; background:#0d151f; overflow:hidden; }
+  .iv-analysis-card summary { cursor:pointer; padding:11px 12px; display:flex; gap:10px; align-items:center; list-style:none; }
+  .iv-analysis-card summary::-webkit-details-marker { display:none; }
+  .iv-analysis-card summary::before { content:"▾"; color:var(--accent); font-size:12px; }
+  .iv-analysis-card:not([open]) summary::before { content:"▸"; }
+  .iv-analysis-card summary .iv-model-result { margin-left:auto; text-align:right; }
+  .iv-analysis-body { border-top:1px solid var(--border); padding:12px; line-height:1.65; }
+  .iv-analysis-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:10px 0; }
+  .iv-analysis-box { background:#101b27; border:1px solid rgba(148,163,184,.15); border-radius:7px; padding:9px 10px; }
+  .iv-analysis-box b { display:block; color:#dbeafe; margin-bottom:3px; }
+  .iv-analysis-body ul { margin:5px 0 0; padding-left:20px; }
+  .iv-criteria { border-left:3px solid var(--accent); background:rgba(47,128,237,.08); padding:8px 10px; margin-top:9px; border-radius:0 6px 6px 0; }
   .toast-stack {
     position:fixed; top:12px; right:12px; z-index:9999; display:flex; flex-direction:column;
     gap:8px; width:min(390px, calc(100vw - 24px)); pointer-events:none;
@@ -273,6 +286,7 @@
     .summary, .section, .panel-body { padding:8px; }
     .summary { grid-template-columns:1fr 1fr; }
     .grid2, .grid3 { grid-template-columns:1fr; }
+    .iv-analysis-grid { grid-template-columns:1fr; }
     .watch-head, .watch-row {
       grid-template-columns:minmax(86px,1fr) 76px 62px 32px;
       gap:6px; padding-left:8px; padding-right:8px;
@@ -2456,6 +2470,98 @@ function fmtIV(v, currency) {
   return prefix + Number(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
+function ivStatusCriteria() {
+  return `เกณฑ์สถานะเทียบกับราคาปัจจุบัน: สูงกว่า 50% = ถูกมาก · สูงกว่า 20% = ถูก · อยู่ระหว่าง -10% ถึง +20% = ใกล้มูลค่ายุติธรรม · ต่ำกว่า -10% = แพง · ต่ำกว่า -30% = แพงมาก`;
+}
+
+function ivSignedPct(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
+  const n = Number(value);
+  return `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
+}
+
+function ivModelAnalysis(m, r) {
+  const d = r.data_used || {};
+  const price = Number(r.current_price || 0);
+  const cur = r.currency || "USD";
+  const iv = m.intrinsic_value;
+  const status = IV_STATUS_TH[m.status] || m.status || "ไม่มีข้อมูล";
+  const upside = ivSignedPct(m.upside_pct);
+  const mos = ivSignedPct(m.margin_of_safety_pct);
+  const resultLead = iv !== null && iv !== undefined
+    ? `โมเดลประเมินมูลค่าได้ ${fmtIV(iv, cur)} เทียบกับราคาปัจจุบัน ${fmtIV(price, cur)} จึงมีส่วนต่าง ${upside} และจัดอยู่ในสถานะ “${status}”`
+    : `โมเดลนี้ยังคำนวณมูลค่าไม่ได้จากข้อมูลที่มี`;
+  const commonMos = m.margin_of_safety_pct !== null && m.margin_of_safety_pct !== undefined
+    ? (Number(m.margin_of_safety_pct) >= 0
+      ? `Margin of Safety ${mos} หมายถึงราคาตลาดต่ำกว่ามูลค่าที่โมเดลคำนวณได้ นักลงทุนยังมีส่วนเผื่อความผิดพลาดของสมมติฐาน`
+      : `Margin of Safety ${mos} เป็นค่าติดลบ หมายถึงราคาตลาดสูงกว่ามูลค่าตามโมเดล จึงไม่มีส่วนเผื่อความปลอดภัยภายใต้สมมติฐานนี้`)
+    : `ยังคำนวณ Margin of Safety ไม่ได้`;
+  let method = "";
+  let inputs = "";
+  let interpretation = "";
+  let suitability = "";
+
+  if (m.model === "DCF") {
+    const a = m.assumptions || {};
+    const tvPct = Number(m.tv_pct_of_ev || 0);
+    method = `DCF ประเมินเงินสดที่กิจการจะสร้างในอนาคต 9 ปี แล้วคิดลดกลับมาเป็นมูลค่าปัจจุบันด้วย WACC ก่อนบวกเงินสด หักหนี้ และหารด้วยจำนวนหุ้น`;
+    inputs = `ฐาน FCF ${fmtIV(Number(a.base_fcf || 0) / 1e9, cur)} พันล้าน · เติบโตปี 1–5 ที่ ${a.growth_1_5 ?? "—"}% · ปี 6–9 ที่ ${a.growth_6_9 ?? "—"}% · WACC ${a.wacc ?? "—"}% · เติบโตถาวร ${a.perpetual_growth ?? "—"}% · Cash ${d.cash ?? "—"} พันล้าน · Debt ${d.debt ?? "—"} พันล้าน`;
+    interpretation = `มูลค่าเงินสดช่วงประมาณการคิดเป็น ${m.pv_fcf ? fmtIV(m.pv_fcf / 1e9, cur) + " พันล้าน" : "—"} และ Terminal Value คิดเป็น ${tvPct.toFixed(1)}% ของ Enterprise Value ${tvPct > 70 ? "ซึ่งสูงกว่าเกณฑ์เฝ้าระวัง 70% ทำให้ผลไวต่อ WACC และการเติบโตระยะยาวมาก" : "ซึ่งยังไม่เกินเกณฑ์เฝ้าระวัง 70%"}`;
+    suitability = Number(a.growth_1_5 || 0) >= 30
+      ? `สมมติฐานการเติบโตช่วงแรกสูงมาก จึงควรอ่านเป็นกรณีเติบโตเชิงรุก ไม่ใช่ราคาพื้นฐานแบบอนุรักษนิยม ควรเทียบ Heatmap โดยเพิ่ม WACC หรือลด growth ก่อนตัดสินใจ`
+      : `เหมาะกับบริษัทที่ FCF เป็นบวกและคาดการณ์ได้ แต่ผลยังเปลี่ยนแรงเมื่อปรับ WACC หรืออัตราเติบโต`;
+  } else if (m.model === "Graham Number") {
+    method = `Graham Number ใช้สูตร √(22.5 × EPS × BVPS) โดย 22.5 มาจากกรอบหุ้นคุณค่าแบบดั้งเดิมที่ยอมรับ P/E ประมาณ 15 เท่า และ P/BV ประมาณ 1.5 เท่า`;
+    inputs = `EPS ${Number(d.eps || 0).toFixed(2)} · มูลค่าทางบัญชีต่อหุ้น (BVPS) ${Number(d.bvps || 0).toFixed(2)} · สูตรที่ใช้: ${m.formula || "—"}`;
+    interpretation = `ค่า BVPS ต่ำเมื่อเทียบกับราคาหุ้นทำให้ผลลัพธ์ถูกกดลง โมเดลนี้ให้คุณค่ากับสินทรัพย์ในงบดุลมาก และไม่ให้ราคากับแบรนด์ เทคโนโลยี ทรัพย์สินทางปัญญา หรือการเติบโตในอนาคตมากนัก`;
+    suitability = `เหมาะกับธุรกิจสินทรัพย์ชัดเจนและกำไรค่อนข้างนิ่ง เช่น การเงิน อุตสาหกรรม หรือหุ้น deep value แต่มีแนวโน้มประเมินบริษัทเทคโนโลยีแบบ asset-light ต่ำเกินจริง จึงควรใช้เป็น “พื้นมูลค่าแบบเข้มงวด” มากกว่าราคาเป้าหมายหลัก`;
+  } else if (m.model === "Peter Lynch") {
+    const score = m.lynch_score;
+    method = `มูลค่า Lynch ในระบบนี้ใช้ EPS × (อัตราเติบโต EPS% × 2) ส่วน Lynch Score ใช้ (การเติบโต EPS% + Dividend Yield%) ÷ P/E เพื่อดูว่าการเติบโตคุ้มกับราคาที่จ่ายหรือไม่`;
+    inputs = `EPS ${Number(d.eps || 0).toFixed(2)} · EPS Growth ที่ใช้ในสูตร ${m.formula ? escapeHtml(m.formula) : "—"} · Lynch Score ${score ?? "—"}`;
+    interpretation = score === null || score === undefined
+      ? `ยังประเมิน Lynch Score ไม่ได้`
+      : `เกณฑ์ Lynch Score: ต่ำกว่า 1 = แพง · 1–1.5 = พอใช้/ใกล้ยุติธรรม · มากกว่า 1.5–2.5 = น่าสนใจ/ถูก · มากกว่า 2.5 = ถูกมาก ปัจจุบันได้ ${score} จึงอยู่แถว “${m.lynch_score_status || "—"}”`;
+    suitability = Number((m.formula || "").match(/growth ([\d.]+)/)?.[1] || 0) > 40
+      ? `ข้อควรระวังสำคัญ: ระบบกำลังนำอัตราเติบโตสูงมากไปคูณตรง ๆ หากการเติบโตชะลอลง มูลค่าจะลดแรง โมเดลนี้จึงเป็นภาพกรณีที่บริษัทสามารถรักษา growth สูงได้ ไม่ควรใช้เดี่ยว ๆ`
+      : `เหมาะกับหุ้นเติบโตที่กำไรเป็นบวกและอัตราเติบโตมีความต่อเนื่อง แต่ไม่เหมาะเมื่อ growth ผันผวนหรือเกิดจากฐานต่ำผิดปกติ`;
+  } else if (m.model === "DDM") {
+    method = `DDM มองว่ามูลค่าหุ้นเท่ากับกระแสเงินปันผลในอนาคต ใช้สูตร Gordon Growth: เงินปันผลปีหน้า ÷ (อัตราคิดลด − อัตราเติบโตปันผล)`;
+    inputs = `สูตรที่ใช้: ${m.formula || "—"} · อัตราคิดลดอิง WACC 8.6% · ระบบจำกัด growth สูงสุดที่ 8%`;
+    interpretation = `แม้ส่วนต่างระหว่าง discount rate กับ growth จะเล็ก แต่เงินปันผลต่อหุ้นเริ่มต้นต่ำมาก จึงได้มูลค่าต่ำเมื่อเทียบราคาตลาด ผลนี้กำลังบอกว่า “ราคาหุ้นไม่ได้รับการรองรับด้วยเงินปันผลปัจจุบัน” ไม่ได้แปลว่าธุรกิจไม่มีคุณค่า`;
+    suitability = `เหมาะกับหุ้นปันผลสม่ำเสมอ เช่น สาธารณูปโภค ธนาคาร หรือ REIT มากกว่าหุ้นเติบโตที่เก็บกำไรไว้ลงทุนต่อ เมื่อบริษัทจ่ายปันผลน้อย DDM มักประเมินต่ำและไม่ควรเป็นโมเดลหลัก`;
+  } else if (m.model === "P/E Fair Value") {
+    const targetMatch = (m.formula || "").match(/target P\/E ([\d.]+)/);
+    const targetPe = targetMatch ? Number(targetMatch[1]) : null;
+    method = `P/E Fair Value นำกำไรต่อหุ้นคูณด้วย P/E เป้าหมาย เป็นวิธีตอบคำถามว่า “ถ้าตลาดยอมจ่ายกำไรกี่เท่า ราคาที่สมเหตุสมผลควรเป็นเท่าไร”`;
+    inputs = `EPS ${Number(d.eps || 0).toFixed(2)} × P/E เป้าหมาย ${targetPe ?? "—"} เท่า = ${fmtIV(iv, cur)}`;
+    interpretation = `P/E เป้าหมาย ${targetPe ?? "—"} เท่าเป็นกรอบค่อนข้างอนุรักษนิยมสำหรับหุ้นเติบโต หากราคาปัจจุบันสูงกว่ามูลค่ามาก แปลว่าตลาดกำลังให้ premium กับการเติบโต คุณภาพ หรือความได้เปรียบทางการแข่งขันเหนือบริษัททั่วไป`;
+    suitability = `ควรเปรียบเทียบ P/E เป้าหมายกับค่าเฉลี่ยอุตสาหกรรม ประวัติของบริษัท และ forward EPS หากใช้ 15 เท่ากับบริษัทที่โตเร็ว ผลมักต่ำเกินจริง แต่เป็นประโยชน์ในการเห็นว่าราคาปัจจุบันฝังความคาดหวังไว้มากเพียงใด`;
+  }
+
+  const warnings = (m.warnings || []).length
+    ? `<div class="iv-analysis-box"><b style="color:#fbbf24;">จุดที่ต้องระวัง</b><ul>${m.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>`
+    : "";
+  return `<details class="iv-analysis-card" open>
+    <summary>
+      <b>${escapeHtml(m.model)}</b>
+      <span class="iv-model-result ${IV_STATUS_CLS[m.status] || "neutral"}">${fmtIV(iv, cur)} · ${escapeHtml(status)}</span>
+    </summary>
+    <div class="iv-analysis-body">
+      <div>${escapeHtml(resultLead)}</div>
+      <div class="iv-analysis-grid">
+        <div class="iv-analysis-box"><b>โมเดลคิดอย่างไร</b>${method}</div>
+        <div class="iv-analysis-box"><b>ตัวเลขที่นำมาใช้</b>${inputs}</div>
+        <div class="iv-analysis-box"><b>ทำไมจึงได้ผลลัพธ์นี้</b>${interpretation}</div>
+        <div class="iv-analysis-box"><b>ควรเชื่อแค่ไหน / เหมาะกับหุ้นแบบใด</b>${suitability}</div>
+        <div class="iv-analysis-box"><b>ความหมายของ Margin of Safety</b>${commonMos}</div>
+        ${warnings}
+      </div>
+      <div class="iv-criteria"><b>เกณฑ์การตัดสินของระบบ</b><br>${ivStatusCriteria()}</div>
+    </div>
+  </details>`;
+}
+
 function renderIVReport(r) {
   const s = r.summary || {};
   const price = r.current_price || 0;
@@ -2463,7 +2569,7 @@ function renderIVReport(r) {
   const statusCls = IV_STATUS_CLS[s.status] || "neutral";
   const statusTh = IV_STATUS_TH[s.status] || s.status;
   const mosPct = s.margin_of_safety_pct;
-  const upside = s.iv_median ? ((s.iv_median - price) / price * 100) : null;
+  const upside = s.iv_median && price > 0 ? ((s.iv_median - price) / price * 100) : null;
 
   // Summary bar
   const summaryHtml = `
@@ -2484,17 +2590,19 @@ function renderIVReport(r) {
   const barsHtml = (r.models || []).map(m => {
     if (!m.intrinsic_value) return "";
     const iv = m.intrinsic_value;
-    const up = ((iv - price) / price * 100).toFixed(1);
+    const upValue = price > 0 ? ((iv - price) / price * 100) : m.upside_pct;
+    const up = upValue !== null && upValue !== undefined && Number.isFinite(Number(upValue))
+      ? Number(upValue).toFixed(1) : null;
     const cls = IV_STATUS_CLS[m.status] || "neutral";
     const barW = Math.min(100, Math.max(5, (iv / (s.iv_max * 1.1)) * 100));
     return `<div style="margin-bottom:10px;">
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
         <b>${m.model}</b>
-        <span class="${cls}">${fmtIV(iv, cur)} (${up > 0 ? "+" : ""}${up}%)</span>
+        <span class="${cls}">${fmtIV(iv, cur)}${up !== null ? ` (${Number(up) > 0 ? "+" : ""}${up}%)` : ""}</span>
       </div>
       <div style="background:#1a2535; border-radius:4px; height:10px; position:relative;">
-        <div style="background:${up >= 0 ? "var(--up,#2a6)" : "var(--down,#e55)"}; width:${barW}%; height:100%; border-radius:4px;"></div>
-        <div style="position:absolute; left:${Math.min(95, (price/(s.iv_max*1.1))*100)}%; top:-3px; width:2px; height:16px; background:#fff5; border-radius:2px;" title="ราคาปัจจุบัน"></div>
+        <div style="background:${up !== null && Number(up) >= 0 ? "var(--up,#2a6)" : "var(--down,#e55)"}; width:${barW}%; height:100%; border-radius:4px;"></div>
+        ${price > 0 ? `<div style="position:absolute; left:${Math.min(95, (price/(s.iv_max*1.1))*100)}%; top:-3px; width:2px; height:16px; background:#fff5; border-radius:2px;" title="ราคาปัจจุบัน"></div>` : ""}
       </div>
       ${m.formula ? `<div class="tiny" style="color:var(--muted); margin-top:2px;">${escapeHtml(m.formula)}</div>` : ""}
     </div>`;
@@ -2546,11 +2654,16 @@ function renderIVReport(r) {
         .map(([k,v]) => `<div class="stat"><div class="tiny">${k}</div><b>${v !== null && v !== undefined ? v : "—"}</b></div>`).join("")}
     </div>
   </div>`;
+  const analysisHtml = `<div style="margin-top:18px; border-top:1px solid var(--border); padding-top:12px;">
+    <b>🧠 เหตุผลเชิงวิเคราะห์รายโมเดล</b>
+    <div class="note" style="margin-top:4px;">แต่ละโมเดลไม่ได้เป็น “คะแนนรวม” แต่เป็นมุมประเมินคนละแบบ เปิดอ่านเพื่อดูสูตร ตัวเลข เกณฑ์ตัดสิน และข้อจำกัดว่าทำไมคำตอบจึงต่างกันมาก</div>
+    <div class="iv-analysis-list">${(r.models || []).map(m => ivModelAnalysis(m, r)).join("")}</div>
+  </div>`;
 
   $("ivResult").innerHTML = summaryHtml
     + `<div style="margin-bottom:16px;">${barsHtml}</div>`
     + `<div class="table-scroll"><table><thead><tr><th>โมเดล</th><th>IV/หุ้น</th><th>Upside</th><th>MoS</th><th>สถานะ</th><th>หมายเหตุ</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`
-    + heatmapHtml + dataHtml
+    + analysisHtml + heatmapHtml + dataHtml
     + `<div class="note" style="margin-top:12px; font-size:11px;">⚠️ มูลค่า IV เป็นเพียงการประมาณการ ขึ้นกับสมมติฐานที่ใช้ — ไม่ใช่คำแนะนำซื้อขาย. DCF ไวต่อ WACC และ Perpetual Growth มาก</div>`;
 }
 
