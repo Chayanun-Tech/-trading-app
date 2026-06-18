@@ -123,17 +123,29 @@ _CRUMB_TTL = 1800  # 30 นาที
 
 
 async def _yahoo_crumb(force: bool = False) -> tuple[str, str]:
-    """ขอ cookie+crumb ของ Yahoo (cache 30 นาที) สำหรับเรียก quoteSummary."""
+    """ขอ cookie+crumb ของ Yahoo (cache 30 นาที) สำหรับเรียก quoteSummary.
+
+    ลอง seed cookie หลายทาง (บาง host เช่น fc.yahoo.com อาจถูกบล็อกจาก IP ดาต้าเซ็นเตอร์).
+    """
     import httpx
     now = time.time()
     if not force and _ya_session["crumb"] and now - _ya_session["ts"] < _CRUMB_TTL:
         return _ya_session["cookie"], _ya_session["crumb"]
-    async with httpx.AsyncClient(headers=_YA_UA, timeout=20, follow_redirects=True) as c:
-        await c.get("https://fc.yahoo.com/")
-        crumb = (await c.get("https://query1.finance.yahoo.com/v1/test/getcrumb")).text
-        cookie = "; ".join(f"{k}={v}" for k, v in c.cookies.items())
-    _ya_session.update(cookie=cookie, crumb=crumb, ts=now)
-    return cookie, crumb
+    last_err: Exception | None = None
+    for seed in ("https://finance.yahoo.com/quote/AAPL",
+                 "https://finance.yahoo.com/",
+                 "https://fc.yahoo.com/"):
+        try:
+            async with httpx.AsyncClient(headers=_YA_UA, timeout=20, follow_redirects=True) as c:
+                await c.get(seed)
+                crumb = (await c.get("https://query1.finance.yahoo.com/v1/test/getcrumb")).text.strip()
+                cookie = "; ".join(f"{k}={v}" for k, v in c.cookies.items())
+            if crumb and "<" not in crumb and len(crumb) < 40:
+                _ya_session.update(cookie=cookie, crumb=crumb, ts=now)
+                return cookie, crumb
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+    raise RuntimeError(f"ขอ crumb จาก Yahoo ไม่สำเร็จ (IP อาจถูกจำกัด): {last_err}")
 
 
 def _raw(d: dict, key: str):
@@ -148,19 +160,29 @@ async def fetch_yahoo_fundamentals(symbol: str) -> dict:
 
     ใช้ httpx (ไม่ใช่ curl_cffi) จึงไม่ติดปัญหา path ภาษาไทย และคุม retry/cache เองได้.
     """
+    import asyncio as _aio
+
     import httpx
     mods = "summaryProfile,price,financialData,defaultKeyStatistics,summaryDetail"
-    url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules={mods}"
+    hosts = ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com")
+    result = None
+    last_status = None
     async with httpx.AsyncClient(timeout=20, follow_redirects=True) as c:
-        cookie, crumb = await _yahoo_crumb()
-        r = await c.get(f"{url}&crumb={crumb}", headers={**_YA_UA, "Cookie": cookie})
-        if r.status_code in (401, 403):  # crumb หมดอายุ → รีเฟรชแล้วลองใหม่ครั้งเดียว
-            cookie, crumb = await _yahoo_crumb(force=True)
+        for attempt in range(3):
+            host = hosts[attempt % len(hosts)]
+            url = f"{host}/v10/finance/quoteSummary/{symbol}?modules={mods}"
+            cookie, crumb = await _yahoo_crumb(force=attempt > 0)
             r = await c.get(f"{url}&crumb={crumb}", headers={**_YA_UA, "Cookie": cookie})
-        r.raise_for_status()
-        result = (r.json().get("quoteSummary", {}).get("result") or [])
+            last_status = r.status_code
+            if r.status_code == 200:
+                result = (r.json().get("quoteSummary", {}).get("result") or [])
+                break
+            if r.status_code in (401, 403, 429):  # crumb เก่า/โดนจำกัด → หน่วงแล้วลองใหม่
+                await _aio.sleep(0.6 * (attempt + 1))
+                continue
+            r.raise_for_status()
     if not result:
-        raise RuntimeError(f"Yahoo ไม่มีข้อมูลพื้นฐานของ {symbol}")
+        raise RuntimeError(f"Yahoo ไม่ตอบข้อมูลพื้นฐานของ {symbol} (status {last_status})")
     res = result[0]
     sp, price = res.get("summaryProfile", {}), res.get("price", {})
     fd, ks, sd = res.get("financialData", {}), res.get("defaultKeyStatistics", {}), res.get("summaryDetail", {})
