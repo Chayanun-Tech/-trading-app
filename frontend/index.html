@@ -425,6 +425,11 @@
         </div>
         <div id="financialsView" class="note" style="margin-top:10px;">กด "วิเคราะห์ VI" เพื่อโหลดงบย้อนหลังหลายปี</div>
       </div>
+
+      <div id="filingsSection" style="margin-top:18px; border-top:1px solid var(--border); padding-top:12px;">
+        <b>📰 ไทม์ไลน์เอกสาร SEC ล่าสุด</b>
+        <div id="filingsView" class="note" style="margin-top:8px;">กด "วิเคราะห์ VI" เพื่อโหลดเอกสารล่าสุด (เฉพาะหุ้น US)</div>
+      </div>
     </div>
 
     <div id="imagePanel" class="panel-body hidden">
@@ -2324,7 +2329,31 @@ async function runFundamentalAnalysis() {
     if (!res.ok) throw new Error(await res.text());
     renderValueReport(await res.json());
     loadFinancials(sym, finFreq);
+    loadFilings(sym);
   } catch (e) { notifyError(errorMessage(e), "VI analysis failed"); $("viResult").innerHTML = `<div class="down">${e.message || e}</div>`; }
+}
+
+const FORM_TH = {
+  "10-K": "รายงานประจำปี (10-K)", "10-Q": "รายงานไตรมาส (10-Q)", "8-K": "เหตุการณ์สำคัญ (8-K)",
+  "4": "ธุรกรรมคนใน (Form 4)", "3": "รายงานถือครอง (Form 3)", "5": "รายงานถือครอง (Form 5)",
+  "DEF 14A": "หนังสือเชิญประชุม (Proxy)", "SC 13G": "ผู้ถือหุ้นใหญ่ (13G)", "SC 13D": "ผู้ถือหุ้นใหญ่ (13D)",
+  "SCHEDULE 13G": "ผู้ถือหุ้นใหญ่ (13G)", "S-1": "ไฟลิ่ง IPO (S-1)", "SD": "แร่ขัดแย้ง (SD)",
+};
+async function loadFilings(symbol) {
+  const el = $("filingsView");
+  el.innerHTML = `<div class="note">กำลังโหลดเอกสารล่าสุด...</div>`;
+  try {
+    const res = await fetch(`${API}/api/filings?symbol=${encodeURIComponent(symbol)}&limit=20`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: res.statusText }))).detail || res.statusText);
+    const d = await res.json();
+    const rows = (d.filings || []).map(f => {
+      const link = f.url ? `<a href="${f.url}" target="_blank" rel="noopener">เปิด ↗</a>` : "";
+      const items = f.items ? ` <span class="tiny">[${f.items}]</span>` : "";
+      const cls = f.form === "8-K" ? "up" : (f.form === "4" ? "neutral" : "");
+      return `<tr><td class="tiny">${f.date || ""}</td><td><b class="${cls}">${FORM_TH[f.form] || f.form}</b>${items}</td><td>${link}</td></tr>`;
+    }).join("");
+    el.innerHTML = `<div class="table-scroll"><table class="fin-table"><thead><tr><th>วันที่</th><th>เอกสาร</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  } catch (e) { el.innerHTML = `<div class="note">${e.message || e}</div>`; }
 }
 
 async function updateOfflineThai() {

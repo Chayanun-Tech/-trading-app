@@ -458,6 +458,20 @@ async def fundamentals_route(symbol: str = Query(..., description="สัญล�
         raise HTTPException(502, f"ดึงข้อมูลพื้นฐานไม่สำเร็จ: {exc}")
 
 
+@app.get("/api/filings")
+async def filings_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL"),
+                        limit: int = Query(25, ge=1, le=100)):
+    """ไทม์ไลน์การยื่นเอกสารล่าสุดต่อ SEC (10-K/10-Q/8-K/Form 4 ...) + ลิงก์เอกสารจริง."""
+    if not is_equity_symbol(symbol):
+        raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น")
+    try:
+        return {"symbol": symbol.upper(), "filings": await edgar.recent_filings(symbol, limit)}
+    except ValueError:
+        raise HTTPException(404, "ไทม์ไลน์เอกสาร SEC รองรับเฉพาะหุ้นสหรัฐ")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูล SEC ไม่สำเร็จ: {exc}")
+
+
 @app.get("/api/financials")
 async def financials_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL"),
                            freq: str = Query("annual", description="annual | quarterly")):
@@ -489,7 +503,12 @@ async def analyze_fundamentals_route(req: AnalyzeFundamentalsRequest):
     py_verdicts = evaluate_value_schools(snapshot)
     if req.enabled_schools is not None:
         py_verdicts = [v for v in py_verdicts if v["id"] in req.enabled_schools]
-    ai = await analyze_fundamentals_ai(req.symbol, snapshot, req.note, req.enabled_schools)
+    try:  # ดึงส่วน Risk Factors/MD&A จาก 10-K จริงมา ground ให้ AI (เฉพาะหุ้น US ที่ยื่น SEC)
+        doc = await edgar.get_10k_context(req.symbol)
+    except Exception:  # noqa: BLE001
+        doc = None
+    ai = await analyze_fundamentals_ai(req.symbol, snapshot, note=req.note,
+                                       doc_context=doc, only_ids=req.enabled_schools)
     verdicts = py_verdicts + ai["verdicts"]
 
     return ValueReport(**build_value_report(
@@ -537,7 +556,11 @@ async def update_offline_route(symbol: str = Query(..., description="สัญ�
     # คำนวณ + cache คำวิเคราะห์ AI เชิงคุณภาพ ลง snapshot ด้วย (จะได้ไปโชว์บนเว็ปแม้ quota หมด)
     ai_cached = False
     try:
-        ai = await analyze_fundamentals_ai(symbol, {**snap, "_source": "yahoo"})
+        try:
+            doc = await edgar.get_10k_context(symbol)
+        except Exception:  # noqa: BLE001
+            doc = None
+        ai = await analyze_fundamentals_ai(symbol, {**snap, "_source": "yahoo"}, doc_context=doc)
         if ai.get("ai_status") == "live" and ai.get("verdicts"):
             save_ai_qualitative(symbol, ai["verdicts"], ai.get("summary"))
             ai_cached = True

@@ -80,6 +80,7 @@ def placeholder_verdicts(ids: list[str], reason: str | None = None) -> list[dict
 
 
 async def analyze_fundamentals_ai(symbol: str, snapshot: dict, note: str | None = None,
+                                  doc_context: dict | None = None,  # 10-K Risk Factors/MD&A (ถ้ามี)
                                   only_ids: list[str] | None = None) -> dict:
     """ประเมินด้านเชิงคุณภาพสาย VI ตามลำดับความสด:
     (1) LLM สด (Gemini→ตก Groq เมื่อ quota หมด) → (2) คำวิเคราะห์ AI ที่ cache ไว้ใน snapshot
@@ -105,8 +106,14 @@ async def analyze_fundamentals_ai(symbol: str, snapshot: dict, note: str | None 
                 "revenue_growth", "earnings_growth", "fcf_yield", "market_cap")},
             "user_note": note or "ไม่มี",
         }
+        if doc_context:
+            if doc_context.get("risk_factors"):
+                payload["10k_risk_factors_excerpt"] = doc_context["risk_factors"][:3500]
+            if doc_context.get("mda"):
+                payload["10k_mda_excerpt"] = doc_context["mda"][:3500]
         user_msg = (
-            "ประเมินด้านเชิงคุณภาพของกิจการนี้แยกตามแต่ละด้าน. ใช้ความรู้อ้างอิงเป็นกรอบ:\n\n"
+            "ประเมินด้านเชิงคุณภาพของกิจการนี้แยกตามแต่ละด้าน. ใช้ความรู้อ้างอิงเป็นกรอบ "
+            "และถ้ามีข้อความจาก 10-K จริง (risk_factors/mda) ให้ใช้ประกอบการประเมินความเสี่ยง/คุณภาพ:\n\n"
             "=== KNOWLEDGE BASE ===\n" + kb.value_knowledge_bundle()
             + "\n\n=== ข้อมูลกิจการ ===\n" + json.dumps(payload, ensure_ascii=False)
         )
@@ -117,7 +124,9 @@ async def analyze_fundamentals_ai(symbol: str, snapshot: dict, note: str | None 
                 text = await llm.complete(system, user_msg, exclude=exclude)
                 verdicts = _materialize(_extract_json(text).get("verdicts", []), claude_ids)
                 if verdicts:
-                    return {"verdicts": verdicts, "summary": _safe_summary(text), "ai_status": "live"}
+                    grounded = bool(doc_context and (doc_context.get("risk_factors") or doc_context.get("mda")))
+                    return {"verdicts": verdicts, "summary": _safe_summary(text),
+                            "ai_status": "live", "grounded_10k": grounded}
                 break
             except Exception as exc:  # noqa: BLE001
                 reason = str(exc).lower()
