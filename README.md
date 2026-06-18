@@ -28,6 +28,10 @@ Elliott Wave, Fibonacci, Harmonic, Wyckoff, SMC/ICT, Gann, อินดิเค
 
 ## 🚀 วิธีรัน
 
+**Windows (ง่ายสุด):** ดับเบิลคลิก **`run.bat`** — ครั้งแรกติดตั้งให้อัตโนมัติ แล้วเปิด http://localhost:8000
+> รันในเครื่องแล้ว **หุ้นไทย (.BK) ใช้งานได้เต็ม** ผ่าน Yahoo (บนเว็ปคลาวด์ Yahoo บล็อก IP ดาต้าเซ็นเตอร์ จึงได้แต่หุ้น US)
+
+**หรือรันเอง:**
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
