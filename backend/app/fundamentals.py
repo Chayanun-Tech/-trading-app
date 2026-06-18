@@ -33,9 +33,25 @@ def get_offline(symbol: str) -> dict | None:
 
 def save_offline(symbol: str, snap: dict) -> None:
     data = load_offline()
+    key = (symbol or "").upper().strip()
     entry = {k: v for k, v in snap.items() if k != "_source"}
     entry["fetched_at"] = int(time.time())
-    data[(symbol or "").upper().strip()] = entry
+    # คงคำวิเคราะห์ AI ที่ cache ไว้เดิม (ถ้ามี) ไม่ให้ถูกลบตอนรีเฟรชเฉพาะตัวเลข
+    prev = data.get(key) or {}
+    if prev.get("ai_qualitative") and "ai_qualitative" not in entry:
+        entry["ai_qualitative"] = prev["ai_qualitative"]
+    data[key] = entry
+    _OFFLINE_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True),
+                             encoding="utf-8")
+
+
+def save_ai_qualitative(symbol: str, verdicts: list[dict], summary: str | None) -> None:
+    """เก็บคำวิเคราะห์เชิงคุณภาพจาก AI ลง snapshot ออฟไลน์ (อยู่ได้แม้ quota หมด/บนเว็ป)."""
+    data = load_offline()
+    key = (symbol or "").upper().strip()
+    entry = data.get(key) or {"symbol": key, "fetched_at": int(time.time())}
+    entry["ai_qualitative"] = {"verdicts": verdicts, "summary": summary, "at": int(time.time())}
+    data[key] = entry
     _OFFLINE_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True),
                              encoding="utf-8")
 

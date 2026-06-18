@@ -25,7 +25,8 @@ from app.db import DatabaseStore
 from app import edgar
 from app.engine import build_report
 from app.financials import build_financials
-from app.fundamentals import get_fundamentals, is_equity_symbol
+from app.fundamentals import (get_fundamentals, is_equity_symbol, save_ai_qualitative,
+                              update_offline)
 from app.fundamentals_ai import analyze_fundamentals_ai
 from app.indicators import compute_indicators
 from app.math_model import DEFAULT_MODEL_PATH, load_model
@@ -494,6 +495,7 @@ async def analyze_fundamentals_route(req: AnalyzeFundamentalsRequest):
     return ValueReport(**build_value_report(
         verdicts, snapshot, ai_enabled=settings.llm_enabled(),
         summary=ai.get("summary"), weights=req.weights,
+        ai_status=ai.get("ai_status"), ai_as_of=ai.get("ai_as_of"),
     ))
 
 
@@ -532,12 +534,22 @@ async def update_offline_route(symbol: str = Query(..., description="สัญ�
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(503, "อัปเดตได้เฉพาะตอนรันในเครื่อง (เว็ปดึง Yahoo สำหรับหุ้นไทยไม่ได้): "
                                  + str(exc)[:120])
+    # คำนวณ + cache คำวิเคราะห์ AI เชิงคุณภาพ ลง snapshot ด้วย (จะได้ไปโชว์บนเว็ปแม้ quota หมด)
+    ai_cached = False
+    try:
+        ai = await analyze_fundamentals_ai(symbol, {**snap, "_source": "yahoo"})
+        if ai.get("ai_status") == "live" and ai.get("verdicts"):
+            save_ai_qualitative(symbol, ai["verdicts"], ai.get("summary"))
+            ai_cached = True
+    except Exception:  # noqa: BLE001
+        pass
     pub = await asyncio.to_thread(_git_publish_offline, symbol)
     return {
         "updated": True,
         "symbol": symbol.upper(),
         "long_name": snap.get("long_name"),
         "as_of": snap.get("fetched_at"),
+        "ai_cached": ai_cached,
         "published": pub.get("pushed"),
         "publish_detail": pub.get("error") or "push ขึ้นเว็ปแล้ว (เว็ป rebuild ~3-8 นาที)",
     }

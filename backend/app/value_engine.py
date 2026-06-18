@@ -87,7 +87,8 @@ def _key_metrics(snapshot: dict) -> dict:
 
 
 def build_value_report(verdicts: list[dict], snapshot: dict, *, ai_enabled: bool,
-                       summary: str | None = None, weights: dict | None = None) -> dict:
+                       summary: str | None = None, weights: dict | None = None,
+                       ai_status: str | None = None, ai_as_of: int | None = None) -> dict:
     """ประกอบผลลัพธ์สุดท้ายตาม schema ValueReport."""
     agg = aggregate_value(verdicts, weights)
     return {
@@ -102,6 +103,8 @@ def build_value_report(verdicts: list[dict], snapshot: dict, *, ai_enabled: bool
         "key_metrics": _key_metrics(snapshot),
         "data_source": snapshot.get("_source"),
         "offline_as_of": snapshot.get("fetched_at") if "offline" in (snapshot.get("_source") or "") else None,
+        "ai_status": ai_status,
+        "ai_as_of": ai_as_of,
         "ai_enabled": ai_enabled,
         "disclaimer": DISCLAIMER,
     }

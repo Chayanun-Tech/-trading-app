@@ -56,9 +56,12 @@ async def _call_openai_compatible(cfg: dict, system: str, user_text: str,
     return resp.choices[0].message.content or ""
 
 
-async def complete(system: str, user_text: str, image: dict | None = None) -> str:
-    """เรียก LLM ที่ resolve ได้. image = {'b64':..., 'media_type':...} หรือ None."""
-    cfg = get_settings().resolve_llm()
+async def complete(system: str, user_text: str, image: dict | None = None,
+                   exclude: set | None = None) -> str:
+    """เรียก LLM ที่ resolve ได้. image = {'b64':..., 'media_type':...} หรือ None.
+
+    exclude = ชุด provider ที่ข้าม (เช่น {'gemini'} เมื่อ quota หมด → ตกไป groq)."""
+    cfg = get_settings().resolve_llm(exclude=exclude or set())
     if not cfg["api_key"]:
         raise LLMError("ยังไม่ได้ตั้งคีย์ AI ใด ๆ")
     if image and not cfg["vision"]:

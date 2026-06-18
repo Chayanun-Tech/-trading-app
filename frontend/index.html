@@ -2359,6 +2359,11 @@ function renderValueReport(r) {
     ["Rev growth", viMetric(m.revenue_growth)], ["FCF yield", viMetric(m.fcf_yield)], ["Div yield", viMetric(m.dividend_yield)],
   ].map(([k, val]) => `<div class="stat"><div class="tiny">${k}</div><div><b>${val}</b></div></div>`).join("");
   const gradeCls = VI_GRADE_CLASS[r.quality_grade] || "neutral";
+  const aiNote = {
+    live: `<div class="note" style="color:#7c7;">🟢 ด้านเชิงคุณภาพวิเคราะห์โดย AI (สด)</div>`,
+    cached: `<div class="note" style="color:#cb6;">🟡 ด้านเชิงคุณภาพ: ใช้คำวิเคราะห์ AI ที่บันทึกไว้${r.ai_as_of ? " (" + new Date(r.ai_as_of*1000).toLocaleDateString() + ")" : ""}</div>`,
+    rule: `<div class="note" style="color:#9aa;">⚪ ด้านเชิงคุณภาพประเมินจากตัวเลข (AI ไม่พร้อม/โควตาหมด) — กด "อัปเดตขึ้นเว็ป" ตอนรันในเครื่องเพื่อให้ AI ประเมินและบันทึก</div>`,
+  }[r.ai_status] || "";
   const offlineBadge = (r.data_source || "").includes("offline")
     ? `<span class="pill" style="background:#7a5; color:#fff;" title="ข้อมูลออฟไลน์ — กด 'อัปเดตขึ้นเว็ป' ตอนรันในเครื่องเพื่อรีเฟรช">ออฟไลน์${r.offline_as_of ? " ณ " + new Date(r.offline_as_of*1000).toLocaleDateString() : ""}</span>`
     : "";
@@ -2373,6 +2378,7 @@ function renderValueReport(r) {
     <div class="gauge" style="margin-top:8px;"><div class="g-up" style="width:${r.value_score}%">คุณค่า ${r.value_score}%</div><div class="g-down" style="width:${100 - r.value_score}%"></div></div>
     <div class="grid3" style="margin:10px 0;">${cards}</div>
     <div class="note" style="margin:10px 0;">${r.summary || ""}</div>
+    ${aiNote}
     <div class="table-scroll"><table><thead><tr><th>ด้าน</th><th>มุมมอง</th><th>ค่า/สัญญาณ</th><th>มั่นใจ</th><th>เหตุผล</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="note" style="margin-top:10px;">${r.disclaimer}</div>`;
 }

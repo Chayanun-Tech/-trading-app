@@ -143,6 +143,8 @@ class ValueReport(BaseModel):
     key_metrics: dict
     data_source: Optional[str] = None       # edgar / yahoo / offline / fmp ...
     offline_as_of: Optional[int] = None     # unix time ถ้าข้อมูลมาจาก snapshot ออฟไลน์
+    ai_status: Optional[str] = None         # live / cached / rule / none
+    ai_as_of: Optional[int] = None          # unix time ถ้าใช้คำวิเคราะห์ AI ที่ cache ไว้
     ai_enabled: bool
     disclaimer: str
 
