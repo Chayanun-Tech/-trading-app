@@ -16,6 +16,8 @@ load_dotenv(_ENV_PATH if _ENV_PATH.exists() else None)
 class Settings:
     data_provider: str = os.getenv("DATA_PROVIDER", "mock").lower()
     finnhub_api_key: str = os.getenv("FINNHUB_API_KEY", "")
+    # Financial Modeling Prep — แหล่งปัจจัยพื้นฐานหุ้นไทย/ต่างประเทศบนคลาวด์ (Yahoo บล็อก IP ดาต้าเซ็นเตอร์)
+    fmp_api_key: str = os.getenv("FMP_API_KEY", "")
     # OANDA (ทอง/เงิน/forex ตรง TradingView OANDA เป๊ะ). ตั้ง token แล้วระบบ route ให้เอง
     oanda_api_token: str = os.getenv("OANDA_API_TOKEN", "")
     oanda_account_id: str = os.getenv("OANDA_ACCOUNT_ID", "")  # เว้นว่างได้ ระบบดึงอัตโนมัติ

@@ -222,6 +222,72 @@ async def fetch_yahoo_fundamentals(symbol: str) -> dict:
     }
 
 
+async def fetch_fmp_fundamentals(symbol: str) -> dict:
+    """ดึงปัจจัยพื้นฐานจาก Financial Modeling Prep (ต้องตั้ง FMP_API_KEY).
+
+    FMP เป็น API จริง ใช้ได้จาก IP ดาต้าเซ็นเตอร์ (ต่างจาก Yahoo ที่บล็อก) — ใช้เป็นแหล่ง
+    หลักของหุ้นไทย/ต่างประเทศบนเว็ป. หมายเหตุ: free tier อาจไม่ครอบคลุมหุ้นไทยทุกตัว.
+    """
+    from app.config import get_settings
+    key = get_settings().fmp_api_key
+    if not key:
+        raise RuntimeError("ยังไม่ได้ตั้ง FMP_API_KEY")
+    import httpx
+    base = "https://financialmodelingprep.com/api/v3"
+
+    async def _get(c, path: str):
+        sep = "&" if "?" in path else "?"
+        r = await c.get(f"{base}/{path}{sep}apikey={key}")
+        r.raise_for_status()
+        d = r.json()
+        if isinstance(d, dict) and d.get("Error Message"):
+            raise RuntimeError("FMP: " + str(d.get("Error Message"))[:100])
+        return d[0] if isinstance(d, list) and d else (d if isinstance(d, dict) else {})
+
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=_YA_UA) as c:
+        prof = await _get(c, f"profile/{symbol}")
+        ratios = await _get(c, f"ratios-ttm/{symbol}")
+        growth = await _get(c, f"financial-growth/{symbol}?period=annual&limit=1")
+    if not prof and not ratios:
+        raise RuntimeError(f"FMP ไม่มีข้อมูลของ {symbol} (อาจไม่รองรับในแพ็กฟรี)")
+
+    def pick(*keys, src=None):
+        for d in ([src] if src is not None else [ratios, prof, growth]):
+            for k in keys:
+                if d.get(k) is not None:
+                    return _to_float(d.get(k))
+        return None
+
+    dy = pick("dividendYielTTM", "dividendYieldTTM")  # FMP สะกด "Yiel" ในบาง endpoint
+    if dy is not None and dy > 1:
+        dy = dy / 100.0
+    return {
+        "symbol": symbol.upper(),
+        "long_name": prof.get("companyName") or symbol.upper(),
+        "sector": prof.get("sector"),
+        "industry": prof.get("industry"),
+        "summary": (prof.get("description") or "")[:1500] or None,
+        "currency": prof.get("currency"),
+        "market_cap": pick("mktCap", "marketCap", "marketCapTTM"),
+        "pe": pick("peRatioTTM", "peRatio", "pe"),
+        "forward_pe": None,
+        "peg": pick("pegRatioTTM", "priceEarningsToGrowthRatioTTM"),
+        "pb": pick("priceToBookRatioTTM", "pbRatioTTM"),
+        "roe": pick("returnOnEquityTTM", "roeTTM"),
+        "gross_margin": pick("grossProfitMarginTTM"),
+        "operating_margin": pick("operatingProfitMarginTTM"),
+        "profit_margin": pick("netProfitMarginTTM"),
+        "debt_to_equity": pick("debtEquityRatioTTM", "debtToEquityTTM"),
+        "current_ratio": pick("currentRatioTTM"),
+        "revenue_growth": pick("revenueGrowth", src=growth),
+        "earnings_growth": pick("epsgrowth", "epsGrowth", src=growth),
+        "fcf": None,
+        "fcf_yield": pick("freeCashFlowYieldTTM"),
+        "dividend_yield": dy,
+        "payout_ratio": pick("payoutRatioTTM"),
+    }
+
+
 _SNAPSHOT_KEYS = (
     "symbol", "long_name", "sector", "industry", "summary", "market_cap",
     "pe", "forward_pe", "peg", "pb", "roe", "gross_margin", "operating_margin",
@@ -275,17 +341,26 @@ async def get_fundamentals(symbol: str, *, facts: dict | None = None,
         snap = latest_snapshot(facts)
         _apply_price_ratios(snap, price)
 
-    # แหล่ง live: Yahoo ผ่าน httpx ก่อน (รองรับ US + ไทย, คุมได้), ตกไปใช้ yfinance ถ้าล้ม
+    # แหล่ง live ตามลำดับ. หุ้นไทย/ไม่มี EDGAR → ลอง FMP ก่อน (ใช้ได้จากคลาวด์);
+    # หุ้น US มี EDGAR เป็นฐานแล้ว → ไม่เปลือง quota FMP (ใช้เป็น last resort).
+    from app.config import get_settings
+    has_fmp = bool(get_settings().fmp_api_key)
+    order: list = []
+    if not facts and has_fmp:
+        order.append(("fmp", fetch_fmp_fundamentals))
+    order.append(("yahoo", fetch_yahoo_fundamentals))
+    order.append(("yfinance", lambda s: asyncio.to_thread(_fetch_sync, s)))
+    if facts and has_fmp:
+        order.append(("fmp", fetch_fmp_fundamentals))
+
     live, live_src = None, None
-    try:
-        live = await fetch_yahoo_fundamentals(key)
-        live_src = "yahoo"
-    except Exception:
+    for name, fn in order:
         try:
-            live = await asyncio.to_thread(_fetch_sync, key)
-            live_src = "yfinance"
+            live = await fn(key)
+            live_src = name
+            break
         except Exception:
-            live = None
+            continue
     if live:
         for k, v in live.items():
             if v is not None:

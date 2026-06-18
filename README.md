@@ -44,6 +44,7 @@ uvicorn app.main:app --reload --port 8000
 |---|---|---|
 | `DATA_PROVIDER` | `yahoo` (แนะนำ) / `mock` / `finnhub` | แหล่งข้อมูลราคา |
 | `FINNHUB_API_KEY` | คีย์จาก finnhub.io | เปิดข้อมูลหุ้นสหรัฐจริง (เฉพาะ provider finnhub) |
+| `FMP_API_KEY` | คีย์ฟรีจาก financialmodelingprep.com | ปัจจัยพื้นฐาน**หุ้นไทย/ต่างประเทศ**บนคลาวด์ (Yahoo บล็อก IP ดาต้าเซ็นเตอร์); หุ้น US ใช้ SEC EDGAR อยู่แล้ว |
 | `ANTHROPIC_API_KEY` | คีย์จาก console.anthropic.com | เปิดการวิเคราะห์ด้วย Claude เต็มรูปแบบ |
 | `ANTHROPIC_MODEL` | `claude-opus-4-8` | รุ่นโมเดล |
 | `TRADINGVIEW_WEBHOOK_SECRET` | ค่าสุ่ม | ยืนยัน webhook จาก TradingView |
