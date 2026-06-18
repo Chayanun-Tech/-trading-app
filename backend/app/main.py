@@ -497,6 +497,52 @@ async def analyze_fundamentals_route(req: AnalyzeFundamentalsRequest):
     ))
 
 
+def _git_publish_offline(symbol: str) -> dict:
+    """commit + push ไฟล์ snapshot ออฟไลน์ขึ้น GitHub + HF (เว็ป). ใช้ได้เฉพาะที่มี git/remote
+    (เครื่องผู้ใช้). บน HF container ไม่มี .git → คืน pushed=false อย่างนุ่มนวล."""
+    import subprocess
+    repo = str(FRONTEND_DIR.parent)
+    rel = "backend/app/offline_fundamentals.json"
+
+    def run(args, timeout):
+        return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=timeout)
+
+    try:
+        run(["add", rel], 30)
+        c = run(["commit", "-m", f"Update offline fundamentals: {symbol.upper()}", "--", rel], 30)
+        if c.returncode != 0 and "nothing to commit" in (c.stdout + c.stderr).lower():
+            return {"pushed": False, "error": "ไม่มีการเปลี่ยนแปลง (ข้อมูลเดิมอยู่แล้ว)"}
+        p1 = run(["push", "origin", "HEAD"], 150)
+        p2 = run(["push", "hf", "HEAD:main"], 200)
+        if p2.returncode == 0:
+            return {"pushed": True, "error": None}
+        return {"pushed": False, "error": (p2.stderr or p1.stderr or "push ล้มเหลว")[:200]}
+    except Exception as exc:  # noqa: BLE001
+        return {"pushed": False, "error": str(exc)[:200]}
+
+
+@app.post("/api/fundamentals/update-offline")
+async def update_offline_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น KBANK.BK")):
+    """ดึงข้อมูลพื้นฐานสด → เซฟ snapshot ออฟไลน์ → push ขึ้นเว็ปอัตโนมัติ.
+    ใช้ได้เฉพาะตอนรันในเครื่อง (Yahoo เข้าถึงได้); บนเว็ปจะแจ้งว่าอัปเดตไม่ได้."""
+    if not is_equity_symbol(symbol):
+        raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น")
+    try:
+        snap = await update_offline(symbol)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, "อัปเดตได้เฉพาะตอนรันในเครื่อง (เว็ปดึง Yahoo สำหรับหุ้นไทยไม่ได้): "
+                                 + str(exc)[:120])
+    pub = await asyncio.to_thread(_git_publish_offline, symbol)
+    return {
+        "updated": True,
+        "symbol": symbol.upper(),
+        "long_name": snap.get("long_name"),
+        "as_of": snap.get("fetched_at"),
+        "published": pub.get("pushed"),
+        "publish_detail": pub.get("error") or "push ขึ้นเว็ปแล้ว (เว็ป rebuild ~3-8 นาที)",
+    }
+
+
 # ---------- Backtest (ท่าไม้ตาย) ----------
 @app.post("/api/backtest")
 async def backtest_route(req: BacktestRequest):

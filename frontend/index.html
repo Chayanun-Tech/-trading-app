@@ -395,10 +395,12 @@
 
     <div id="fundamentalsPanel" class="panel-body hidden">
       <div class="grid3">
-        <div class="field"><label>หุ้น (US)</label><input id="viSymbol" placeholder="เช่น AAPL" /></div>
+        <div class="field"><label>หุ้น (US / ไทย .BK)</label><input id="viSymbol" placeholder="เช่น AAPL หรือ KBANK.BK" /></div>
         <div class="field" style="align-self:end;"><button class="primary" onclick="runFundamentalAnalysis()">วิเคราะห์ VI</button></div>
+        <div class="field" style="align-self:end;"><button onclick="updateOfflineThai()" title="ดึงข้อมูลสดแล้วบันทึก+push ขึ้นเว็ป (ใช้ได้ตอนรันในเครื่อง)">🔄 อัปเดตขึ้นเว็ป</button></div>
       </div>
-      <div class="note" style="margin-top:6px;">วิเคราะห์ปัจจัยพื้นฐานสำหรับลงทุนระยะยาว (หุ้นรายตัวเท่านั้น — ไม่รองรับคริปโต/ฟอเร็กซ์)</div>
+      <div class="note" style="margin-top:6px;">วิเคราะห์ปัจจัยพื้นฐานสำหรับลงทุนระยะยาว (หุ้นรายตัวเท่านั้น). หุ้น US = สด/งบลึก; หุ้นไทยบนเว็ป = ออฟไลน์ กดปุ่ม "อัปเดตขึ้นเว็ป" ตอนรันในเครื่องเพื่อรีเฟรช</div>
+      <div id="viUpdateStatus" class="note" style="margin-top:4px;"></div>
       <div id="viResult" class="note" style="margin-top:10px;">พิมพ์สัญลักษณ์หุ้นแล้วกด "วิเคราะห์ VI"</div>
 
       <div id="financialsSection" style="margin-top:18px; border-top:1px solid var(--border); padding-top:12px;">
@@ -2325,6 +2327,22 @@ async function runFundamentalAnalysis() {
   } catch (e) { notifyError(errorMessage(e), "VI analysis failed"); $("viResult").innerHTML = `<div class="down">${e.message || e}</div>`; }
 }
 
+async function updateOfflineThai() {
+  let sym = ($("viSymbol").value || currentSymbol || "").trim().toUpperCase();
+  if (!sym) { $("viUpdateStatus").innerHTML = `<span class="down">กรุณาพิมพ์สัญลักษณ์หุ้น</span>`; return; }
+  $("viSymbol").value = sym;
+  $("viUpdateStatus").innerHTML = `<span class="note">⏳ ดึงข้อมูลสด ${sym} + บันทึก + push ขึ้นเว็ป... (อาจใช้เวลาสักครู่)</span>`;
+  try {
+    const res = await fetch(`${API}/api/fundamentals/update-offline?symbol=${encodeURIComponent(sym)}`, { method:"POST" });
+    if (!res.ok) throw new Error((await res.json().catch(()=>({detail:res.statusText}))).detail || res.statusText);
+    const d = await res.json();
+    const when = d.as_of ? new Date(d.as_of*1000).toLocaleString() : "";
+    const pub = d.published ? `✅ push ขึ้นเว็ปแล้ว (เว็ป rebuild ~3-8 นาที)` : `⚠️ บันทึกในเครื่องแล้ว แต่ยังไม่ขึ้นเว็ป: ${d.publish_detail||""}`;
+    $("viUpdateStatus").innerHTML = `<span class="up">บันทึก ${d.symbol} แล้ว (${when})</span> — ${pub}`;
+    runFundamentalAnalysis();
+  } catch (e) { $("viUpdateStatus").innerHTML = `<span class="down">อัปเดตไม่สำเร็จ: ${e.message || e}</span>`; }
+}
+
 function renderValueReport(r) {
   const rows = r.verdicts.map(v => `
     <tr>
@@ -2341,11 +2359,14 @@ function renderValueReport(r) {
     ["Rev growth", viMetric(m.revenue_growth)], ["FCF yield", viMetric(m.fcf_yield)], ["Div yield", viMetric(m.dividend_yield)],
   ].map(([k, val]) => `<div class="stat"><div class="tiny">${k}</div><div><b>${val}</b></div></div>`).join("");
   const gradeCls = VI_GRADE_CLASS[r.quality_grade] || "neutral";
+  const offlineBadge = (r.data_source || "").includes("offline")
+    ? `<span class="pill" style="background:#7a5; color:#fff;" title="ข้อมูลออฟไลน์ — กด 'อัปเดตขึ้นเว็ป' ตอนรันในเครื่องเพื่อรีเฟรช">ออฟไลน์${r.offline_as_of ? " ณ " + new Date(r.offline_as_of*1000).toLocaleDateString() : ""}</span>`
+    : "";
   $("viResult").innerHTML = `
     <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
       <div class="${gradeCls}" style="font-size:42px; font-weight:800; line-height:1;">${r.quality_grade}</div>
       <div>
-        <div><b>${r.long_name || r.symbol}</b> ${r.sector ? `<span class="pill">${r.sector}</span>` : ""}</div>
+        <div><b>${r.long_name || r.symbol}</b> ${r.sector ? `<span class="pill">${r.sector}</span>` : ""} ${offlineBadge}</div>
         <div class="note">คะแนนคุณค่า ${r.value_score}/100 — ${r.consensus_strength}</div>
       </div>
     </div>

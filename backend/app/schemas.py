@@ -141,6 +141,8 @@ class ValueReport(BaseModel):
     consensus_strength: str
     summary: str
     key_metrics: dict
+    data_source: Optional[str] = None       # edgar / yahoo / offline / fmp ...
+    offline_as_of: Optional[int] = None     # unix time ถ้าข้อมูลมาจาก snapshot ออฟไลน์
     ai_enabled: bool
     disclaimer: str
 

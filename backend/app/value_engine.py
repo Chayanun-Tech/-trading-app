@@ -100,6 +100,8 @@ def build_value_report(verdicts: list[dict], snapshot: dict, *, ai_enabled: bool
         "consensus_strength": agg["consensus_strength"],
         "summary": summary or _fallback_summary(verdicts, agg, snapshot),
         "key_metrics": _key_metrics(snapshot),
+        "data_source": snapshot.get("_source"),
+        "offline_as_of": snapshot.get("fetched_at") if "offline" in (snapshot.get("_source") or "") else None,
         "ai_enabled": ai_enabled,
         "disclaimer": DISCLAIMER,
     }

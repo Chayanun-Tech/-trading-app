@@ -8,11 +8,36 @@ yfinance เป็น lib แบบ sync + ช้า + โดน rate-limit ไ�
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
+from pathlib import Path
 
 _CACHE_TTL = 12 * 3600  # 12 ชั่วโมง
 _cache: dict[str, tuple[float, dict]] = {}
+
+# snapshot ออฟไลน์ (commit ลง repo + ฝังใน Docker image) — ใช้บนเว็ปที่ดึง Yahoo หุ้นไทยไม่ได้
+_OFFLINE_PATH = Path(__file__).resolve().parent / "offline_fundamentals.json"
+
+
+def load_offline() -> dict:
+    try:
+        return json.loads(_OFFLINE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def get_offline(symbol: str) -> dict | None:
+    return load_offline().get((symbol or "").upper().strip())
+
+
+def save_offline(symbol: str, snap: dict) -> None:
+    data = load_offline()
+    entry = {k: v for k, v in snap.items() if k != "_source"}
+    entry["fetched_at"] = int(time.time())
+    data[(symbol or "").upper().strip()] = entry
+    _OFFLINE_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True),
+                             encoding="utf-8")
 
 
 def _ensure_ascii_ca_bundle() -> None:
@@ -343,43 +368,75 @@ async def get_fundamentals(symbol: str, *, facts: dict | None = None,
         if cached and now - cached[0] < _CACHE_TTL:
             return cached[1]
 
+    def _merge(dst: dict, src: dict) -> None:
+        for k, v in (src or {}).items():
+            if v is not None and k != "_source":
+                dst[k] = v
+
+    def _has_quant(d: dict) -> bool:
+        return any(d.get(k) is not None for k in ("roe", "pe", "gross_margin", "operating_margin"))
+
+    from app.config import get_settings
+    has_fmp = bool(get_settings().fmp_api_key)
+    sources: list[str] = []
+
     snap: dict = {}
-    if facts:
+    if facts:  # หุ้น US: EDGAR เป็นฐานเต็ม (เสถียร ไม่ต้องพึ่ง Yahoo)
         from app.financials import latest_snapshot
         snap = latest_snapshot(facts)
         _apply_price_ratios(snap, price)
+        if _has_quant(snap):
+            sources.append("edgar")
 
-    # แหล่ง live ตามลำดับ. หุ้นไทย/ไม่มี EDGAR → ลอง FMP ก่อน (ใช้ได้จากคลาวด์);
-    # หุ้น US มี EDGAR เป็นฐานแล้ว → ไม่เปลือง quota FMP (ใช้เป็น last resort).
-    from app.config import get_settings
-    has_fmp = bool(get_settings().fmp_api_key)
-    order: list = []
-    if not facts and has_fmp:
-        order.append(("fmp", fetch_fmp_fundamentals))
-    order.append(("yahoo", fetch_yahoo_fundamentals))
-    order.append(("yfinance", lambda s: asyncio.to_thread(_fetch_sync, s)))
-    if facts and has_fmp:
-        order.append(("fmp", fetch_fmp_fundamentals))
+    # 1) สดเต็ม: Yahoo → yfinance (ใช้ได้ในเครื่อง; บนเว็ปหุ้นไทยจะล้ม)
+    if not _has_quant(snap):
+        for name, fn in (("yahoo", fetch_yahoo_fundamentals),
+                         ("yfinance", lambda s: asyncio.to_thread(_fetch_sync, s))):
+            try:
+                live = await fn(key)
+                if live:
+                    _merge(snap, live)
+                    sources.append(name)
+                    if _has_quant(snap):
+                        break
+            except Exception:
+                continue
 
-    live, live_src = None, None
-    for name, fn in order:
+    # 2) snapshot ออฟไลน์ (เต็มแต่ลงวันที่ — สำหรับเว็ปที่ดึงสดหุ้นไทยไม่ได้)
+    if not _has_quant(snap):
+        off = get_offline(key)
+        if off:
+            _merge(snap, off)
+            snap["fetched_at"] = off.get("fetched_at")
+            sources.append("offline")
+
+    # 3) FMP (หุ้นไทยแพ็กฟรี = profile บางส่วน / US sector) — ทางเลือกท้ายสุด
+    if not _has_quant(snap) and has_fmp:
         try:
-            live = await fn(key)
-            live_src = name
-            break
+            _merge(snap, await fetch_fmp_fundamentals(key))
+            sources.append("fmp")
         except Exception:
-            continue
-    if live:
-        for k, v in live.items():
-            if v is not None:
-                snap[k] = v
+            pass
 
     if not snap:
-        raise RuntimeError("ดึงข้อมูลพื้นฐานไม่สำเร็จจากทุกแหล่ง (Yahoo/SEC) — ลองใหม่ภายหลัง")
+        raise RuntimeError("ดึงข้อมูลพื้นฐานไม่สำเร็จจากทุกแหล่ง (Yahoo/SEC/ออฟไลน์) — ลองใหม่ภายหลัง")
 
     for k in _SNAPSHOT_KEYS:
         snap.setdefault(k, None)
     snap.setdefault("symbol", key)
-    snap["_source"] = "+".join(x for x in [("edgar" if facts else None), live_src] if x) or "none"
+    snap["_source"] = "+".join(sources) or "none"
     _cache[key] = (now, snap)
+    return snap
+
+
+async def update_offline(symbol: str) -> dict:
+    """ดึงข้อมูลสด (Yahoo→yfinance) แล้วเซฟลง snapshot ออฟไลน์. ใช้ได้เฉพาะที่ Yahoo เข้าถึงได้
+    (รันในเครื่อง). บนเว็ป (Yahoo บล็อก) จะ throw — ให้ route แจ้งผู้ใช้."""
+    key = (symbol or "").upper().strip()
+    try:
+        snap = await fetch_yahoo_fundamentals(key)
+    except Exception:
+        snap = await asyncio.to_thread(_fetch_sync, key)
+    save_offline(key, snap)
+    _cache.pop(key, None)  # ล้าง cache เพื่อให้รอบหน้าอ่านค่าใหม่
     return snap
