@@ -37,6 +37,7 @@ from app.schools import evaluate_python_schools
 from app.value_engine import build_value_report
 from app.value_schools import evaluate_value_schools
 from app.vision import analyze_image
+from app.intrinsic_value import build_iv_report
 
 settings = get_settings()
 app = FastAPI(title="AI Trade Assistant", version="0.1.0")
@@ -516,6 +517,26 @@ async def analyze_fundamentals_route(req: AnalyzeFundamentalsRequest):
         summary=ai.get("summary"), weights=req.weights,
         ai_status=ai.get("ai_status"), ai_as_of=ai.get("ai_as_of"),
     ))
+
+
+@app.get("/api/intrinsic-value")
+async def intrinsic_value_route(symbol: str = Query(...)):
+    """คำนวณมูลค่าที่แท้จริง (IV) ด้วย DCF / Graham / Peter Lynch / DDM / P/E"""
+    if not is_equity_symbol(symbol):
+        raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น")
+    try:
+        snapshot = await _value_snapshot(symbol)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูลพื้นฐานไม่สำเร็จ: {exc}")
+    # ลอง SEC EDGAR สำหรับ FCF ย้อนหลัง (เฉพาะหุ้น US — ถ้าล้มเหลวใช้ snapshot อย่างเดียว)
+    financials = None
+    try:
+        facts = await edgar.get_company_facts(symbol)
+        from app.financials import build_financials
+        financials = build_financials(facts, "annual")
+    except Exception:  # noqa: BLE001
+        pass
+    return build_iv_report(snapshot, financials)
 
 
 def _git_publish_offline(symbol: str) -> dict:

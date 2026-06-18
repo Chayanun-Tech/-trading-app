@@ -386,6 +386,7 @@
       <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
       <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
+      <button class="tab" id="tabIv" onclick="showTab('iv')">📐 มูลค่า IV</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
     </div>
 
@@ -430,6 +431,16 @@
         <b>📰 ไทม์ไลน์เอกสาร SEC ล่าสุด</b>
         <div id="filingsView" class="note" style="margin-top:8px;">กด "วิเคราะห์ VI" เพื่อโหลดเอกสารล่าสุด (เฉพาะหุ้น US)</div>
       </div>
+    </div>
+
+    <div id="ivPanel" class="panel-body hidden">
+      <div class="grid3">
+        <div class="field"><label>หุ้น (US / ไทย .BK)</label><input id="ivSymbol" placeholder="เช่น AAPL, NVDA, KBANK.BK" /></div>
+        <div class="field" style="align-self:end;"><button class="primary" onclick="runIVAnalysis()">คำนวณมูลค่า IV</button></div>
+        <div></div>
+      </div>
+      <div class="note" style="margin-top:6px;">คำนวณมูลค่าที่แท้จริงด้วย 5 โมเดล: DCF · Graham · Peter Lynch · DDM · P/E — เหมาะสำหรับหุ้น US (ข้อมูลสด); หุ้นไทยใช้ข้อมูลออฟไลน์</div>
+      <div id="ivResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้นแล้วกด "คำนวณมูลค่า IV"</div></div>
     </div>
 
     <div id="imagePanel" class="panel-body hidden">
@@ -2234,7 +2245,7 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","fundamentals","strategy","image","indicators","auto"].forEach(name => {
+  ["report","fundamentals","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -2410,6 +2421,137 @@ function renderValueReport(r) {
     ${aiNote}
     <div class="table-scroll"><table><thead><tr><th>ด้าน</th><th>มุมมอง</th><th>ค่า/สัญญาณ</th><th>มั่นใจ</th><th>เหตุผล</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="note" style="margin-top:10px;">${r.disclaimer}</div>`;
+}
+
+// ===== Intrinsic Value =====
+
+const IV_STATUS_CLS = {
+  "Strongly Undervalued": "up", "Undervalued": "up",
+  "Fairly Valued": "neutral", "Overvalued": "down", "Highly Overvalued": "down", "N/A": "neutral"
+};
+const IV_STATUS_TH = {
+  "Strongly Undervalued": "ถูกมาก ✅", "Undervalued": "ถูก 👍",
+  "Fairly Valued": "ราคายุติธรรม ⚖️", "Overvalued": "แพง ⚠️",
+  "Highly Overvalued": "แพงมาก 🔴", "N/A": "ไม่มีข้อมูล"
+};
+
+async function runIVAnalysis() {
+  const sym = ($("ivSymbol").value || currentSymbol || "").trim().toUpperCase();
+  if (!sym) { $("ivResult").innerHTML = `<div class="down">กรุณาพิมพ์สัญลักษณ์หุ้น</div>`; return; }
+  $("ivSymbol").value = sym;
+  $("ivResult").innerHTML = `<div class="note">กำลังคำนวณมูลค่า ${sym}... (ครั้งแรกอาจช้าสักครู่)</div>`;
+  showTab("iv");
+  try {
+    const res = await fetch(`${API}/api/intrinsic-value?symbol=${encodeURIComponent(sym)}`);
+    if (!res.ok) throw new Error(await res.text());
+    renderIVReport(await res.json());
+  } catch (e) {
+    $("ivResult").innerHTML = `<div class="down">${e.message || e}</div>`;
+  }
+}
+
+function fmtIV(v, currency) {
+  if (v === null || v === undefined) return "—";
+  const prefix = (currency && currency !== "USD") ? currency + " " : "$";
+  return prefix + Number(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function renderIVReport(r) {
+  const s = r.summary || {};
+  const price = r.current_price || 0;
+  const cur = r.currency || "USD";
+  const statusCls = IV_STATUS_CLS[s.status] || "neutral";
+  const statusTh = IV_STATUS_TH[s.status] || s.status;
+  const mosPct = s.margin_of_safety_pct;
+  const upside = s.iv_median ? ((s.iv_median - price) / price * 100) : null;
+
+  // Summary bar
+  const summaryHtml = `
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px;">
+      <div class="${statusCls}" style="font-size:36px; font-weight:800; line-height:1;">${statusTh.split(" ")[1] || "📊"}</div>
+      <div>
+        <div><b>${r.long_name || r.symbol}</b></div>
+        <div class="note">ราคาปัจจุบัน ${fmtIV(price, cur)} · IV median ${fmtIV(s.iv_median, cur)} · ช่วง ${fmtIV(s.iv_min, cur)} – ${fmtIV(s.iv_max, cur)}</div>
+      </div>
+      <div style="margin-left:auto; text-align:right;">
+        <div class="${statusCls}" style="font-size:20px; font-weight:700;">${statusTh}</div>
+        ${upside !== null ? `<div class="note">${upside > 0 ? "+" : ""}${upside.toFixed(1)}% vs ราคาปัจจุบัน</div>` : ""}
+        ${mosPct !== null ? `<div class="note">Margin of Safety: ${mosPct.toFixed(1)}%</div>` : ""}
+      </div>
+    </div>`;
+
+  // Bar chart แสดงช่วง IV
+  const barsHtml = (r.models || []).map(m => {
+    if (!m.intrinsic_value) return "";
+    const iv = m.intrinsic_value;
+    const up = ((iv - price) / price * 100).toFixed(1);
+    const cls = IV_STATUS_CLS[m.status] || "neutral";
+    const barW = Math.min(100, Math.max(5, (iv / (s.iv_max * 1.1)) * 100));
+    return `<div style="margin-bottom:10px;">
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
+        <b>${m.model}</b>
+        <span class="${cls}">${fmtIV(iv, cur)} (${up > 0 ? "+" : ""}${up}%)</span>
+      </div>
+      <div style="background:#1a2535; border-radius:4px; height:10px; position:relative;">
+        <div style="background:${up >= 0 ? "var(--up,#2a6)" : "var(--down,#e55)"}; width:${barW}%; height:100%; border-radius:4px;"></div>
+        <div style="position:absolute; left:${Math.min(95, (price/(s.iv_max*1.1))*100)}%; top:-3px; width:2px; height:16px; background:#fff5; border-radius:2px;" title="ราคาปัจจุบัน"></div>
+      </div>
+      ${m.formula ? `<div class="tiny" style="color:var(--muted); margin-top:2px;">${escapeHtml(m.formula)}</div>` : ""}
+    </div>`;
+  }).join("");
+
+  // Model detail table
+  const rowsHtml = (r.models || []).map(m => {
+    const cls = IV_STATUS_CLS[m.status] || "neutral";
+    const warnings = (m.warnings || []).map(w => `<div class="tiny" style="color:#f90;">${escapeHtml(w)}</div>`).join("");
+    const lynchScore = m.lynch_score !== undefined && m.lynch_score !== null
+      ? `<br><span class="tiny">Lynch Score: ${m.lynch_score} — ${escapeHtml(m.lynch_score_status || "")}</span>` : "";
+    return `<tr>
+      <td><b>${m.model}</b></td>
+      <td class="${cls}">${fmtIV(m.intrinsic_value, cur)}</td>
+      <td class="${cls}">${m.upside_pct !== null && m.upside_pct !== undefined ? (m.upside_pct > 0 ? "+" : "") + m.upside_pct + "%" : "—"}</td>
+      <td>${m.margin_of_safety_pct !== null && m.margin_of_safety_pct !== undefined ? m.margin_of_safety_pct + "%" : "—"}</td>
+      <td class="${cls}">${IV_STATUS_TH[m.status] || m.status}${lynchScore}</td>
+      <td class="note">${warnings}</td>
+    </tr>`;
+  }).join("");
+
+  // Sensitivity heatmap
+  let heatmapHtml = "";
+  if (r.heatmap) {
+    const h = r.heatmap;
+    const ivMed = s.iv_median;
+    heatmapHtml = `<div style="margin-top:18px; border-top:1px solid var(--border); padding-top:12px;">
+      <b>🌡️ Sensitivity Heatmap (DCF) — WACC × Perpetual Growth</b>
+      <div class="note" style="margin-bottom:8px;">แต่ละช่องคือ IV/share (${cur}) · แนวตั้ง = WACC · แนวนอน = Perpetual Growth · เส้นขาว = ราคาปัจจุบัน</div>
+      <div class="table-scroll"><table style="font-size:11px; border-collapse:collapse; min-width:100%;">
+        <thead><tr><th>WACC ↓ / g →</th>${h.perp_axis.map(p => `<th>${p}%</th>`).join("")}</tr></thead>
+        <tbody>${h.rows.map(row => `<tr><th>${row.wacc}%</th>${row.values.map(v => {
+          if (v === null) return `<td style="color:var(--muted)">—</td>`;
+          const up = price > 0 ? (v - price) / price : 0;
+          const bg = up > 0.3 ? "rgba(42,160,102,.35)" : up > 0.1 ? "rgba(42,160,102,.18)" : up > -0.1 ? "rgba(200,180,60,.18)" : up > -0.3 ? "rgba(229,85,85,.18)" : "rgba(229,85,85,.35)";
+          const bold = ivMed && Math.abs(v - ivMed) < ivMed * 0.05 ? "font-weight:700;" : "";
+          return `<td style="background:${bg}; padding:4px 8px; text-align:right; ${bold}">${v.toLocaleString(undefined,{maximumFractionDigits:0})}</td>`;
+        }).join("")}</tr>`).join("")}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  // Data used
+  const d = r.data_used || {};
+  const dataHtml = `<div style="margin-top:14px; border-top:1px solid var(--border); padding-top:10px;">
+    <div class="note" style="margin-bottom:6px;"><b>ข้อมูลที่ใช้คำนวณ</b></div>
+    <div class="grid3">
+      ${[["EPS",d.eps],["P/E",d.pe],["BVPS",d.bvps],["Base FCF (M)",d.base_fcf !== undefined ? (d.base_fcf/1e6).toFixed(1) : null],["Shares (M)",d.shares],["Cash ($B)",d.cash],["Debt ($B)",d.debt],["Growth 1-5yr",d.growth_1_5_pct !== undefined ? d.growth_1_5_pct+"%" : null],["Growth 6-9yr",d.growth_6_9_pct !== undefined ? d.growth_6_9_pct+"%" : null]]
+        .map(([k,v]) => `<div class="stat"><div class="tiny">${k}</div><b>${v !== null && v !== undefined ? v : "—"}</b></div>`).join("")}
+    </div>
+  </div>`;
+
+  $("ivResult").innerHTML = summaryHtml
+    + `<div style="margin-bottom:16px;">${barsHtml}</div>`
+    + `<div class="table-scroll"><table><thead><tr><th>โมเดล</th><th>IV/หุ้น</th><th>Upside</th><th>MoS</th><th>สถานะ</th><th>หมายเหตุ</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`
+    + heatmapHtml + dataHtml
+    + `<div class="note" style="margin-top:12px; font-size:11px;">⚠️ มูลค่า IV เป็นเพียงการประมาณการ ขึ้นกับสมมติฐานที่ใช้ — ไม่ใช่คำแนะนำซื้อขาย. DCF ไวต่อ WACC และ Perpetual Growth มาก</div>`;
 }
 
 // ===== งบการเงินย้อนหลัง (SEC EDGAR) =====
