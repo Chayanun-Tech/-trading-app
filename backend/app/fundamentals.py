@@ -233,32 +233,40 @@ async def fetch_fmp_fundamentals(symbol: str) -> dict:
     if not key:
         raise RuntimeError("ยังไม่ได้ตั้ง FMP_API_KEY")
     import httpx
-    base = "https://financialmodelingprep.com/api/v3"
+    base = "https://financialmodelingprep.com/stable"
 
-    async def _get(c, path: str):
+    async def _get(c, path: str) -> dict:
         sep = "&" if "?" in path else "?"
         r = await c.get(f"{base}/{path}{sep}apikey={key}")
+        if r.status_code == 402:  # ไม่อยู่ในแพ็ก (เช่น หุ้นไทยในแพ็กฟรี) → ข้ามอย่างนุ่มนวล
+            return {}
         r.raise_for_status()
         d = r.json()
-        if isinstance(d, dict) and d.get("Error Message"):
-            raise RuntimeError("FMP: " + str(d.get("Error Message"))[:100])
+        if isinstance(d, dict) and (d.get("Error Message") or d.get("message")):
+            return {}
         return d[0] if isinstance(d, list) and d else (d if isinstance(d, dict) else {})
 
     async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=_YA_UA) as c:
-        prof = await _get(c, f"profile/{symbol}")
-        ratios = await _get(c, f"ratios-ttm/{symbol}")
-        growth = await _get(c, f"financial-growth/{symbol}?period=annual&limit=1")
+        prof = await _get(c, f"profile?symbol={symbol}")
+        ratios = await _get(c, f"ratios-ttm?symbol={symbol}")
+        km = await _get(c, f"key-metrics-ttm?symbol={symbol}")
+        growth = await _get(c, f"financial-growth?symbol={symbol}&limit=1")
     if not prof and not ratios:
         raise RuntimeError(f"FMP ไม่มีข้อมูลของ {symbol} (อาจไม่รองรับในแพ็กฟรี)")
 
+    merged = {**growth, **km, **ratios, **prof}  # prof ทับท้าย (มี marketCap/price/sector)
+
     def pick(*keys, src=None):
-        for d in ([src] if src is not None else [ratios, prof, growth]):
-            for k in keys:
-                if d.get(k) is not None:
-                    return _to_float(d.get(k))
+        d = src if src is not None else merged
+        for k in keys:
+            if d.get(k) is not None:
+                return _to_float(d.get(k))
         return None
 
-    dy = pick("dividendYielTTM", "dividendYieldTTM")  # FMP สะกด "Yiel" ในบาง endpoint
+    price, last_div = _to_float(prof.get("price")), _to_float(prof.get("lastDividend"))
+    dy = pick("dividendYieldTTM")
+    if dy is None and last_div and price:  # หุ้นไทยแพ็กฟรี: คำนวณจาก profile
+        dy = last_div / price
     if dy is not None and dy > 1:
         dy = dy / 100.0
     return {
@@ -268,23 +276,23 @@ async def fetch_fmp_fundamentals(symbol: str) -> dict:
         "industry": prof.get("industry"),
         "summary": (prof.get("description") or "")[:1500] or None,
         "currency": prof.get("currency"),
-        "market_cap": pick("mktCap", "marketCap", "marketCapTTM"),
-        "pe": pick("peRatioTTM", "peRatio", "pe"),
+        "market_cap": pick("marketCap"),
+        "pe": pick("priceToEarningsRatioTTM"),
         "forward_pe": None,
-        "peg": pick("pegRatioTTM", "priceEarningsToGrowthRatioTTM"),
-        "pb": pick("priceToBookRatioTTM", "pbRatioTTM"),
-        "roe": pick("returnOnEquityTTM", "roeTTM"),
+        "peg": pick("priceToEarningsGrowthRatioTTM"),
+        "pb": pick("priceToBookRatioTTM"),
+        "roe": pick("returnOnEquityTTM"),
         "gross_margin": pick("grossProfitMarginTTM"),
         "operating_margin": pick("operatingProfitMarginTTM"),
         "profit_margin": pick("netProfitMarginTTM"),
-        "debt_to_equity": pick("debtEquityRatioTTM", "debtToEquityTTM"),
+        "debt_to_equity": pick("debtToEquityRatioTTM"),
         "current_ratio": pick("currentRatioTTM"),
         "revenue_growth": pick("revenueGrowth", src=growth),
-        "earnings_growth": pick("epsgrowth", "epsGrowth", src=growth),
+        "earnings_growth": pick("epsgrowth", "netIncomeGrowth", src=growth),
         "fcf": None,
         "fcf_yield": pick("freeCashFlowYieldTTM"),
         "dividend_yield": dy,
-        "payout_ratio": pick("payoutRatioTTM"),
+        "payout_ratio": pick("dividendPayoutRatioTTM"),
     }
 
 
