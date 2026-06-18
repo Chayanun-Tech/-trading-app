@@ -286,6 +286,12 @@ def latest_snapshot(facts: dict) -> dict:
 
     rev, rev_prev = val("income", "revenue"), (val("income", "revenue", last - 1) if last >= 1 else None)
     ni, ni_prev = val("income", "net_income"), (val("income", "net_income", last - 1) if last >= 1 else None)
+    equity = val("balance", "total_equity")
+    shares = val("pershare", "shares_diluted")
+    cash = val("balance", "cash")
+    std, ltd = val("balance", "short_term_debt"), val("balance", "long_term_debt")
+    total_debt = None if std is None and ltd is None else (std or 0) + (ltd or 0)
+    div_paid = val("cashflow", "dividends_paid")
     return {
         "symbol": fin.get("symbol"),
         "long_name": fin.get("entity_name"),
@@ -294,10 +300,15 @@ def latest_snapshot(facts: dict) -> dict:
         "revenue": rev,
         "net_income": ni,
         "eps": val("income", "eps_diluted"),
-        "shares": val("pershare", "shares_diluted"),
-        "total_equity": val("balance", "total_equity"),
+        "shares": shares,
+        "total_equity": equity,
+        "cash": cash,
+        "total_debt": total_debt,
         "fcf": val("cashflow", "free_cash_flow"),
-        "dividends_paid": val("cashflow", "dividends_paid"),
+        "dividends_paid": div_paid,
+        # ค่าต่อหุ้นสำหรับสาย IV (Graham/DDM) — คำนวณจากงบ EDGAR โดยตรง
+        "bvps": (equity / shares if equity and shares and shares > 0 else None),
+        "dps": (abs(div_paid) / shares if div_paid and shares and shares > 0 else None),
         "roe": val("ratios", "roe"),
         "gross_margin": val("ratios", "gross_margin"),
         "operating_margin": val("ratios", "operating_margin"),

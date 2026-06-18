@@ -45,27 +45,28 @@ def _pct(v: Any) -> float | None:
 
 
 def _growth_from_financials(financials: dict | None) -> float | None:
-    """คำนวณ median FCF growth จาก EDGAR financials (annual)"""
+    """คำนวณ median FCF growth จาก EDGAR financials (annual).
+
+    โครงสร้าง build_financials = {periods:[...], groups:[{key, metrics:[{key, values:[...]}]}]}
+    values เรียงเก่า→ใหม่ (ตาม periods)
+    """
     if not financials:
         return None
-    rows = financials.get("rows", [])
-    # rows เรียงใหม่สุดก่อน → เก่าสุดท้าย
-    fcf_series = []
-    for r in rows:
-        ocf = _safe(r.get("OperatingCashFlow") or r.get("operating_cash_flow"))
-        capex = _safe(r.get("CapitalExpenditure") or r.get("capital_expenditure") or 0)
-        if ocf is not None:
-            fcf_series.append(ocf - abs(capex))
-    if len(fcf_series) < 2:
+    groups = financials.get("groups", [])
+    cf = next((g for g in groups if g.get("key") == "cashflow"), None)
+    if not cf:
+        return None
+    fcf_metric = next((m for m in cf["metrics"] if m.get("key") == "free_cash_flow"), None)
+    if not fcf_metric:
+        return None
+    series = [_safe(v) for v in fcf_metric.get("values", []) if _safe(v) is not None]
+    if len(series) < 2:
         return None
     growths = []
-    for i in range(len(fcf_series) - 1):
-        prev = fcf_series[i + 1]
-        curr = fcf_series[i]
+    for i in range(1, len(series)):
+        prev, curr = series[i - 1], series[i]
         if prev > 0:
             growths.append((curr - prev) / prev)
-    if not growths:
-        return None
     valid = [g for g in growths if -1 < g < 5]
     return statistics.median(valid) if valid else None
 

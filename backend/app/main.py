@@ -445,7 +445,10 @@ async def _equity_price_safe(symbol: str) -> float | None:
 async def _value_snapshot(symbol: str) -> dict:
     facts = await _edgar_facts_safe(symbol)
     price = await _equity_price_safe(symbol)
-    return await get_fundamentals(symbol, facts=facts, price=price)
+    snap = await get_fundamentals(symbol, facts=facts, price=price)
+    if price:  # เก็บราคาปัจจุบันไว้ใน snapshot (สาย IV ต้องใช้เทียบ upside/margin of safety)
+        snap = {**snap, "price": price}
+    return snap
 
 
 @app.get("/api/fundamentals")
