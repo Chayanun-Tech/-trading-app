@@ -65,3 +65,32 @@ def claude_school_list() -> list[dict]:
         {"id": s["id"], "name": s["display_name"]}
         for s in schools_by_evaluator("claude")
     ]
+
+
+# ---------- สาย VI (ปัจจัยพื้นฐาน) — ทะเบียนแยกจากสายเทคนิค ----------
+@lru_cache
+def get_value_index() -> dict:
+    with open(KNOWLEDGE_DIR / "value_index.json", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def value_schools() -> list[dict]:
+    """รายการ 'ด้าน' ของสาย VI ทั้งหมดจาก value_index.json."""
+    return get_value_index()["schools"]
+
+
+def value_schools_by_evaluator(kind: str) -> list[dict]:
+    return [s for s in value_schools() if s["evaluator"] == kind]
+
+
+def value_knowledge_bundle() -> str:
+    """รวมความรู้ของด้าน VI ที่ใช้ evaluator='claude' เป็นข้อความ ground ให้โมเดล."""
+    seen: set[str] = set()
+    parts: list[str] = []
+    for s in value_schools_by_evaluator("claude"):
+        fname = s["file"]
+        if fname in seen:
+            continue
+        seen.add(fname)
+        parts.append(json.dumps(_load_file(fname), ensure_ascii=False))
+    return "\n\n".join(parts)

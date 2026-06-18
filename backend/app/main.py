@@ -22,12 +22,19 @@ from app.bitkub import BitkubClient
 from app.config import get_settings
 from app.data.base import DataProvider
 from app.db import DatabaseStore
+from app import edgar
 from app.engine import build_report
+from app.financials import build_financials
+from app.fundamentals import get_fundamentals, is_equity_symbol
+from app.fundamentals_ai import analyze_fundamentals_ai
 from app.indicators import compute_indicators
 from app.math_model import DEFAULT_MODEL_PATH, load_model
-from app.schemas import (AlertRule, AnalyzeRequest, BacktestRequest, CandlesResponse,
-                         LiveSignalRequest, MultiSchoolReport)
+from app.schemas import (AlertRule, AnalyzeFundamentalsRequest, AnalyzeRequest,
+                         BacktestRequest, CandlesResponse, LiveSignalRequest,
+                         MultiSchoolReport, ValueReport)
 from app.schools import evaluate_python_schools
+from app.value_engine import build_value_report
+from app.value_schools import evaluate_value_schools
 from app.vision import analyze_image
 
 settings = get_settings()
@@ -412,6 +419,57 @@ async def analyze_image_route(
         symbol=symbol, timeframe=timeframe,
         psychology_summary=ai.get("psychology_summary"),
         suggested_plan=ai.get("suggested_plan"),
+    ))
+
+
+# ---------- สาย VI (ปัจจัยพื้นฐาน) ----------
+@app.get("/api/fundamentals")
+async def fundamentals_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL")):
+    """ดึง snapshot ปัจจัยพื้นฐานดิบ (ใช้ดีบัก/แสดงเมตริก)."""
+    if not is_equity_symbol(symbol):
+        raise HTTPException(400, "สาย VI ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
+    try:
+        return await get_fundamentals(symbol)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูลพื้นฐานไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/financials")
+async def financials_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL"),
+                           freq: str = Query("annual", description="annual | quarterly")):
+    """งบการเงินย้อนหลังลึก (10-15+ ปี) จาก SEC EDGAR — รายปี/รายไตรมาส."""
+    if not is_equity_symbol(symbol):
+        raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
+    if freq not in ("annual", "quarterly"):
+        raise HTTPException(400, "freq ต้องเป็น annual หรือ quarterly")
+    try:
+        facts = await edgar.get_company_facts(symbol)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูล SEC EDGAR ไม่สำเร็จ: {exc}")
+    return build_financials(facts, freq)
+
+
+@app.post("/api/analyze-fundamentals", response_model=ValueReport)
+async def analyze_fundamentals_route(req: AnalyzeFundamentalsRequest):
+    """สาย VI: ดึงปัจจัยพื้นฐาน → ประเมินด้านเชิงตัวเลข (Python) + เชิงคุณภาพ (Claude) → เกรด A–F."""
+    if not is_equity_symbol(req.symbol):
+        raise HTTPException(400, "สาย VI ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
+    try:
+        snapshot = await get_fundamentals(req.symbol)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูลพื้นฐานไม่สำเร็จ: {exc}")
+
+    py_verdicts = evaluate_value_schools(snapshot)
+    if req.enabled_schools is not None:
+        py_verdicts = [v for v in py_verdicts if v["id"] in req.enabled_schools]
+    ai = await analyze_fundamentals_ai(req.symbol, snapshot, req.note, req.enabled_schools)
+    verdicts = py_verdicts + ai["verdicts"]
+
+    return ValueReport(**build_value_report(
+        verdicts, snapshot, ai_enabled=settings.llm_enabled(),
+        summary=ai.get("summary"), weights=req.weights,
     ))
 
 

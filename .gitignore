@@ -25,5 +25,11 @@ Bitkub.txt
 data/candles/
 data/autotrade_history.json
 
+# SEC EDGAR / financials cache (refetched on demand)
+data/financials/
+
+# Local editor/agent settings
+.claude/settings.local.json
+
 # Experimental model versions (keep only the promoted production model)
 models/registry/

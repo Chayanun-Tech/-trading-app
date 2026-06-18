@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "updated": "2026-06-17",
+  "note": "ทะเบียน 'ด้าน' การวิเคราะห์เชิงคุณค่า/ปัจจัยพื้นฐาน (สาย VI) สำหรับนักลงทุนระยะยาว แยกจากสายเทคนิค (_index.json). evaluator 'python' = ตัดสินจากอัตราส่วนการเงิน, 'claude' = ใช้ AI ประเมินเชิงคุณภาพธุรกิจ. weight = น้ำหนักเวลาเฉลี่ยรวมเป็นคะแนนคุณค่า",
+  "schools": [
+    {"id": "valuation", "display_name": "มูลค่า (Valuation: P/E, PEG, P/B)", "category": "valuation", "evaluator": "python", "weight": 1.2, "file": "value/quant_principles.json"},
+    {"id": "profitability", "display_name": "ความสามารถทำกำไร (Profitability: ROE/Margin)", "category": "quality", "evaluator": "python", "weight": 1.2, "file": "value/quant_principles.json"},
+    {"id": "financial_health", "display_name": "สุขภาพการเงิน (Financial Health)", "category": "health", "evaluator": "python", "weight": 1.1, "file": "value/quant_principles.json"},
+    {"id": "growth", "display_name": "การเติบโต (Growth)", "category": "growth", "evaluator": "python", "weight": 1.0, "file": "value/quant_principles.json"},
+    {"id": "cash_flow", "display_name": "กระแสเงินสดอิสระ (Free Cash Flow)", "category": "cash", "evaluator": "python", "weight": 1.1, "file": "value/quant_principles.json"},
+    {"id": "dividend", "display_name": "ปันผล & ความยั่งยืน (Dividend)", "category": "income", "evaluator": "python", "weight": 0.6, "file": "value/quant_principles.json"},
+    {"id": "moat", "display_name": "ความได้เปรียบการแข่งขัน (Moat)", "category": "qualitative", "evaluator": "claude", "weight": 1.3, "file": "value/qualitative_principles.json"},
+    {"id": "management", "display_name": "คุณภาพผู้บริหาร (Management)", "category": "qualitative", "evaluator": "claude", "weight": 1.0, "file": "value/qualitative_principles.json"},
+    {"id": "business_quality", "display_name": "คุณภาพธุรกิจ (Business Quality)", "category": "qualitative", "evaluator": "claude", "weight": 1.1, "file": "value/qualitative_principles.json"}
+  ]
+}

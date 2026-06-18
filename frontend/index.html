@@ -382,14 +382,47 @@
 
     <div class="tabs">
       <button class="tab active" id="tabReport" onclick="showTab('report')">Report</button>
+      <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">💎 VI / พื้นฐาน</button>
       <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
       <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
-      <button class="tab" id="tabAuto" onclick="showTab('auto')">Auto Bot</button>
+      <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
     </div>
 
     <div id="reportPanel" class="panel-body">
       <div id="result" class="note">Ready.</div>
+    </div>
+
+    <div id="fundamentalsPanel" class="panel-body hidden">
+      <div class="grid3">
+        <div class="field"><label>หุ้น (US)</label><input id="viSymbol" placeholder="เช่น AAPL" /></div>
+        <div class="field" style="align-self:end;"><button class="primary" onclick="runFundamentalAnalysis()">วิเคราะห์ VI</button></div>
+      </div>
+      <div class="note" style="margin-top:6px;">วิเคราะห์ปัจจัยพื้นฐานสำหรับลงทุนระยะยาว (หุ้นรายตัวเท่านั้น — ไม่รองรับคริปโต/ฟอเร็กซ์)</div>
+      <div id="viResult" class="note" style="margin-top:10px;">พิมพ์สัญลักษณ์หุ้นแล้วกด "วิเคราะห์ VI"</div>
+
+      <div id="financialsSection" style="margin-top:18px; border-top:1px solid var(--border); padding-top:12px;">
+        <style>
+          .fin-seg{min-height:28px; padding:4px 12px; font-size:12px; border:1px solid var(--border); background:transparent; color:var(--muted,#9aa); cursor:pointer;}
+          .fin-seg:first-child{border-radius:6px 0 0 6px;} .fin-seg:last-child{border-radius:0 6px 6px 0; border-left:none;}
+          .fin-seg.active{background:var(--accent,#2a6); color:#fff;}
+          .fin-gtabs{display:flex; gap:4px; flex-wrap:wrap; margin-bottom:6px;}
+          .fin-gtab{min-height:26px; padding:4px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:transparent; color:var(--muted,#9aa); cursor:pointer;}
+          .fin-gtab.active{background:var(--accent,#2a6); color:#fff; border-color:var(--accent,#2a6);}
+          table.fin-table{font-size:12px; border-collapse:collapse; min-width:100%;}
+          table.fin-table th, table.fin-table td{padding:3px 8px; border-bottom:1px solid var(--border); white-space:nowrap;}
+          table.fin-table tbody tr:hover{background:rgba(255,255,255,0.04);}
+          table.fin-table tr.fin-row-sel{background:rgba(42,160,102,0.16);}
+        </style>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <b>📊 งบการเงินย้อนหลัง (SEC EDGAR)</b>
+          <span style="flex:1"></span>
+          <div>
+            <button id="finFreqAnnual" class="fin-seg active" onclick="setFinFreq('annual')">รายปี</button><button id="finFreqQuarterly" class="fin-seg" onclick="setFinFreq('quarterly')">ไตรมาส</button>
+          </div>
+        </div>
+        <div id="financialsView" class="note" style="margin-top:10px;">กด "วิเคราะห์ VI" เพื่อโหลดงบย้อนหลังหลายปี</div>
+      </div>
     </div>
 
     <div id="imagePanel" class="panel-body hidden">
@@ -788,7 +821,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "imagePanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "fundamentalsPanel", "imagePanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -2194,7 +2227,7 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","strategy","image","indicators","auto"].forEach(name => {
+  ["report","fundamentals","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -2262,6 +2295,154 @@ function renderReport(r) {
     ${r.suggested_plan ? `<div class="note" style="margin:10px 0;">${r.suggested_plan}</div>` : ""}
     <div class="table-scroll"><table><thead><tr><th>School</th><th>View</th><th>Signal</th><th>Confidence</th><th>Reason</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="note" style="margin-top:10px;">${r.disclaimer}</div>`;
+}
+
+const VI_VIEW_TH = { good: "แข็งแรง", fair: "กลาง", poor: "อ่อน" };
+const VI_GRADE_CLASS = { A: "up", B: "up", C: "neutral", D: "down", F: "down" };
+
+function viMetric(v) {
+  if (v === null || v === undefined) return "—";
+  if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(2) + "B";
+  if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + "M";
+  if (Math.abs(v) > 0 && Math.abs(v) < 1) return (v * 100).toFixed(1) + "%";
+  return (+v).toFixed(2);
+}
+
+async function runFundamentalAnalysis() {
+  let sym = ($("viSymbol").value || currentSymbol || "").trim().toUpperCase();
+  if (!sym) { $("viResult").innerHTML = `<div class="down">กรุณาพิมพ์สัญลักษณ์หุ้น</div>`; return; }
+  $("viSymbol").value = sym;
+  $("viResult").innerHTML = `<div class="note">กำลังวิเคราะห์ปัจจัยพื้นฐาน ${sym}... (อาจช้าสักครู่ ครั้งแรกต้องดึงงบ)</div>`;
+  showTab("fundamentals");
+  try {
+    const res = await fetch(`${API}/api/analyze-fundamentals`, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ symbol: sym }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    renderValueReport(await res.json());
+    loadFinancials(sym, finFreq);
+  } catch (e) { notifyError(errorMessage(e), "VI analysis failed"); $("viResult").innerHTML = `<div class="down">${e.message || e}</div>`; }
+}
+
+function renderValueReport(r) {
+  const rows = r.verdicts.map(v => `
+    <tr>
+      <td><b>${v.name}</b> <span class="pill">${v.evaluator}</span></td>
+      <td class="${v.view === "good" ? "up" : v.view === "poor" ? "down" : "neutral"}">${VI_VIEW_TH[v.view] || v.view}</td>
+      <td class="note">${v.metric_value || v.signal || ""}</td>
+      <td>${v.confidence}%</td>
+      <td class="note">${v.rationale || ""}</td>
+    </tr>`).join("");
+  const m = r.key_metrics || {};
+  const cards = [
+    ["P/E", viMetric(m.pe)], ["PEG", viMetric(m.peg)], ["P/B", viMetric(m.pb)],
+    ["ROE", viMetric(m.roe)], ["Gross", viMetric(m.gross_margin)], ["D/E", viMetric(m.debt_to_equity)],
+    ["Rev growth", viMetric(m.revenue_growth)], ["FCF yield", viMetric(m.fcf_yield)], ["Div yield", viMetric(m.dividend_yield)],
+  ].map(([k, val]) => `<div class="stat"><div class="tiny">${k}</div><div><b>${val}</b></div></div>`).join("");
+  const gradeCls = VI_GRADE_CLASS[r.quality_grade] || "neutral";
+  $("viResult").innerHTML = `
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <div class="${gradeCls}" style="font-size:42px; font-weight:800; line-height:1;">${r.quality_grade}</div>
+      <div>
+        <div><b>${r.long_name || r.symbol}</b> ${r.sector ? `<span class="pill">${r.sector}</span>` : ""}</div>
+        <div class="note">คะแนนคุณค่า ${r.value_score}/100 — ${r.consensus_strength}</div>
+      </div>
+    </div>
+    <div class="gauge" style="margin-top:8px;"><div class="g-up" style="width:${r.value_score}%">คุณค่า ${r.value_score}%</div><div class="g-down" style="width:${100 - r.value_score}%"></div></div>
+    <div class="grid3" style="margin:10px 0;">${cards}</div>
+    <div class="note" style="margin:10px 0;">${r.summary || ""}</div>
+    <div class="table-scroll"><table><thead><tr><th>ด้าน</th><th>มุมมอง</th><th>ค่า/สัญญาณ</th><th>มั่นใจ</th><th>เหตุผล</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="note" style="margin-top:10px;">${r.disclaimer}</div>`;
+}
+
+// ===== งบการเงินย้อนหลัง (SEC EDGAR) =====
+let finCache = {};            // { SYMBOL: { annual:data, quarterly:data } }
+let finSymbol = null;
+let finFreq = "annual";
+let finGroupKey = "income";
+let finMetricKey = null;      // เมตริกที่เลือกแสดงกราฟ
+
+function setFinFreq(freq) {
+  if (finFreq === freq) return;
+  finFreq = freq;
+  $("finFreqAnnual").classList.toggle("active", freq === "annual");
+  $("finFreqQuarterly").classList.toggle("active", freq === "quarterly");
+  if (finSymbol) loadFinancials(finSymbol, freq);
+}
+
+async function loadFinancials(symbol, freq) {
+  finSymbol = symbol; finFreq = freq;
+  finCache[symbol] = finCache[symbol] || {};
+  $("financialsView").innerHTML = `<div class="note">กำลังโหลดงบ ${symbol} (${freq === "annual" ? "รายปี" : "ไตรมาส"})... ครั้งแรกต้องดึงจาก SEC อาจช้าสักครู่</div>`;
+  try {
+    let data = finCache[symbol][freq];
+    if (!data) {
+      const res = await fetch(`${API}/api/financials?symbol=${encodeURIComponent(symbol)}&freq=${freq}`);
+      if (!res.ok) throw new Error(await res.text());
+      data = await res.json();
+      finCache[symbol][freq] = data;
+    }
+    renderFinancials();
+  } catch (e) { $("financialsView").innerHTML = `<div class="down">${e.message || e}</div>`; }
+}
+
+function finCurrentData() { return (finCache[finSymbol] || {})[finFreq]; }
+
+function fmtFin(v, u) {
+  if (v === null || v === undefined) return "—";
+  if (u === "%") return (v * 100).toFixed(1) + "%";
+  if (u === "ratio") return (+v).toFixed(2);
+  if (u === "USD/shares") return "$" + (+v).toFixed(2);
+  const a = Math.abs(v), s = v < 0 ? "-" : "";
+  if (u === "shares") { if (a >= 1e9) return (v / 1e9).toFixed(2) + "B"; if (a >= 1e6) return (v / 1e6).toFixed(1) + "M"; return (+v).toFixed(0); }
+  if (a >= 1e9) return s + "$" + (a / 1e9).toFixed(2) + "B";
+  if (a >= 1e6) return s + "$" + (a / 1e6).toFixed(1) + "M";
+  return s + "$" + a.toFixed(0);
+}
+
+function svgBars(values, unit) {
+  const valid = values.filter(v => v !== null && v !== undefined);
+  if (!valid.length) return `<div class="note">ไม่มีข้อมูลสำหรับเมตริกนี้</div>`;
+  const W = Math.max(values.length * 34, 200), H = 130, pad = 16;
+  const max = Math.max(0, ...valid), min = Math.min(0, ...valid), range = (max - min) || 1;
+  const bw = (W - pad * 2) / values.length;
+  const zeroY = pad + (max / range) * (H - pad * 2);
+  let bars = "";
+  values.forEach((v, i) => {
+    if (v === null || v === undefined) return;
+    const x = pad + i * bw + bw * 0.15, w = bw * 0.7;
+    const h = Math.max(Math.abs(v) / range * (H - pad * 2), 1);
+    const y = v >= 0 ? zeroY - h : zeroY;
+    const col = v >= 0 ? "var(--green, #26a69a)" : "var(--red, #ef5350)";
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${col}"><title>${fmtFin(v, unit)}</title></rect>`;
+  });
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="max-height:140px; display:block;">
+    <line x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${(W - pad).toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>${bars}</svg>`;
+}
+
+function selectFinGroup(k) { finGroupKey = k; finMetricKey = null; renderFinancials(); }
+function selectFinMetric(k) { finMetricKey = k; renderFinancials(); }
+
+function renderFinancials() {
+  const d = finCurrentData();
+  if (!d) return;
+  if (!d.groups.some(g => g.key === finGroupKey)) finGroupKey = d.groups[0].key;
+  const grp = d.groups.find(g => g.key === finGroupKey);
+  if (!finMetricKey || !grp.metrics.some(m => m.key === finMetricKey)) finMetricKey = grp.metrics[0].key;
+  const metric = grp.metrics.find(m => m.key === finMetricKey) || grp.metrics[0];
+  const gtabs = d.groups.map(g => `<button class="fin-gtab ${g.key === finGroupKey ? "active" : ""}" onclick="selectFinGroup('${g.key}')">${g.label}</button>`).join("");
+  const head = `<th style="text-align:left; position:sticky; left:0; background:var(--panel,#111);">รายการ</th>` + d.periods.map(p => `<th style="text-align:right;">${p}</th>`).join("");
+  const rows = grp.metrics.map(m => `<tr class="${m.key === finMetricKey ? "fin-row-sel" : ""}" onclick="selectFinMetric('${m.key}')" style="cursor:pointer;">
+      <td style="text-align:left; position:sticky; left:0; background:var(--panel,#111);">${m.label}</td>
+      ${m.values.map(v => `<td style="text-align:right;">${fmtFin(v, m.unit)}</td>`).join("")}
+    </tr>`).join("");
+  $("financialsView").innerHTML = `
+    <div class="fin-gtabs">${gtabs}</div>
+    <div style="margin:8px 0 4px;"><b>${metric.label}</b> <span class="tiny">— คลิกแถวในตารางเพื่อเปลี่ยนกราฟ</span></div>
+    ${svgBars(metric.values, metric.unit)}
+    <div class="table-scroll" style="margin-top:8px; overflow-x:auto;"><table class="fin-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="note" style="margin-top:8px;">${d.entity_name || ""} · ${d.freq === "annual" ? "รายปี" : "รายไตรมาส"} · ${d.disclaimer || ""}</div>`;
 }
 
 function previewImg() {

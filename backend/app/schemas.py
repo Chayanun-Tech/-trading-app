@@ -109,6 +109,42 @@ class MultiSchoolReport(BaseModel):
     disclaimer: str
 
 
+class AnalyzeFundamentalsRequest(BaseModel):
+    """คำขอวิเคราะห์สาย VI (ปัจจัยพื้นฐาน) ของหุ้นหนึ่งตัว."""
+    symbol: str
+    note: Optional[str] = Field(default=None, description="ข้อมูล/บริบทเพิ่มเติมจากผู้ใช้")
+    enabled_schools: Optional[list[str]] = Field(default=None, description="id ด้านที่ให้ร่วมประเมิน (None=ทั้งหมด)")
+    weights: Optional[dict] = Field(default=None, description="น้ำหนักแต่ละด้าน {id: weight}")
+
+
+class ValueVerdict(BaseModel):
+    """ผลประเมินเชิงคุณค่าของด้านหนึ่ง = หนึ่งแถวในตาราง VI."""
+    id: str
+    name: str
+    category: str
+    view: Literal["good", "fair", "poor"]
+    signal: str  # undervalued / strong / weak / ...
+    confidence: int = Field(ge=0, le=100, description="ความเชื่อมั่นของด้านนี้ต่อมุมมอง (0-100)")
+    metric_value: Optional[str] = Field(default=None, description="ค่าเมตริกที่ใช้ตัดสิน")
+    rationale: str
+    evaluator: Literal["python", "claude"]
+
+
+class ValueReport(BaseModel):
+    """ผลรวมการประเมินสาย VI ทุกด้าน + ถ่วงน้ำหนักเป็นคะแนนคุณค่า/เกรด."""
+    symbol: Optional[str] = None
+    long_name: Optional[str] = None
+    sector: Optional[str] = None
+    verdicts: list[ValueVerdict]
+    value_score: int = Field(ge=0, le=100, description="คะแนนคุณค่า/คุณภาพรวม (0-100)")
+    quality_grade: str  # A / B / C / D / F
+    consensus_strength: str
+    summary: str
+    key_metrics: dict
+    ai_enabled: bool
+    disclaimer: str
+
+
 class ImageAnalyzeMeta(BaseModel):
     symbol: Optional[str] = None
     timeframe: Optional[str] = None

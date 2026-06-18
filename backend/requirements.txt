@@ -7,3 +7,4 @@ openai>=1.40
 python-dotenv>=1.0
 python-multipart>=0.0.9
 asyncpg>=0.29
+yfinance>=0.2.40
