@@ -133,6 +133,11 @@ def _fetch_sync(symbol: str) -> dict:
         "summary": (info.get("longBusinessSummary") or "")[:1500] or None,
         "market_cap": market_cap,
         "currency": info.get("currency"),
+        "eps": _to_float(info.get("trailingEps")),
+        # impliedSharesOutstanding รวมผลของหุ้นหลาย class ได้ดีกว่า (เช่น Visa)
+        "shares": _to_float(info.get("impliedSharesOutstanding") or info.get("sharesOutstanding")),
+        "bvps": _to_float(info.get("bookValue")),
+        "dps": _to_float(info.get("dividendRate")),
         # มูลค่า (valuation)
         "pe": _to_float(info.get("trailingPE")),
         "forward_pe": _to_float(info.get("forwardPE")),
@@ -244,6 +249,10 @@ async def fetch_yahoo_fundamentals(symbol: str) -> dict:
         "summary": (sp.get("longBusinessSummary") or "")[:1500] or None,
         "currency": fd.get("financialCurrency"),
         "market_cap": market_cap,
+        "eps": _raw(ks, "trailingEps"),
+        "shares": _raw(ks, "impliedSharesOutstanding") or _raw(ks, "sharesOutstanding"),
+        "bvps": _raw(ks, "bookValue"),
+        "dps": _raw(sd, "dividendRate"),
         "pe": _raw(sd, "trailingPE"),
         "forward_pe": _raw(sd, "forwardPE") or _raw(ks, "forwardPE"),
         "peg": _raw(ks, "pegRatio") or _raw(ks, "trailingPegRatio"),
@@ -353,20 +362,64 @@ def _apply_price_ratios(snap: dict, price: float | None) -> None:
     if not price or not shares:
         return
     mc = price * shares
-    snap["market_cap"] = mc
-    if eq and eq > 0:
+    if not snap.get("market_cap"):
+        snap["market_cap"] = mc
+    else:
+        mc = snap["market_cap"]
+    if not snap.get("pb") and eq and eq > 0:
         snap["pb"] = mc / eq
-    if ni and ni > 0:
+    if not snap.get("pe") and ni and ni > 0:
         snap["pe"] = mc / ni
-    elif eps and eps > 0:
+    elif not snap.get("pe") and eps and eps > 0:
         snap["pe"] = price / eps
-    if fcf and mc:
+    if snap.get("fcf_yield") is None and fcf and mc:
         snap["fcf_yield"] = fcf / mc
-    if div and mc:
+    if snap.get("dividend_yield") is None and div and mc:
         snap["dividend_yield"] = abs(div) / mc
     eg = snap.get("earnings_growth")
-    if snap.get("pe") and eg and eg > 0:
+    if snap.get("peg") is None and snap.get("pe") and eg and eg > 0:
         snap["peg"] = snap["pe"] / (eg * 100)
+
+
+def _derive_missing_per_share(snap: dict, price: float | None) -> None:
+    """เติมค่าต่อหุ้นเมื่อ XBRL ของบางบริษัทไม่ใช้แท็กมาตรฐาน.
+
+    ตัวอย่าง Visa แยกหุ้นหลาย class จน SEC companyfacts ไม่มี weighted-average shares/EPS
+    แบบ us-gaap ที่เราใช้ แต่ Yahoo ยังมี market cap/P-E/P-B/dividend yield จึงย้อนหา
+    shares, EPS, BVPS และ DPS ได้โดยไม่ทิ้งงบ EDGAR ที่น่าเชื่อถือกว่า.
+    """
+    if not price or price <= 0:
+        return
+    market_cap = _to_float(snap.get("market_cap"))
+    shares = _to_float(snap.get("shares"))
+    net_income = _to_float(snap.get("net_income"))
+    total_equity = _to_float(snap.get("total_equity"))
+    pe = _to_float(snap.get("pe"))
+    pb = _to_float(snap.get("pb"))
+    dividend_yield = _to_float(snap.get("dividend_yield"))
+    dividends_paid = _to_float(snap.get("dividends_paid"))
+
+    if not shares and market_cap and market_cap > 0:
+        shares = market_cap / price
+        snap["shares"] = shares
+    if not snap.get("eps"):
+        if net_income and shares and shares > 0:
+            snap["eps"] = net_income / shares
+        elif pe and pe > 0:
+            snap["eps"] = price / pe
+    if not total_equity and market_cap and pb and pb > 0:
+        total_equity = market_cap / pb
+        snap["total_equity"] = total_equity
+    if not snap.get("bvps"):
+        if total_equity and shares and shares > 0:
+            snap["bvps"] = total_equity / shares
+        elif pb and pb > 0:
+            snap["bvps"] = price / pb
+    if not snap.get("dps"):
+        if dividends_paid and shares and shares > 0:
+            snap["dps"] = abs(dividends_paid) / shares
+        elif dividend_yield is not None:
+            snap["dps"] = dividend_yield * price
 
 
 async def get_fundamentals(symbol: str, *, facts: dict | None = None,
@@ -384,9 +437,9 @@ async def get_fundamentals(symbol: str, *, facts: dict | None = None,
         if cached and now - cached[0] < _CACHE_TTL:
             return cached[1]
 
-    def _merge(dst: dict, src: dict) -> None:
+    def _merge(dst: dict, src: dict, *, missing_only: bool = False) -> None:
         for k, v in (src or {}).items():
-            if v is not None and k != "_source":
+            if v is not None and k != "_source" and (not missing_only or dst.get(k) is None):
                 dst[k] = v
 
     def _has_quant(d: dict) -> bool:
@@ -403,6 +456,23 @@ async def get_fundamentals(symbol: str, *, facts: dict | None = None,
         _apply_price_ratios(snap, price)
         if _has_quant(snap):
             sources.append("edgar")
+
+        # EDGAR ของบางบริษัทมีงบครบแต่ขาด EPS/shares เพราะโครงสร้างหุ้นหลาย class.
+        # เติมเฉพาะช่องว่างด้วย Yahoo โดยยังเก็บตัวเลขงบจาก EDGAR เป็นแหล่งหลัก.
+        critical = ("shares", "eps", "market_cap", "pe", "pb", "dividend_yield")
+        if any(snap.get(k) is None for k in critical):
+            for name, fn in (("yahoo", fetch_yahoo_fundamentals),
+                             ("yfinance", lambda s: asyncio.to_thread(_fetch_sync, s))):
+                try:
+                    live = await fn(key)
+                    if live:
+                        _merge(snap, live, missing_only=True)
+                        sources.append(name)
+                        break
+                except Exception:
+                    continue
+        _derive_missing_per_share(snap, price)
+        _apply_price_ratios(snap, price)
 
     # 1) สดเต็ม: Yahoo → yfinance (ใช้ได้ในเครื่อง; บนเว็ปหุ้นไทยจะล้ม)
     if not _has_quant(snap):

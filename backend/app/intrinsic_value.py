@@ -92,6 +92,7 @@ def classify_peter_lynch(snapshot: dict) -> dict:
     market_cap = _safe(snapshot.get("market_cap")) or 0
     profit_margin = _pct(snapshot.get("profit_margin"))
     fcf = _safe(snapshot.get("free_cash_flow") or snapshot.get("fcf")) or 0
+    net_income = _safe(snapshot.get("net_income"))
 
     cyclical_words = (
         "semiconductor", "automobile", "auto manufacturer", "steel", "metal",
@@ -134,6 +135,10 @@ def classify_peter_lynch(snapshot: dict) -> dict:
         scores["Fast Grower"] += 2
     if roe is not None and roe >= 20:
         scores["Fast Grower"] += 1
+    # กำไรปีเดียวอาจเด้งจากฐานต่ำ/รายการพิเศษ ถ้ารายได้โตต่ำในบริษัทใหญ่มาก
+    # ไม่ควรรีบจัดเป็น Fast Grower
+    if market_cap >= 50_000_000_000 and revenue_growth < 10:
+        scores["Fast Grower"] = max(0, scores["Fast Grower"] - 3)
 
     # Stalwart: บริษัทใหญ่ คุณภาพดี โตปานกลาง ไม่หวือหวา
     if market_cap >= 20_000_000_000:
@@ -145,6 +150,10 @@ def classify_peter_lynch(snapshot: dict) -> dict:
     if fcf > 0:
         scores["Stalwart"] += 1
     if roe is not None and roe >= 12:
+        scores["Stalwart"] += 1
+    if market_cap >= 50_000_000_000 and 0 <= revenue_growth < 15:
+        scores["Stalwart"] += 4
+    if dividend_yield >= 1.5:
         scores["Stalwart"] += 1
 
     # Slow Grower: โตต่ำ แต่มักคืนเงินผ่านปันผล
@@ -167,14 +176,16 @@ def classify_peter_lynch(snapshot: dict) -> dict:
     if sector.lower() in {"consumer cyclical", "basic materials", "energy", "industrials"}:
         scores["Cyclical"] += 2
 
-    # Turnaround: กำไรหด/ขาดทุน แต่ยังมีสัญญาณว่ารายได้หรือ FCF พอประคองได้
-    if earnings_growth < 0:
-        scores["Turnaround"] += 4
-    if revenue_growth > 0 and earnings_growth < 0:
+    # Turnaround: ต้องมีปัญหากำไรจริง ไม่ใช่เพียง growth ลดลงจากปีก่อน
+    if net_income is not None and net_income < 0:
+        scores["Turnaround"] += 5
+    if earnings_growth < -30:
         scores["Turnaround"] += 2
-    if pe <= 0:
+    if revenue_growth > 0 and net_income is not None and net_income < 0:
         scores["Turnaround"] += 2
-    if fcf > 0 and earnings_growth < 0:
+    if pe <= 0 and (net_income is None or net_income <= 0):
+        scores["Turnaround"] += 2
+    if fcf > 0 and net_income is not None and net_income < 0:
         scores["Turnaround"] += 1
     if debt_to_equity is not None and debt_to_equity > 2:
         scores["Turnaround"] += 1
