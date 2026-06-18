@@ -71,6 +71,213 @@ def _growth_from_financials(financials: dict | None) -> float | None:
     return statistics.median(valid) if valid else None
 
 
+def classify_peter_lynch(snapshot: dict) -> dict:
+    """จำแนกหุ้นแบบ Peter Lynch ด้วยข้อมูลเชิงปริมาณที่มีอยู่
+
+    นี่เป็น heuristic เพื่อช่วยเลือกกรอบวิเคราะห์ ไม่ใช่การจัดหมวดแบบเด็ดขาด
+    เพราะ Cyclical / Turnaround / Asset Play ต้องอ่านวงจรธุรกิจและหมายเหตุงบเพิ่มด้วย
+    """
+    sector = str(snapshot.get("sector") or "")
+    industry = str(snapshot.get("industry") or "")
+    business = f"{sector} {industry}".lower()
+    earnings_growth = _pct(snapshot.get("earnings_growth")) or 0
+    revenue_growth = _pct(snapshot.get("revenue_growth")) or 0
+    dividend_yield = _pct(snapshot.get("dividend_yield")) or 0
+    payout_ratio = _pct(snapshot.get("payout_ratio"))
+    pe = _safe(snapshot.get("pe")) or 0
+    peg = _safe(snapshot.get("peg"))
+    pb = _safe(snapshot.get("pb")) or 0
+    roe = _pct(snapshot.get("roe"))
+    debt_to_equity = _safe(snapshot.get("debt_to_equity"))
+    market_cap = _safe(snapshot.get("market_cap")) or 0
+    profit_margin = _pct(snapshot.get("profit_margin"))
+    fcf = _safe(snapshot.get("free_cash_flow") or snapshot.get("fcf")) or 0
+
+    cyclical_words = (
+        "semiconductor", "automobile", "auto manufacturer", "steel", "metal",
+        "mining", "oil", "gas", "energy", "chemical", "airline", "shipping",
+        "construction", "homebuilding", "commodity", "paper", "industrial",
+    )
+    defensive_words = (
+        "utility", "consumer defensive", "grocery", "food", "beverage",
+        "telecom", "household", "tobacco",
+    )
+    asset_words = (
+        "real estate", "reit", "bank", "insurance", "property", "land",
+        "hotel", "natural resources",
+    )
+    is_cyclical_business = any(word in business for word in cyclical_words)
+    is_defensive_business = any(word in business for word in defensive_words)
+    is_asset_business = any(word in business for word in asset_words)
+
+    scores = {
+        "Fast Grower": 0,
+        "Stalwart": 0,
+        "Slow Grower": 0,
+        "Cyclical": 0,
+        "Turnaround": 0,
+        "Asset Play": 0,
+    }
+
+    # Fast Grower: Lynch มักมองหากำไรเติบโตราว 20–25%+ โดยต้องระวังฐานสูง/ชะลอตัว
+    if earnings_growth >= 25:
+        scores["Fast Grower"] += 5
+    elif earnings_growth >= 15:
+        scores["Fast Grower"] += 3
+    if revenue_growth >= 20:
+        scores["Fast Grower"] += 3
+    elif revenue_growth >= 10:
+        scores["Fast Grower"] += 1
+    if dividend_yield < 1:
+        scores["Fast Grower"] += 1
+    if peg is not None and 0 < peg <= 1.5:
+        scores["Fast Grower"] += 2
+    if roe is not None and roe >= 20:
+        scores["Fast Grower"] += 1
+
+    # Stalwart: บริษัทใหญ่ คุณภาพดี โตปานกลาง ไม่หวือหวา
+    if market_cap >= 20_000_000_000:
+        scores["Stalwart"] += 2
+    if 7 <= earnings_growth < 20:
+        scores["Stalwart"] += 4
+    if 5 <= revenue_growth < 15:
+        scores["Stalwart"] += 2
+    if fcf > 0:
+        scores["Stalwart"] += 1
+    if roe is not None and roe >= 12:
+        scores["Stalwart"] += 1
+
+    # Slow Grower: โตต่ำ แต่มักคืนเงินผ่านปันผล
+    if -2 <= earnings_growth < 7:
+        scores["Slow Grower"] += 4
+    if revenue_growth < 7:
+        scores["Slow Grower"] += 2
+    if dividend_yield >= 3:
+        scores["Slow Grower"] += 3
+    elif dividend_yield >= 1.5:
+        scores["Slow Grower"] += 1
+    if is_defensive_business:
+        scores["Slow Grower"] += 2
+
+    # Cyclical: ประเภทธุรกิจมีน้ำหนักมากกว่า growth ช่วงเดียว
+    if is_cyclical_business:
+        scores["Cyclical"] += 6
+    if abs(earnings_growth) >= 30 and is_cyclical_business:
+        scores["Cyclical"] += 2
+    if sector.lower() in {"consumer cyclical", "basic materials", "energy", "industrials"}:
+        scores["Cyclical"] += 2
+
+    # Turnaround: กำไรหด/ขาดทุน แต่ยังมีสัญญาณว่ารายได้หรือ FCF พอประคองได้
+    if earnings_growth < 0:
+        scores["Turnaround"] += 4
+    if revenue_growth > 0 and earnings_growth < 0:
+        scores["Turnaround"] += 2
+    if pe <= 0:
+        scores["Turnaround"] += 2
+    if fcf > 0 and earnings_growth < 0:
+        scores["Turnaround"] += 1
+    if debt_to_equity is not None and debt_to_equity > 2:
+        scores["Turnaround"] += 1
+
+    # Asset Play: ราคาหรือกิจการมีสินทรัพย์รองรับชัดเจน
+    if 0 < pb <= 1.2:
+        scores["Asset Play"] += 5
+    elif 0 < pb <= 1.8:
+        scores["Asset Play"] += 2
+    if is_asset_business:
+        scores["Asset Play"] += 3
+    if dividend_yield >= 3:
+        scores["Asset Play"] += 1
+
+    ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    primary, top_score = ordered[0]
+    second, second_score = ordered[1]
+    if top_score <= 2:
+        confidence = "ต่ำ"
+    elif top_score >= 8 and top_score - second_score >= 3:
+        confidence = "สูง"
+    else:
+        confidence = "ปานกลาง"
+
+    labels_th = {
+        "Fast Grower": "หุ้นเติบโตเร็ว",
+        "Stalwart": "หุ้นใหญ่แข็งแกร่ง",
+        "Slow Grower": "หุ้นเติบโตช้า/เน้นปันผล",
+        "Cyclical": "หุ้นวัฏจักร",
+        "Turnaround": "หุ้นฟื้นตัว",
+        "Asset Play": "หุ้นสินทรัพย์",
+    }
+    descriptions = {
+        "Fast Grower": "กำไร/รายได้เติบโตสูง ตลาดให้ราคากับอนาคตมาก ต้องติดตามว่า growth รักษาได้หรือเริ่มชะลอ",
+        "Stalwart": "บริษัทขนาดใหญ่ ฐานธุรกิจแข็งแรง เติบโตปานกลาง เหมาะกับการดูคุณภาพกำไรและราคาที่ไม่แพงเกินไป",
+        "Slow Grower": "ธุรกิจโตต่ำแต่กระแสเงินสดค่อนข้างนิ่ง มักคืนผลตอบแทนผ่านเงินปันผล",
+        "Cyclical": "กำไรขึ้นลงตามวัฏจักรเศรษฐกิจ/สินค้าโภคภัณฑ์ ต้องดูจุดของรอบมากกว่าดู P/E ต่ำเพียงอย่างเดียว",
+        "Turnaround": "กิจการกำลังแก้ปัญหาหรือฟื้นจากช่วงกำไรหดตัว ต้องเน้นสภาพคล่อง หนี้ และหลักฐานการฟื้นจริง",
+        "Asset Play": "มูลค่าหลักอยู่ในสินทรัพย์ เช่น ที่ดิน เงินสด ทรัพยากร หรือมูลค่าทางบัญชีที่ตลาดอาจมองข้าม",
+    }
+    preferred_models = {
+        "Fast Grower": ["Peter Lynch / PEG", "DCF แบบหลายกรณี", "Forward P/E เทียบ growth"],
+        "Stalwart": ["P/E เทียบอดีตและอุตสาหกรรม", "DCF", "Dividend Yield/Shareholder Yield"],
+        "Slow Grower": ["DDM", "Dividend Yield", "DCF แบบอนุรักษนิยม"],
+        "Cyclical": ["กำไรเฉลี่ยกลางวัฏจักร", "P/BV", "EV/EBITDA กลางรอบ"],
+        "Turnaround": ["งบดุลและกระแสเงินสด", "Scenario DCF", "มูลค่าชำระบัญชี/สินทรัพย์"],
+        "Asset Play": ["P/BV และ NAV", "Graham Number", "มูลค่าสินทรัพย์สุทธิ"],
+    }
+    avoid_notes = {
+        "Fast Grower": "อย่าใช้ DDM หรือ P/E 15 เท่าเป็นคำตอบหลักหากบริษัทแทบไม่จ่ายปันผลและยังโตสูง",
+        "Stalwart": "อย่าจ่าย P/E สูงเหมือน Fast Grower หาก growth อยู่เพียงหลักเดียวถึงกลางสิบ",
+        "Slow Grower": "PEG มักไม่เด่นเพราะ growth ต่ำ ให้ดูปันผลว่ายั่งยืนและ payout ไม่ตึงเกินไป",
+        "Cyclical": "P/E มักดูต่ำที่สุดตรงยอดวัฏจักรและดูสูงตอนกำไรตก จึงห้ามอ่านกลับด้าน",
+        "Turnaround": "ตัวคูณกำไรปกติอาจใช้ไม่ได้จนกว่ากำไรและ FCF จะกลับมาเสถียร",
+        "Asset Play": "ต้องตรวจคุณภาพและความสามารถในการปลดล็อกสินทรัพย์ ไม่ใช่เชื่อ Book Value ทุกบาท",
+    }
+
+    reasons = []
+    if earnings_growth:
+        reasons.append(f"กำไรเติบโต {earnings_growth:.1f}%")
+    if revenue_growth:
+        reasons.append(f"รายได้เติบโต {revenue_growth:.1f}%")
+    reasons.append(f"Dividend Yield {dividend_yield:.2f}%")
+    if pe > 0:
+        reasons.append(f"P/E {pe:.1f} เท่า")
+    if peg is not None:
+        reasons.append(f"PEG {peg:.2f}")
+    if pb > 0:
+        reasons.append(f"P/BV {pb:.1f} เท่า")
+    if sector or industry:
+        reasons.append(f"ธุรกิจ: {industry or sector}")
+
+    return {
+        "primary": primary,
+        "primary_th": labels_th[primary],
+        "confidence": confidence,
+        "description": descriptions[primary],
+        "preferred_models": preferred_models[primary],
+        "avoid_note": avoid_notes[primary],
+        "reasons": reasons,
+        "secondary": [
+            {"type": name, "type_th": labels_th[name], "score": score}
+            for name, score in ordered[1:3] if score > 0
+        ],
+        "scores": [
+            {"type": name, "type_th": labels_th[name], "score": score}
+            for name, score in ordered
+        ],
+        "disclaimer": "การจำแนกนี้เป็นแนวทางจากตัวเลขล่าสุด หุ้นหนึ่งตัวอาจอยู่ได้มากกว่าหนึ่งกลุ่ม และควรอ่านลักษณะธุรกิจ/วงจรกำไรประกอบ",
+        "inputs": {
+            "earnings_growth_pct": round(earnings_growth, 1),
+            "revenue_growth_pct": round(revenue_growth, 1),
+            "dividend_yield_pct": round(dividend_yield, 2),
+            "payout_ratio_pct": round(payout_ratio, 1) if payout_ratio is not None else None,
+            "pe": round(pe, 2) if pe else None,
+            "peg": round(peg, 2) if peg is not None else None,
+            "pb": round(pb, 2) if pb else None,
+            "roe_pct": round(roe, 1) if roe is not None else None,
+            "profit_margin_pct": round(profit_margin, 1) if profit_margin is not None else None,
+        },
+    }
+
+
 # ── Model 1: DCF ─────────────────────────────────────────────────────────────
 
 def run_dcf(
@@ -378,6 +585,7 @@ def build_iv_report(snapshot: dict, financials: dict | None = None) -> dict:
         "current_price": price,
         "currency": snapshot.get("currency", "USD"),
         "models": models,
+        "stock_profile": classify_peter_lynch(snapshot),
         "summary": {
             "iv_min": round(iv_min, 2) if iv_min is not None else None,
             "iv_max": round(iv_max, 2) if iv_max is not None else None,
