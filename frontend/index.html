@@ -839,7 +839,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "fundamentalsPanel", "imagePanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "fundamentalsPanel", "ivPanel", "imagePanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
