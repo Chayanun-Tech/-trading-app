@@ -426,8 +426,122 @@
           <div class="note">คัดทั้งตลาด → ตัดหุ้นบาง/Warrant/SPAC → วิเคราะห์ Growth, Quality, งบดุล, ราคา และ runway</div>
         </div>
         <span style="flex:1;"></span>
+        <button id="mbGuideBtn" onclick="toggleMbGuide()" style="margin-right:6px;">📖 คู่มือ & Preset</button>
         <button class="primary" onclick="runMultibaggerScan()">เริ่มขุดหุ้น</button>
       </div>
+
+      <!-- ===== GUIDE SECTION ===== -->
+      <div id="mbGuideSection" style="display:none; margin-top:10px; border:1px solid var(--border); border-radius:8px; padding:14px 16px; background:#080f17;">
+        <style>
+          .mb-guide-h { font-size:13px; font-weight:700; color:var(--accent2); margin:0 0 8px; }
+          .mb-research-table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:14px; }
+          .mb-research-table th { color:var(--muted); font-weight:600; padding:4px 8px; border-bottom:1px solid var(--border); text-align:left; }
+          .mb-research-table td { padding:5px 8px; border-bottom:1px solid rgba(36,49,64,.5); vertical-align:top; line-height:1.45; }
+          .mb-research-table tr:last-child td { border-bottom:none; }
+          .mb-preset-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-bottom:14px; }
+          .mb-preset-card { border:1px solid var(--border); border-radius:8px; padding:12px; background:#0c141f; display:flex; flex-direction:column; gap:6px; }
+          .mb-preset-card:hover { border-color:var(--accent); }
+          .mb-preset-title { font-size:13px; font-weight:700; }
+          .mb-preset-sub { font-size:11px; color:var(--muted); line-height:1.4; }
+          .mb-preset-params { font-size:11px; color:var(--cyan); font-family:monospace; line-height:1.6; }
+          .mb-preset-apply { margin-top:auto; padding:5px 10px; font-size:12px; background:var(--accent); border:none; border-radius:5px; color:#fff; cursor:pointer; font-weight:650; }
+          .mb-score-row { display:flex; gap:8px; flex-wrap:wrap; }
+          .mb-score-chip { font-size:11px; padding:3px 10px; border-radius:999px; border:1px solid; }
+          .mb-warn { font-size:11px; color:var(--amber); margin-top:6px; line-height:1.5; }
+        </style>
+
+        <!-- Research basis -->
+        <div class="mb-guide-h">📚 งานวิจัยที่ใช้อ้างอิง</div>
+        <table class="mb-research-table">
+          <thead><tr><th>แหล่ง</th><th>ข้อค้นพบสำคัญ</th></tr></thead>
+          <tbody>
+            <tr><td><b>CAFÉ Working Paper 33 (2025)</b></td><td>ศึกษา 464 หุ้น 10x+ บน US exchanges ปี 2009–2024 → <b>FCF Yield คือตัวทำนายที่แรงที่สุด</b> มากกว่า EPS growth</td></tr>
+            <tr><td><b>Fama-French (1992–2024)</b></td><td>Small-cap + Value + Profitability = premium จริง ชัดเจนที่ market cap <b>$100M–$2B</b></td></tr>
+            <tr><td><b>AVUV (Dimensional/Avantis)</b></td><td>กรอง low P/B + P/E แล้วซ้อน <b>profitability filter</b> ตัด unprofitable ออก → ชนะ passive small-cap index</td></tr>
+            <tr><td><b>O'Shaughnessy (2011)</b></td><td>Revenue growth >15% + market cap $50M–$1B → ผลตอบแทนเฉลี่ยสูงสุดในระยะยาว</td></tr>
+            <tr><td><b>CAFÉ 2025 (เพิ่มเติม)</b></td><td>หุ้น multi-bagger <b>ไม่จำเป็นต้องมี EPS growth สูงก่อน</b> แต่ต้องมี asset growth ที่ EBITDA รองรับ · ดอกเบี้ยสูงลด return ~10%</td></tr>
+          </tbody>
+        </table>
+
+        <!-- 4 Presets -->
+        <div class="mb-guide-h">⚙️ Preset สำเร็จรูป — คลิกเพื่อใส่ค่าอัตโนมัติ</div>
+        <div class="mb-preset-grid">
+
+          <div class="mb-preset-card">
+            <div class="mb-preset-title">🚀 นักล่า Multi-bagger</div>
+            <div class="mb-preset-sub">ความเสี่ยงสูง · โอกาส 10–100x<br>อ้างอิง: CAFÉ 2025, Chris Mayer "100 Baggers"<br>เหมาะกับ: ผู้รับความเสี่ยงสูง รอได้ 3–10 ปี</div>
+            <div class="mb-preset-params">
+              Cap: $50M–$500M<br>
+              ราคา: ≥$2 · Volume: ≥$300K/วัน<br>
+              Sector: Technology · ผลลัพธ์: 20
+            </div>
+            <button class="mb-preset-apply" onclick="applyMbPreset({minCap:50,maxCap:500,price:2,dolVol:0.3,sector:'Technology',limit:20})">ใช้ Preset นี้</button>
+          </div>
+
+          <div class="mb-preset-card" style="border-color:var(--accent);">
+            <div class="mb-preset-title">⚖️ GARP คุณภาพ <span style="font-size:10px; background:var(--accent); color:#fff; border-radius:4px; padding:1px 6px; vertical-align:middle;">แนะนำ</span></div>
+            <div class="mb-preset-sub">สมดุล growth + quality + valuation<br>อ้างอิง: AVUV, Fama-French SMB+Profitability<br>เหมาะกับ: ใช้งานทั่วไป สมดุลที่สุด</div>
+            <div class="mb-preset-params">
+              Cap: $200M–$2,000M<br>
+              ราคา: ≥$5 · Volume: ≥$1.5M/วัน<br>
+              Sector: ทั้งหมด · ผลลัพธ์: 30
+            </div>
+            <button class="mb-preset-apply" onclick="applyMbPreset({minCap:200,maxCap:2000,price:5,dolVol:1.5,sector:'',limit:30})">ใช้ Preset นี้</button>
+          </div>
+
+          <div class="mb-preset-card">
+            <div class="mb-preset-title">🛡️ Small-cap Conservative</div>
+            <div class="mb-preset-sub">ลด downside risk · เน้นคุณภาพและสภาพคล่อง<br>อ้างอิง: O'Shaughnessy, Greenblatt Magic Formula<br>เหมาะกับ: ผู้เริ่มต้น หรือพอร์ตไม่ต้องการผันผวนสูง</div>
+            <div class="mb-preset-params">
+              Cap: $500M–$3,000M<br>
+              ราคา: ≥$10 · Volume: ≥$3M/วัน<br>
+              Sector: ทั้งหมด · ผลลัพธ์: 20
+            </div>
+            <button class="mb-preset-apply" onclick="applyMbPreset({minCap:500,maxCap:3000,price:10,dolVol:3,sector:'',limit:20})">ใช้ Preset นี้</button>
+          </div>
+
+          <div class="mb-preset-card">
+            <div class="mb-preset-title">💻 Tech Growth Specialist</div>
+            <div class="mb-preset-sub">เน้น Technology เท่านั้น Gross margin สูง = SaaS/software moat<br>อ้างอิง: Nasdaq tech small-cap data + SaaS metrics<br>เหมาะกับ: เชื่อว่า tech จะ outperform ระยะยาว</div>
+            <div class="mb-preset-params">
+              Cap: $100M–$2,000M<br>
+              ราคา: ≥$5 · Volume: ≥$1M/วัน<br>
+              Sector: Technology · ผลลัพธ์: 25
+            </div>
+            <button class="mb-preset-apply" onclick="applyMbPreset({minCap:100,maxCap:2000,price:5,dolVol:1,sector:'Technology',limit:25})">ใช้ Preset นี้</button>
+          </div>
+
+        </div>
+
+        <!-- Score guide -->
+        <div class="mb-guide-h">🎯 การอ่านคะแนน (จากระบบ 100 คะแนน)</div>
+        <div class="mb-score-row">
+          <span class="mb-score-chip up" style="border-color:var(--green);">🟢 70+ = ยอดเยี่ยม (top ~5%)</span>
+          <span class="mb-score-chip" style="color:var(--cyan); border-color:var(--cyan);">🔵 50–69 = ดี น่าศึกษาต่อ</span>
+          <span class="mb-score-chip" style="color:var(--amber); border-color:var(--amber);">🟡 35–49 = พอใช้ ต้องเปิดงบตรวจ</span>
+          <span class="mb-score-chip down" style="border-color:var(--red);">🔴 &lt;35 = ธงแดงหนัก หลีกเลี่ยง</span>
+        </div>
+        <div class="mb-score-row" style="margin-top:8px; font-size:11px; color:var(--muted);">
+          <span><b style="color:var(--text);">Growth 35pt</b> = รายได้โต (22) + กำไรโต (13)</span>
+          <span><b style="color:var(--text);">Quality 25pt</b> = Gross margin + Op margin + Profit margin + ROE</span>
+          <span><b style="color:var(--text);">Balance 20pt</b> = D/E + Current ratio + FCF บวก</span>
+          <span><b style="color:var(--text);">Valuation 10pt</b> = PEG + FCF yield</span>
+          <span><b style="color:var(--text);">Runway 10pt</b> = ≤$300M=10 / ≤$1B=9 / ≤$2B=7</span>
+        </div>
+        <div class="mb-warn">
+          ⚠️ งานวิจัย CAFÉ 2025: <b>FCF Yield คือตัวแปรทำนายที่แรงที่สุด</b> — หุ้นที่มีคะแนน Balance + Valuation สูง (FCF บวก + FCF yield ดี) มีโอกาส outperform สูงกว่าหุ้น Growth score สูงอย่างเดียว
+          &nbsp;·&nbsp; ดอกเบี้ยสูง (Fed rate สูง) ลดผลตอบแทน small-cap ลงเฉลี่ย ~10% — ควรเน้น Preset Conservative หรือ GARP ในช่วงนี้
+        </div>
+
+        <div style="margin-top:10px; font-size:11px; color:var(--muted);">
+          แหล่งข้อมูล:
+          <a href="https://www.open-access.bcu.ac.uk/16180/" target="_blank" style="color:var(--accent);">CAFÉ WP33 (2025)</a> ·
+          <a href="https://247wallst.com/investing/2026/02/25/the-profitability-filter-that-separates-avuv-from-every-other-small-cap-fund/" target="_blank" style="color:var(--accent);">AVUV Profitability Filter (2026)</a> ·
+          <a href="https://www.quant-investing.com/blog/find-next-10-bagger-using-data-driven-screening" target="_blank" style="color:var(--accent);">Quant Investing 10-Bagger</a>
+        </div>
+      </div>
+      <!-- ===== END GUIDE ===== -->
+
       <div class="grid3" style="margin-top:10px;">
         <div class="field"><label>Market cap ต่ำสุด (ล้าน $)</label><input id="mbMinCap" type="number" value="50" min="10" /></div>
         <div class="field"><label>Market cap สูงสุด (ล้าน $)</label><input id="mbMaxCap" type="number" value="3000" min="50" /></div>
@@ -2460,6 +2574,25 @@ function openCandidate(symbol, target) {
     showTab("fundamentals");
     runFundamentalAnalysis();
   }
+}
+
+function toggleMbGuide() {
+  const sec = $("mbGuideSection");
+  const btn = $("mbGuideBtn");
+  const open = sec.style.display === "none";
+  sec.style.display = open ? "block" : "none";
+  btn.textContent = open ? "✕ ปิดคู่มือ" : "📖 คู่มือ & Preset";
+}
+
+function applyMbPreset(p) {
+  $("mbMinCap").value = p.minCap;
+  $("mbMaxCap").value = p.maxCap;
+  $("mbMinPrice").value = p.price;
+  $("mbMinDollarVolume").value = p.dolVol;
+  $("mbSector").value = p.sector;
+  $("mbLimit").value = p.limit;
+  $("mbGuideSection").style.display = "none";
+  $("mbGuideBtn").textContent = "📖 คู่มือ & Preset";
 }
 
 async function runMultibaggerScan() {
