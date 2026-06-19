@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import time
 import uuid
+from typing import NamedTuple
 
 from app.schemas import AlertRule, TriggeredAlert
 
 _rules: dict[str, AlertRule] = {}
 _triggered: list[TriggeredAlert] = []
+_last_fired: dict[str, float] = {}  # rule_id → unix timestamp ที่ยิงล่าสุด
+ALERT_COOLDOWN_SECONDS = 1800  # ไม่ยิงซ้ำภายใน 30 นาที
 
 
 def add_rule(rule: AlertRule) -> AlertRule:
@@ -25,6 +28,7 @@ def list_rules() -> list[AlertRule]:
 
 
 def delete_rule(rule_id: str) -> bool:
+    _last_fired.pop(rule_id, None)  # reset cooldown เมื่อลบกฎ
     return _rules.pop(rule_id, None) is not None
 
 
@@ -36,9 +40,14 @@ def symbols_with_rules() -> set[str]:
     return {r.symbol for r in _rules.values()}
 
 
-def evaluate(symbol: str, price: float, rsi: float | None) -> list[TriggeredAlert]:
-    """ตรวจกฎทั้งหมดของ symbol นี้กับค่าปัจจุบัน คืนรายการที่เพิ่งทริกเกอร์."""
-    fired: list[TriggeredAlert] = []
+class FiredResult(NamedTuple):
+    alert: TriggeredAlert
+    notify_email: str | None
+
+
+def evaluate(symbol: str, price: float, rsi: float | None, global_email: str = "") -> list[FiredResult]:
+    """ตรวจกฎทั้งหมดของ symbol นี้กับค่าปัจจุบัน คืนรายการที่เพิ่งทริกเกอร์พร้อม email."""
+    fired: list[FiredResult] = []
     now = int(time.time())
     for rule in _rules.values():
         if rule.symbol != symbol:
@@ -53,11 +62,17 @@ def evaluate(symbol: str, price: float, rsi: float | None) -> list[TriggeredAler
         elif rule.kind == "rsi_below" and rsi is not None and rsi <= rule.value:
             hit, observed = True, rsi
         if hit:
+            rule_id = rule.id or ""
+            last = _last_fired.get(rule_id, 0)
+            if now - last < ALERT_COOLDOWN_SECONDS:
+                continue  # ยังอยู่ใน cooldown — ข้ามไป
+            _last_fired[rule_id] = now
             ta = TriggeredAlert(
-                rule_id=rule.id or "", symbol=symbol, kind=rule.kind,
+                rule_id=rule_id, symbol=symbol, kind=rule.kind,
                 value=rule.value, observed=round(observed, 2), time=now,
                 message=f"{symbol}: {rule.kind} {rule.value} (ค่าปัจจุบัน {round(observed, 2)})",
             )
-            fired.append(ta)
             _triggered.append(ta)
+            email = rule.notify_email or global_email or None
+            fired.append(FiredResult(alert=ta, notify_email=email))
     return fired

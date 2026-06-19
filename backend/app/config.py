@@ -35,6 +35,11 @@ class Settings:
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     tradingview_webhook_secret: str = os.getenv("TRADINGVIEW_WEBHOOK_SECRET", "change-me")
+
+    # Gmail สำหรับส่งแจ้งเตือน (ตั้ง App Password ใน Google Account → Security → App Passwords)
+    gmail_user: str = os.getenv("GMAIL_USER", "")
+    gmail_app_password: str = os.getenv("GMAIL_APP_PASSWORD", "")
+    alert_notify_email: str = os.getenv("ALERT_NOTIFY_EMAIL", "")
     bitkub_api_key: str = os.getenv("BITKUB_API_KEY", "")
     bitkub_api_secret: str = os.getenv("BITKUB_API_SECRET", "")
     bitkub_real_trading_enabled: bool = os.getenv("BITKUB_REAL_TRADING_ENABLED", "false").lower() == "true"
@@ -94,61 +99,69 @@ class Settings:
         "1d": 86400,
     }
 
-    # สัญลักษณ์ตัวอย่าง (หุ้นสหรัฐ + ตัวอย่างหุ้นไทยแบบ .BK)
+    # สัญลักษณ์ทั้งหมด พร้อม type: growth | value | dividend | cyclical | defensive | crypto | commodity | index
     sample_symbols = [
-        {"symbol": "AAPL", "name": "Apple Inc.", "market": "US"},
-        {"symbol": "MSFT", "name": "Microsoft", "market": "US"},
-        {"symbol": "NVDA", "name": "NVIDIA", "market": "US"},
-        {"symbol": "TSLA", "name": "Tesla", "market": "US"},
-        {"symbol": "META", "name": "Meta Platforms", "market": "US"},
-        {"symbol": "AMZN", "name": "Amazon.com", "market": "US"},
-        {"symbol": "GOOGL", "name": "Alphabet Class A", "market": "US"},
-        {"symbol": "AMD", "name": "Advanced Micro Devices", "market": "US"},
-        {"symbol": "KO", "name": "The Coca-Cola Company", "market": "US"},
-        {"symbol": "PEP", "name": "PepsiCo", "market": "US"},
-        {"symbol": "MCD", "name": "McDonald's", "market": "US"},
-        {"symbol": "NKE", "name": "Nike", "market": "US"},
-        {"symbol": "DIS", "name": "Walt Disney", "market": "US"},
-        {"symbol": "NFLX", "name": "Netflix", "market": "US"},
-        {"symbol": "JPM", "name": "JPMorgan Chase", "market": "US"},
-        {"symbol": "BAC", "name": "Bank of America", "market": "US"},
-        {"symbol": "V", "name": "Visa", "market": "US"},
-        {"symbol": "MA", "name": "Mastercard", "market": "US"},
-        {"symbol": "WMT", "name": "Walmart", "market": "US"},
-        {"symbol": "COST", "name": "Costco Wholesale", "market": "US"},
-        {"symbol": "XOM", "name": "Exxon Mobil", "market": "US"},
-        {"symbol": "CVX", "name": "Chevron", "market": "US"},
-        {"symbol": "PLTR", "name": "Palantir Technologies", "market": "US"},
-        {"symbol": "COIN", "name": "Coinbase Global", "market": "US"},
-        {"symbol": "PTT.BK", "name": "PTT (ตัวอย่าง)", "market": "TH"},
-        {"symbol": "KBANK.BK", "name": "Kasikornbank (ตัวอย่าง)", "market": "TH"},
-        {"symbol": "CPALL.BK", "name": "CP All", "market": "TH"},
-        {"symbol": "ADVANC.BK", "name": "Advanced Info Service", "market": "TH"},
-        {"symbol": "DELTA.BK", "name": "Delta Electronics Thailand", "market": "TH"},
-        {"symbol": "AOT.BK", "name": "Airports of Thailand", "market": "TH"},
-        {"symbol": "BDMS.BK", "name": "Bangkok Dusit Medical Services", "market": "TH"},
-        {"symbol": "SCB.BK", "name": "SCB X", "market": "TH"},
-        {"symbol": "BBL.BK", "name": "Bangkok Bank", "market": "TH"},
-        {"symbol": "KTB.BK", "name": "Krung Thai Bank", "market": "TH"},
-        {"symbol": "TRUE.BK", "name": "True Corporation", "market": "TH"},
-        {"symbol": "GULF.BK", "name": "Gulf Energy Development", "market": "TH"},
-        {"symbol": "CPN.BK", "name": "Central Pattana", "market": "TH"},
-        {"symbol": "BTC-USD", "name": "Bitcoin USD", "market": "CRYPTO"},
-        {"symbol": "ETH-USD", "name": "Ethereum USD", "market": "CRYPTO"},
-        {"symbol": "SOL-USD", "name": "Solana USD", "market": "CRYPTO"},
-        {"symbol": "BNB-USD", "name": "BNB USD", "market": "CRYPTO"},
-        {"symbol": "XRP-USD", "name": "XRP USD", "market": "CRYPTO"},
-        {"symbol": "DOGE-USD", "name": "Dogecoin USD", "market": "CRYPTO"},
-        {"symbol": "ADA-USD", "name": "Cardano USD", "market": "CRYPTO"},
-        {"symbol": "GC=F", "name": "Gold Futures", "market": "COMMODITY"},
-        {"symbol": "XAUUSD=X", "name": "Gold Spot USD", "market": "FX"},
-        {"symbol": "SI=F", "name": "Silver Futures", "market": "COMMODITY"},
-        {"symbol": "CL=F", "name": "Crude Oil Futures", "market": "COMMODITY"},
-        {"symbol": "^GSPC", "name": "S&P 500", "market": "INDEX"},
-        {"symbol": "^IXIC", "name": "Nasdaq Composite", "market": "INDEX"},
-        {"symbol": "^DJI", "name": "Dow Jones Industrial Average", "market": "INDEX"},
-        {"symbol": "^RUT", "name": "Russell 2000", "market": "INDEX"},
-        {"symbol": "^SET.BK", "name": "SET Index", "market": "TH"},
+        # ── US Growth ──────────────────────────────────────────────────
+        {"symbol": "AAPL",  "name": "Apple Inc.",           "market": "US",        "type": "growth",    "sector": "Technology"},
+        {"symbol": "MSFT",  "name": "Microsoft",            "market": "US",        "type": "growth",    "sector": "Technology"},
+        {"symbol": "NVDA",  "name": "NVIDIA",               "market": "US",        "type": "growth",    "sector": "Semiconductors"},
+        {"symbol": "TSLA",  "name": "Tesla",                "market": "US",        "type": "growth",    "sector": "EV / Energy"},
+        {"symbol": "META",  "name": "Meta Platforms",       "market": "US",        "type": "growth",    "sector": "Social Media"},
+        {"symbol": "AMZN",  "name": "Amazon.com",           "market": "US",        "type": "growth",    "sector": "E-Commerce / Cloud"},
+        {"symbol": "GOOGL", "name": "Alphabet Class A",     "market": "US",        "type": "growth",    "sector": "Search / Cloud"},
+        {"symbol": "AMD",   "name": "Advanced Micro Devices","market": "US",       "type": "growth",    "sector": "Semiconductors"},
+        {"symbol": "NFLX",  "name": "Netflix",              "market": "US",        "type": "growth",    "sector": "Streaming"},
+        {"symbol": "PLTR",  "name": "Palantir Technologies","market": "US",        "type": "growth",    "sector": "AI / Data"},
+        {"symbol": "COIN",  "name": "Coinbase Global",      "market": "US",        "type": "growth",    "sector": "Crypto Exchange"},
+        # ── US Value ────────────────────────────────────────────────
+        {"symbol": "JPM",   "name": "JPMorgan Chase",       "market": "US",        "type": "value",     "sector": "Banking"},
+        {"symbol": "BAC",   "name": "Bank of America",      "market": "US",        "type": "value",     "sector": "Banking"},
+        {"symbol": "V",     "name": "Visa",                 "market": "US",        "type": "value",     "sector": "Payments"},
+        {"symbol": "MA",    "name": "Mastercard",           "market": "US",        "type": "value",     "sector": "Payments"},
+        {"symbol": "WMT",   "name": "Walmart",              "market": "US",        "type": "value",     "sector": "Retail"},
+        {"symbol": "COST",  "name": "Costco Wholesale",     "market": "US",        "type": "value",     "sector": "Retail"},
+        # ── US Defensive / Dividend ────────────────────────────────
+        {"symbol": "KO",    "name": "The Coca-Cola Company","market": "US",        "type": "dividend",  "sector": "Beverages"},
+        {"symbol": "PEP",   "name": "PepsiCo",              "market": "US",        "type": "dividend",  "sector": "Beverages"},
+        {"symbol": "MCD",   "name": "McDonald's",           "market": "US",        "type": "dividend",  "sector": "Fast Food"},
+        {"symbol": "NKE",   "name": "Nike",                 "market": "US",        "type": "defensive", "sector": "Consumer"},
+        {"symbol": "DIS",   "name": "Walt Disney",          "market": "US",        "type": "defensive", "sector": "Entertainment"},
+        # ── US Cyclical ────────────────────────────────────────────
+        {"symbol": "XOM",   "name": "Exxon Mobil",          "market": "US",        "type": "cyclical",  "sector": "Energy"},
+        {"symbol": "CVX",   "name": "Chevron",              "market": "US",        "type": "cyclical",  "sector": "Energy"},
+        # ── TH Growth ────────────────────────────────────────────
+        {"symbol": "CPALL.BK",  "name": "CP All",           "market": "TH",        "type": "growth",    "sector": "Retail"},
+        {"symbol": "ADVANC.BK", "name": "Advanced Info Service","market": "TH",    "type": "growth",    "sector": "Telecom"},
+        {"symbol": "DELTA.BK",  "name": "Delta Electronics Thailand","market": "TH","type": "growth",   "sector": "Electronics"},
+        {"symbol": "AOT.BK",    "name": "Airports of Thailand","market": "TH",     "type": "growth",    "sector": "Transport"},
+        {"symbol": "BDMS.BK",   "name": "Bangkok Dusit Medical","market": "TH",    "type": "growth",    "sector": "Healthcare"},
+        {"symbol": "TRUE.BK",   "name": "True Corporation", "market": "TH",        "type": "growth",    "sector": "Telecom"},
+        {"symbol": "GULF.BK",   "name": "Gulf Energy Development","market": "TH",  "type": "growth",    "sector": "Energy"},
+        {"symbol": "CPN.BK",    "name": "Central Pattana",  "market": "TH",        "type": "growth",    "sector": "Property"},
+        # ── TH Value / Dividend ───────────────────────────────────
+        {"symbol": "PTT.BK",    "name": "PTT",              "market": "TH",        "type": "value",     "sector": "Energy"},
+        {"symbol": "KBANK.BK",  "name": "Kasikornbank",     "market": "TH",        "type": "dividend",  "sector": "Banking"},
+        {"symbol": "SCB.BK",    "name": "SCB X",            "market": "TH",        "type": "dividend",  "sector": "Banking"},
+        {"symbol": "BBL.BK",    "name": "Bangkok Bank",     "market": "TH",        "type": "dividend",  "sector": "Banking"},
+        {"symbol": "KTB.BK",    "name": "Krung Thai Bank",  "market": "TH",        "type": "dividend",  "sector": "Banking"},
+        # ── Crypto ───────────────────────────────────────────────
+        {"symbol": "BTC-USD",  "name": "Bitcoin USD",       "market": "CRYPTO",    "type": "crypto",    "sector": "Store of Value"},
+        {"symbol": "ETH-USD",  "name": "Ethereum USD",      "market": "CRYPTO",    "type": "crypto",    "sector": "Smart Contract"},
+        {"symbol": "SOL-USD",  "name": "Solana USD",        "market": "CRYPTO",    "type": "crypto",    "sector": "Smart Contract"},
+        {"symbol": "BNB-USD",  "name": "BNB USD",           "market": "CRYPTO",    "type": "crypto",    "sector": "Exchange"},
+        {"symbol": "XRP-USD",  "name": "XRP USD",           "market": "CRYPTO",    "type": "crypto",    "sector": "Payments"},
+        {"symbol": "DOGE-USD", "name": "Dogecoin USD",      "market": "CRYPTO",    "type": "crypto",    "sector": "Meme"},
+        {"symbol": "ADA-USD",  "name": "Cardano USD",       "market": "CRYPTO",    "type": "crypto",    "sector": "Smart Contract"},
+        # ── Commodity / FX / Index ───────────────────────────────
+        {"symbol": "GC=F",    "name": "Gold Futures",       "market": "COMMODITY", "type": "commodity", "sector": "Precious Metal"},
+        {"symbol": "XAUUSD=X","name": "Gold Spot USD",      "market": "FX",        "type": "commodity", "sector": "Precious Metal"},
+        {"symbol": "SI=F",    "name": "Silver Futures",     "market": "COMMODITY", "type": "commodity", "sector": "Precious Metal"},
+        {"symbol": "CL=F",    "name": "Crude Oil Futures",  "market": "COMMODITY", "type": "cyclical",  "sector": "Energy"},
+        {"symbol": "^GSPC",   "name": "S&P 500",            "market": "INDEX",     "type": "index",     "sector": "US Broad"},
+        {"symbol": "^IXIC",   "name": "Nasdaq Composite",   "market": "INDEX",     "type": "index",     "sector": "US Tech"},
+        {"symbol": "^DJI",    "name": "Dow Jones Industrial Average","market": "INDEX","type": "index",  "sector": "US Blue Chip"},
+        {"symbol": "^RUT",    "name": "Russell 2000",       "market": "INDEX",     "type": "index",     "sector": "US Small Cap"},
+        {"symbol": "^SET.BK", "name": "SET Index",          "market": "TH",        "type": "index",     "sector": "TH Broad"},
     ]
 
     bitkub_pairs = [

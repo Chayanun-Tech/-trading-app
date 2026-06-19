@@ -411,6 +411,7 @@
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
       <button class="tab" id="tabIv" onclick="showTab('iv')">📐 มูลค่า IV</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
+      <button class="tab" onclick="openDashboard()" style="background:var(--accent);border-color:var(--accent);color:#fff;">📊 Dashboard</button>
     </div>
 
     <div id="reportPanel" class="panel-body">
@@ -677,6 +678,8 @@
         </select>
         <input id="alertValue" type="number" placeholder="Value" />
       </div>
+      <input id="alertEmail" type="email" placeholder="📧 อีเมลรับแจ้งเตือน (optional)"
+             style="width:100%; margin-top:6px; font-size:12px;" />
       <button style="width:100%; margin-top:8px;" onclick="addAlert()">Add alert</button>
       <div id="alertList" style="margin-top:8px;"></div>
       <h3 style="margin-top:14px;">Triggered</h3>
@@ -685,6 +688,58 @@
 
   </aside>
 </main>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- Growth Dashboard Modal                                            -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="dashModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);overflow:auto;">
+  <div style="max-width:1200px;margin:32px auto;background:#161b22;border:1px solid #30363d;border-radius:14px;padding:20px 24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 style="margin:0;font-size:18px;">📊 Growth Dashboard — ไกด์ทำการบ้านลงทุน</h2>
+      <button onclick="closeDashboard()" style="background:none;border:none;color:#8b949e;font-size:20px;cursor:pointer;">✕</button>
+    </div>
+
+    <!-- Filter toolbar -->
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+      <span style="font-size:13px;color:#8b949e;">ตลาด:</span>
+      <button id="dmkt-all"  class="db-filter on" onclick="dashSetMarket('all')">ทั้งหมด</button>
+      <button id="dmkt-US"   class="db-filter"    onclick="dashSetMarket('US')">🇺🇸 US</button>
+      <button id="dmkt-TH"   class="db-filter"    onclick="dashSetMarket('TH')">🇹🇭 TH</button>
+      <button id="dmkt-CRYPTO" class="db-filter"  onclick="dashSetMarket('CRYPTO')">₿ Crypto</button>
+      <span style="margin-left:12px;font-size:13px;color:#8b949e;">ประเภท:</span>
+      <button id="dtyp-all"      class="db-filter on" onclick="dashSetType('all')">ทั้งหมด</button>
+      <button id="dtyp-growth"   class="db-filter"    onclick="dashSetType('growth')">🌱 Growth</button>
+      <button id="dtyp-value"    class="db-filter"    onclick="dashSetType('value')">💎 Value</button>
+      <button id="dtyp-dividend" class="db-filter"    onclick="dashSetType('dividend')">💰 Dividend</button>
+      <button onclick="dashRefreshPrices()" style="margin-left:auto;padding:5px 12px;font-size:12px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;cursor:pointer;">⟳ รีเฟรชราคา</button>
+    </div>
+
+    <div id="dashGrid" style="color:#8b949e;font-size:13px;">กำลังโหลด…</div>
+  </div>
+</div>
+
+<style>
+.db-filter {
+  padding:4px 12px; font-size:12px; border-radius:16px;
+  border:1px solid #30363d; background:none; color:#8b949e; cursor:pointer;
+  transition:all .15s;
+}
+.db-filter.on { border-color:#2f81f7; color:#2f81f7; background:rgba(47,129,247,.1); }
+.db-card {
+  background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:14px;
+  cursor:pointer; transition:border-color .15s;
+}
+.db-card:hover { border-color:#2f81f7; }
+.type-growth   { background:rgba(63,185,80,.15);   color:#3fb950; border:1px solid rgba(63,185,80,.3); }
+.type-value    { background:rgba(210,153,34,.15);  color:#d29922; border:1px solid rgba(210,153,34,.3);}
+.type-dividend { background:rgba(188,140,255,.15); color:#bc8cff; border:1px solid rgba(188,140,255,.3);}
+.type-cyclical { background:rgba(248,81,73,.15);   color:#f85149; border:1px solid rgba(248,81,73,.3);}
+.type-defensive{ background:rgba(139,148,158,.15); color:#8b949e; border:1px solid #30363d;}
+.type-crypto   { background:rgba(255,166,0,.15);   color:#ffa600; border:1px solid rgba(255,166,0,.3);}
+.type-commodity{ background:rgba(255,215,0,.12);   color:#ffd700; border:1px solid rgba(255,215,0,.3);}
+.type-index    { background:rgba(47,129,247,.12);  color:#2f81f7; border:1px solid rgba(47,129,247,.3);}
+.db-badge { display:inline-block; font-size:10px; padding:2px 7px; border-radius:10px; font-weight:600; text-transform:uppercase; margin-bottom:5px; }
+</style>
 
 <script src="./config.js"></script>
 <script>
@@ -2937,12 +2992,16 @@ async function addAlert() {
   const value = parseFloat($("alertValue").value);
   if (Number.isNaN(value)) return;
   try {
+    const email = ($("alertEmail")?.value || "").trim();
+    const payload = { symbol:currentSymbol, kind:$("alertKind").value, value, timeframe:tf() };
+    if (email) payload.notify_email = email;
     const res = await fetch(`${API}/api/alerts`, {
       method:"POST", headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ symbol:currentSymbol, kind:$("alertKind").value, value, timeframe:tf() }),
+      body:JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(await res.text());
     $("alertValue").value = "";
+    if ($("alertEmail")) $("alertEmail").value = "";
     refreshAlerts();
   } catch (e) {
     notifyError(errorMessage(e), "Add alert failed");
@@ -4120,6 +4179,120 @@ init().catch(e => {
   const message = escapeHtml(errorMessage(e));
   if ($("chartStatus")) $("chartStatus").textContent = "App startup failed";
   if ($("summary")) $("summary").innerHTML = `<div class="stat" style="grid-column:1 / -1;"><span>ผิดพลาด</span><b class="down">${message}</b></div>`;
+});
+</script>
+
+<!-- ── Growth Dashboard Scripts ─────────────────────────────────── -->
+<script>
+let _dashSymbols = [];
+let _dashQuotes  = {};
+let _dashMarket  = "all";
+let _dashType    = "all";
+
+async function openDashboard() {
+  document.getElementById("dashModal").style.display = "block";
+  if (!_dashSymbols.length) {
+    try {
+      _dashSymbols = await fetch(`${API}/api/symbols`).then(r => r.json());
+    } catch(e) { console.error(e); }
+  }
+  dashRender();
+  dashRefreshPrices();
+}
+
+function closeDashboard() {
+  document.getElementById("dashModal").style.display = "none";
+}
+
+function dashSetMarket(v) {
+  _dashMarket = v;
+  ["all","US","TH","CRYPTO"].forEach(k => {
+    const el = document.getElementById("dmkt-" + k);
+    if (el) el.classList.toggle("on", k === v);
+  });
+  dashRender();
+}
+
+function dashSetType(v) {
+  _dashType = v;
+  ["all","growth","value","dividend"].forEach(k => {
+    const el = document.getElementById("dtyp-" + k);
+    if (el) el.classList.toggle("on", k === v);
+  });
+  dashRender();
+}
+
+function dashFiltered() {
+  return _dashSymbols.filter(s => {
+    const mOk = _dashMarket === "all" || s.market === _dashMarket;
+    const tOk = _dashType === "all" || s.type === _dashType;
+    return mOk && tOk;
+  });
+}
+
+async function dashRefreshPrices() {
+  const filtered = dashFiltered().slice(0, 40);
+  const results = await Promise.allSettled(
+    filtered.map(s => fetch(`${API}/api/quote?symbol=${encodeURIComponent(s.symbol)}`).then(r => r.json()))
+  );
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") _dashQuotes[filtered[i].symbol] = r.value;
+  });
+  dashRender();
+}
+
+function dashRender() {
+  const filtered = dashFiltered();
+  const grid = document.getElementById("dashGrid");
+  if (!filtered.length) {
+    grid.innerHTML = '<div style="color:#8b949e;">ไม่พบหุ้นที่ตรงเงื่อนไข</div>';
+    return;
+  }
+
+  // group by market
+  const byMkt = {};
+  filtered.forEach(s => { (byMkt[s.market] = byMkt[s.market] || []).push(s); });
+  const mktLabel = { US:"🇺🇸 US Market", TH:"🇹🇭 SET Market", CRYPTO:"₿ Crypto", COMMODITY:"🏅 Commodity", FX:"💱 FX", INDEX:"📈 Index" };
+
+  grid.innerHTML = Object.entries(byMkt).map(([mkt, stocks]) => {
+    const cards = stocks.map(s => {
+      const q = _dashQuotes[s.symbol];
+      const up = q && q.change >= 0;
+      const priceHtml = q
+        ? `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;">
+             <span style="font-size:17px;font-weight:700;">${q.price}</span>
+             <span style="font-size:12px;color:${up ? "#3fb950" : "#f85149"};">
+               ${up ? "▲" : "▼"} ${Math.abs(q.change).toFixed(2)} (${q.change_percent}%)
+             </span>
+           </div>`
+        : `<div style="margin-top:8px;color:#8b949e;font-size:12px;">—</div>`;
+      const typeCls = s.type ? `type-${s.type}` : "type-growth";
+      return `<div class="db-card" onclick="closeDashboard();loadSymbol('${s.symbol}')">
+        <span class="db-badge ${typeCls}">${(s.type||"growth").toUpperCase()}</span>
+        <div style="font-size:15px;font-weight:700;">${s.symbol}</div>
+        <div style="font-size:11px;color:#8b949e;">${s.name}</div>
+        <div style="font-size:10px;color:#8b949e;margin-top:2px;">${s.sector || ""}</div>
+        ${priceHtml}
+      </div>`;
+    }).join("");
+    return `
+      <div style="margin-bottom:24px;">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#8b949e;margin-bottom:10px;">${mktLabel[mkt] || mkt}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;">${cards}</div>
+      </div>`;
+  }).join("");
+}
+
+// loadSymbol — สลับกราฟไปหุ้นที่เลือกใน Dashboard
+function loadSymbol(sym) {
+  if (typeof selectSymbol === "function") {
+    selectSymbol(sym);
+  }
+}
+
+// close modal on backdrop click
+document.getElementById("dashModal").addEventListener("click", function(e) {
+  if (e.target === this) closeDashboard();
 });
 </script>
 </body>

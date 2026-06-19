@@ -812,12 +812,39 @@ async def _alert_loop():
                     continue
                 ind = compute_indicators(data)
                 rsi_val = ind["summary"].get("rsi14")
-                fired = alerts.evaluate(sym, data[-1].close, rsi_val)
-                for f in fired:
-                    print("[ALERT]", f.message)
+                fired = alerts.evaluate(sym, data[-1].close, rsi_val, settings.alert_notify_email)
+                for result in fired:
+                    print("[ALERT]", result.alert.message)
+                    if result.notify_email and settings.gmail_user and settings.gmail_app_password:
+                        subject = f"🔔 Alert: {result.alert.message}"
+                        body = (
+                            f"การแจ้งเตือนจาก AI Trade Assistant\n\n"
+                            f"หุ้น: {result.alert.symbol}\n"
+                            f"เงื่อนไข: {result.alert.kind} {result.alert.value}\n"
+                            f"ค่าปัจจุบัน: {result.alert.observed}\n\n"
+                            f"⚠️ นี่คือการแจ้งเตือนอัตโนมัติ — ไม่ใช่คำแนะนำลงทุน"
+                        )
+                        asyncio.create_task(_send_alert_email_async(result.notify_email, subject, body))
         except Exception as e:  # noqa: BLE001
             print("alert loop error:", e)
         await asyncio.sleep(10)
+
+
+async def _send_alert_email_async(to: str, subject: str, body: str) -> None:
+    from app.email_notify import send_alert_email
+    loop = asyncio.get_event_loop()
+    ok = await loop.run_in_executor(
+        None,
+        lambda: send_alert_email(
+            to_email=to, subject=subject, body=body,
+            from_user=settings.gmail_user,
+            app_password=settings.gmail_app_password,
+        ),
+    )
+    if ok:
+        print(f"[EMAIL] sent alert to {to}")
+    else:
+        print(f"[EMAIL] failed to send to {to}")
 
 
 @app.on_event("startup")

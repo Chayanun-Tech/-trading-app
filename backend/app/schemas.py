@@ -162,6 +162,7 @@ class AlertRule(BaseModel):
     value: float
     timeframe: str = "1h"
     note: Optional[str] = None
+    notify_email: Optional[str] = Field(default=None, description="อีเมลรับแจ้งเตือน (เว้นว่างใช้ ALERT_NOTIFY_EMAIL)")
 
 
 class TriggeredAlert(BaseModel):

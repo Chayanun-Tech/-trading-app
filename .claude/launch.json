@@ -4,7 +4,7 @@
     {
       "name": "trade-assistant",
       "runtimeExecutable": "backend\\.venv\\Scripts\\python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--app-dir", "backend"],
+      "runtimeArgs": ["-X", "utf8", "-m", "uvicorn", "app.main:app", "--port", "8000", "--app-dir", "backend"],
       "port": 8000
     }
   ]
