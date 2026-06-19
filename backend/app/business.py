@@ -43,12 +43,22 @@ _OUTPUT_CONTRACT = """รูปแบบ JSON ที่ต้องคืน (�
   "segments": [
     {"name": "<ชื่อส่วนงาน/กลุ่มสินค้า>",
      "pct": <สัดส่วนรายได้เป็นตัวเลข 0-100 หรือ null ถ้าเอกสารไม่ระบุ>,
-     "desc": "<อธิบายส่วนงานนี้ 1-3 ประโยค ว่าคืออะไร ขายให้ใคร>"}
+     "desc": "<อธิบายส่วนงานนี้ 1-3 ประโยค ว่าคืออะไร ขายให้ใคร>",
+     "products": [
+       {"name": "<ชื่อผลิตภัณฑ์/แบรนด์จริงตามเอกสาร เช่น H100, B200, GeForce RTX, CUDA, DGX>",
+        "pct": <สัดส่วนรายได้ของผลิตภัณฑ์นี้ 0-100 หรือ null ถ้าเอกสารไม่ระบุเป็นตัวเลข>,
+        "desc": "<ผลิตภัณฑ์นี้คืออะไร ใช้ทำอะไร 1 ประโยคสั้น>"}
+     ]}
   ],
   "customers": "<ลูกค้าหลักเป็นใคร ขายแบบ B2B/B2C/ภาครัฐ อย่างไร 1-3 ประโยค>",
   "moat_and_position": "<จุดแข็ง/ความได้เปรียบ/ตำแหน่งในอุตสาหกรรม 2-4 ประโยค ถ้าข้อมูลไม่พอให้บอกตรง ๆ>"
 }
 - segments เรียงจากสัดส่วนมากไปน้อย; ถ้าระบุ pct ได้ ผลรวมควรใกล้ 100
+- products: ดึง 'ชื่อผลิตภัณฑ์/แบรนด์จริง' ที่ปรากฏในเอกสาร 10-K ให้มากที่สุดเท่าที่ระบุ (เช่นของ NVIDIA:
+  GeForce RTX, NVIDIA RTX/Quadro, H100, H200, B200/Blackwell, GB200, DGX, CUDA, NVIDIA AI Enterprise,
+  DRIVE, Networking/InfiniBand/Spectrum). ห้ามแต่งชื่อที่ไม่มีในเอกสาร — ถ้าเอกสารไม่ระบุชื่อผลิตภัณฑ์ในส่วนงานนั้น
+  ให้ products = []
+- สัดส่วนรายได้ระดับผลิตภัณฑ์ (products[].pct) บริษัทส่วนใหญ่ 'ไม่เปิดเผยแยกรายผลิตภัณฑ์' → ใส่ null ได้ ห้ามเดาตัวเลข
 - ถ้าข้อความที่ให้มาไม่พอจริง ๆ ให้เติมเท่าที่มี และระบุในฟิลด์นั้นว่า "เอกสารไม่ได้ให้รายละเอียด" """
 
 
@@ -77,10 +87,25 @@ def _clean(payload: dict) -> dict:
             pct = round(float(pct), 1) if pct is not None else None
         except (TypeError, ValueError):
             pct = None
+        prods = []
+        for p in (s.get("products") or [])[:20]:
+            if not isinstance(p, dict) or not p.get("name"):
+                continue
+            ppct = p.get("pct")
+            try:
+                ppct = round(float(ppct), 1) if ppct is not None else None
+            except (TypeError, ValueError):
+                ppct = None
+            prods.append({
+                "name": str(p.get("name", "—"))[:80],
+                "pct": ppct,
+                "desc": str(p.get("desc", ""))[:300],
+            })
         segs.append({
             "name": str(s.get("name", "—"))[:80],
             "pct": pct,
             "desc": str(s.get("desc", ""))[:400],
+            "products": prods,
         })
     return {
         "one_liner": str(payload.get("one_liner", ""))[:300] or None,
@@ -114,7 +139,7 @@ async def get_business_explainer(symbol: str, *, refresh: bool = False) -> dict:
     if not settings.llm_enabled():
         raise ValueError("ต้องตั้งค่าคีย์ AI (เช่น Gemini ฟรี) เพื่อให้ AI เรียบเรียงคำอธิบายธุรกิจ")
 
-    business = (ctx.get("business") or "")[:14000]
+    business = (ctx.get("business") or "")[:20000]
     mda = (ctx.get("mda") or "")[:6000]
     user_msg = (
         "อ่านข้อความจริงจาก 10-K ด้านล่าง แล้วเขียนคำอธิบายธุรกิจภาษาไทยเชิงลึกตามรูปแบบ JSON ที่กำหนด.\n"

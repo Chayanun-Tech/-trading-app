@@ -617,6 +617,7 @@
         .biz-barwrap{background:rgba(255,255,255,.05); border-radius:4px; overflow:hidden; margin-top:4px;}
         .biz-pct{font-variant-numeric:tabular-nums; font-weight:700; text-align:right; white-space:nowrap;}
         .biz-segname{font-weight:600; color:#eef3f8;}
+        .biz-prod{font-weight:500; color:#cdd8e3; font-size:12px;}
       </style>
       <div class="grid3">
         <div class="field"><label>หุ้น (US เท่านั้น)</label><input id="bizSymbol" placeholder="เช่น AAPL, NVDA, KO" /></div>
@@ -2708,15 +2709,24 @@ function renderBusiness(d) {
   const segs = (d.segments || []).filter(s => s && s.name);
   let revHtml = "";
   if (segs.length) {
+    const pctCell = p => (p != null && !isNaN(p)) ? p + "%" : "<span class='tiny' style='color:#7d8b99'>n/a</span>";
+    const barFor = p => (p != null && !isNaN(p)) ? `<div class="biz-barwrap"><div class="biz-bar" style="width:${Math.max(0, Math.min(100, p))}%"></div></div>` : "";
     const rows = segs.map(s => {
       const pct = (s.pct != null && !isNaN(s.pct)) ? s.pct : null;
-      const bar = pct != null ? `<div class="biz-barwrap"><div class="biz-bar" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>` : "";
       const desc = s.desc ? `<div class="tiny" style="margin-top:3px; color:#9fb0c0;">${escapeHtml(s.desc)}</div>` : "";
-      return `<tr><td><span class="biz-segname">${escapeHtml(s.name)}</span>${bar}${desc}</td>` +
-             `<td class="biz-pct">${pct != null ? pct + "%" : "<span class='tiny' style='color:#7d8b99'>n/a</span>"}</td></tr>`;
+      let head = `<tr><td><span class="biz-segname">${escapeHtml(s.name)}</span>${barFor(pct)}${desc}</td>` +
+                 `<td class="biz-pct">${pctCell(pct)}</td></tr>`;
+      const prods = (s.products || []).filter(p => p && p.name);
+      const prodRows = prods.map(p => {
+        const pp = (p.pct != null && !isNaN(p.pct)) ? p.pct : null;
+        const pdesc = p.desc ? ` <span class="tiny" style="color:#8b99a8;">— ${escapeHtml(p.desc)}</span>` : "";
+        return `<tr><td style="padding-left:22px;"><span class="biz-prod">▪ ${escapeHtml(p.name)}</span>${pdesc}${barFor(pp)}</td>` +
+               `<td class="biz-pct tiny">${pctCell(pp)}</td></tr>`;
+      }).join("");
+      return head + prodRows;
     }).join("");
-    revHtml = `<div class="biz-seg"><div class="biz-h">📊 สัดส่วนรายได้แยกส่วนงาน</div><table class="biz-rev"><tbody>${rows}</tbody></table>` +
-              `<div class="tiny" style="margin-top:6px; color:#7d8b99;">* สัดส่วนอ้างอิงจากตารางรายได้ในแบบ 10-K/MD&A; "n/a" = เอกสารไม่ได้ระบุเป็นเปอร์เซ็นต์</div></div>`;
+    revHtml = `<div class="biz-seg"><div class="biz-h">📊 สัดส่วนรายได้แยกส่วนงาน + ผลิตภัณฑ์</div><table class="biz-rev"><tbody>${rows}</tbody></table>` +
+              `<div class="tiny" style="margin-top:6px; color:#7d8b99;">* สัดส่วนอ้างอิงจากตารางรายได้ในแบบ 10-K/MD&A; ▪ = ชื่อผลิตภัณฑ์/แบรนด์จริงในเอกสาร; "n/a" = เอกสารไม่ได้ระบุเป็นเปอร์เซ็นต์ (บริษัทมักไม่เปิดรายได้แยกรายผลิตภัณฑ์)</div></div>`;
   }
   const src = d.filing_url ? `<a href="${d.filing_url}" target="_blank" rel="noopener" style="color:var(--accent,#2a6);">ดูเอกสารต้นฉบับ 10-K ↗</a>` : "";
   $("bizResult").innerHTML =
