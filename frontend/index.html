@@ -407,6 +407,7 @@
       <button class="tab active" id="tabReport" onclick="showTab('report')">Report</button>
       <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">🌱 หุ้นเล็กเด้งไกล</button>
       <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">💎 VI / พื้นฐาน</button>
+      <button class="tab" id="tabBusiness" onclick="showTab('business')">🏢 ธุรกิจ</button>
       <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
       <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
@@ -602,6 +603,28 @@
         <b>📰 ไทม์ไลน์เอกสาร SEC ล่าสุด</b>
         <div id="filingsView" class="note" style="margin-top:8px;">กด "วิเคราะห์ VI" เพื่อโหลดเอกสารล่าสุด (เฉพาะหุ้น US)</div>
       </div>
+    </div>
+
+    <div id="businessPanel" class="panel-body hidden">
+      <style>
+        .biz-seg{margin-top:16px;}
+        .biz-h{font-size:13px; font-weight:700; color:var(--accent,#2a6); margin:0 0 6px;}
+        .biz-p{font-size:13px; line-height:1.65; color:#dfe6ee; margin:0 0 4px; white-space:pre-line;}
+        .biz-oneliner{font-size:15px; line-height:1.55; color:#fff; font-weight:600; padding:10px 12px; border-left:3px solid var(--accent,#2a6); background:rgba(42,160,102,.08); border-radius:0 8px 8px 0;}
+        table.biz-rev{width:100%; border-collapse:collapse; font-size:13px; margin-top:6px;}
+        table.biz-rev td{padding:6px 8px; border-bottom:1px solid rgba(36,49,64,.6); vertical-align:top;}
+        .biz-bar{height:8px; border-radius:4px; background:var(--accent,#2a6); min-width:2px;}
+        .biz-barwrap{background:rgba(255,255,255,.05); border-radius:4px; overflow:hidden; margin-top:4px;}
+        .biz-pct{font-variant-numeric:tabular-nums; font-weight:700; text-align:right; white-space:nowrap;}
+        .biz-segname{font-weight:600; color:#eef3f8;}
+      </style>
+      <div class="grid3">
+        <div class="field"><label>หุ้น (US เท่านั้น)</label><input id="bizSymbol" placeholder="เช่น AAPL, NVDA, KO" /></div>
+        <div class="field" style="align-self:end;"><button class="primary" onclick="runBusiness()">อธิบายธุรกิจ</button></div>
+        <div class="field" style="align-self:end;"><button onclick="runBusiness(true)" title="ให้ AI เรียบเรียงใหม่ทับของเดิม">🔄 สร้างใหม่</button></div>
+      </div>
+      <div class="note" style="margin-top:6px;">อธิบายธุรกิจเชิงลึกจากแบบ 10-K จริง (SEC EDGAR) — บริษัททำอะไร หาเงินอย่างไร พร้อมสัดส่วนรายได้แยกส่วนงาน. เรียบเรียงเป็นภาษาไทยโดย AI (เฉพาะหุ้นสหรัฐ)</div>
+      <div id="bizResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้น US แล้วกด "อธิบายธุรกิจ"</div></div>
     </div>
 
     <div id="ivPanel" class="panel-body hidden">
@@ -2470,7 +2493,7 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","multibagger","fundamentals","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -2664,6 +2687,46 @@ async function runFundamentalAnalysis() {
     loadFinancials(sym, finFreq);
     loadFilings(sym);
   } catch (e) { notifyError(errorMessage(e), "VI analysis failed"); $("viResult").innerHTML = `<div class="down">${e.message || e}</div>`; }
+}
+
+async function runBusiness(refresh) {
+  let sym = ($("bizSymbol").value || currentSymbol || "").trim().toUpperCase();
+  if (!sym) { $("bizResult").innerHTML = `<div class="down">กรุณาพิมพ์สัญลักษณ์หุ้น (US)</div>`; return; }
+  $("bizSymbol").value = sym;
+  showTab("business");
+  $("bizResult").innerHTML = `<div class="note">กำลังอ่าน 10-K และเรียบเรียงคำอธิบายธุรกิจ ${escapeHtml(sym)}... ${refresh ? "(สร้างใหม่)" : "(ครั้งแรกอาจช้า ต้องดึงเอกสารจาก SEC + ให้ AI เรียบเรียง)"}</div>`;
+  try {
+    const url = `${API}/api/business?symbol=${encodeURIComponent(sym)}${refresh ? "&refresh=true" : ""}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: res.statusText }))).detail || res.statusText);
+    renderBusiness(await res.json());
+  } catch (e) { notifyError(errorMessage(e), "อธิบายธุรกิจไม่สำเร็จ"); $("bizResult").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`; }
+}
+
+function renderBusiness(d) {
+  const sec = (title, body) => body ? `<div class="biz-seg"><div class="biz-h">${title}</div><div class="biz-p">${escapeHtml(body)}</div></div>` : "";
+  const segs = (d.segments || []).filter(s => s && s.name);
+  let revHtml = "";
+  if (segs.length) {
+    const rows = segs.map(s => {
+      const pct = (s.pct != null && !isNaN(s.pct)) ? s.pct : null;
+      const bar = pct != null ? `<div class="biz-barwrap"><div class="biz-bar" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>` : "";
+      const desc = s.desc ? `<div class="tiny" style="margin-top:3px; color:#9fb0c0;">${escapeHtml(s.desc)}</div>` : "";
+      return `<tr><td><span class="biz-segname">${escapeHtml(s.name)}</span>${bar}${desc}</td>` +
+             `<td class="biz-pct">${pct != null ? pct + "%" : "<span class='tiny' style='color:#7d8b99'>n/a</span>"}</td></tr>`;
+    }).join("");
+    revHtml = `<div class="biz-seg"><div class="biz-h">📊 สัดส่วนรายได้แยกส่วนงาน</div><table class="biz-rev"><tbody>${rows}</tbody></table>` +
+              `<div class="tiny" style="margin-top:6px; color:#7d8b99;">* สัดส่วนอ้างอิงจากตารางรายได้ในแบบ 10-K/MD&A; "n/a" = เอกสารไม่ได้ระบุเป็นเปอร์เซ็นต์</div></div>`;
+  }
+  const src = d.filing_url ? `<a href="${d.filing_url}" target="_blank" rel="noopener" style="color:var(--accent,#2a6);">ดูเอกสารต้นฉบับ 10-K ↗</a>` : "";
+  $("bizResult").innerHTML =
+    (d.one_liner ? `<div class="biz-oneliner">${escapeHtml(d.one_liner)}</div>` : "") +
+    sec("🔎 บริษัทนี้ทำอะไร", d.what_they_do) +
+    sec("💰 หาเงินอย่างไร", d.how_they_make_money) +
+    revHtml +
+    sec("👥 ลูกค้าหลัก", d.customers) +
+    sec("🏰 จุดแข็ง / ตำแหน่งในอุตสาหกรรม", d.moat_and_position) +
+    `<div class="note" style="margin-top:14px;">ที่มา: ${escapeHtml(d.source || "SEC 10-K")}${d.filing_date ? " · ยื่นเมื่อ " + escapeHtml(d.filing_date) : ""} ${src}</div>`;
 }
 
 const FORM_TH = {

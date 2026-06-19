@@ -24,6 +24,7 @@ from app.config import get_settings
 from app.data.base import DataProvider
 from app.db import DatabaseStore
 from app import edgar
+from app import business as business_explainer
 from app.engine import build_report
 from app.financials import build_financials
 from app.fundamentals import (get_fundamentals, is_equity_symbol, save_ai_qualitative,
@@ -505,6 +506,20 @@ async def filings_route(symbol: str = Query(..., description="สัญลัก
         raise HTTPException(404, "ไทม์ไลน์เอกสาร SEC รองรับเฉพาะหุ้นสหรัฐ")
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"ดึงข้อมูล SEC ไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/business")
+async def business_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL"),
+                         refresh: bool = Query(False, description="True = ให้ AI เรียบเรียงใหม่ทับ cache")):
+    """คำอธิบายธุรกิจเชิงลึก (ภาษาไทย) + สัดส่วนรายได้แยกส่วนงาน — เรียบเรียงจาก 10-K จริง (SEC)."""
+    if not is_equity_symbol(symbol):
+        raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
+    try:
+        return await business_explainer.get_business_explainer(symbol, refresh=refresh)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สร้างคำอธิบายธุรกิจไม่สำเร็จ: {exc}")
 
 
 @app.get("/api/offline/status")

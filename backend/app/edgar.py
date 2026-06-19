@@ -343,7 +343,11 @@ async def fetch_document_text(url: str, max_chars: int = 4_000_000) -> str:
     except Exception:  # noqa: BLE001
         import re
         text = re.sub(r"<[^>]+>", " ", html)
+    import html as _html
     import re
+    # SEC HTML มัก double-escape (&amp;#160;) → unescape สองชั้นให้ entity เช่น &#160; (nbsp),
+    # &#8221; (”) กลายเป็นอักขระจริง ไม่งั้นหัวข้อ "Item 1.&#160;&#160;Business" จะ match ไม่ติด
+    text = _html.unescape(_html.unescape(text))
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -372,12 +376,38 @@ def _section(text: str, start_re: str, end_re: str, cap: int = 8000) -> str | No
     return best.strip() if best and len(best.split()) >= 80 else None
 
 
+def _business_section(text: str, cap: int = 32000) -> str | None:
+    """ดึง Item 1 (Business) จริง: หัวข้อจริงคือ 'ครั้งแรก' ที่เจอ (ไม่ใช่การอ้างอิงกลางประโยค
+    แบบ 'Item 1. Business” of this report') แล้วตัดถึง 'Item 1A. Risk Factors' ตัวแรกถัดมา.
+    widest-span ใช้ไม่ได้กับ Business เพราะการอ้างอิงในส่วน Risk Factors ไม่มี 1A ตามมาใกล้ ๆ
+    ทำให้ span ยาวเกินจริงและถูกเลือกผิด.
+    """
+    import re
+    low = text.lower()
+    starts = []
+    for m in re.finditer(r"item\s*1[\.\)\s\xa0]{1,6}business", low):
+        nxt = text[m.end():m.end() + 2].lstrip()[:1]
+        if nxt in ("”", '"', "”", "’"):   # การอ้างอิง เช่น 'Item 1. Business” of this report'
+            continue
+        if len(re.findall(r"item\s+\d", low[m.start():m.start() + 1500])) >= 5:  # หัวสารบัญ
+            continue
+        starts.append(m.start())
+    if not starts:
+        return None
+    si = min(starts)
+    em = re.search(r"item\s*1a[\.\)\s\xa0]{0,4}risk\s+factors", low[si + 50:])
+    end = si + 50 + em.start() if em else si + cap
+    section = text[si:min(end, si + cap)].strip()
+    return section if len(section.split()) >= 80 else None
+
+
 def extract_filing_sections(text: str) -> dict:
-    """แยกส่วน Risk Factors (Item 1A) และ MD&A (Item 7) จากข้อความ 10-K."""
+    """แยกส่วน Business (Item 1), Risk Factors (Item 1A) และ MD&A (Item 7) จากข้อความ 10-K."""
+    business = _business_section(text)
     risk = _section(text, r"item\s*1a[\.\s\):]{0,4}risk\s+factors", r"item\s*1b[\.\s\):]")
     mda = _section(text, r"item\s*7[\.\s\):]{1,4}management.{0,6}s discussion",
                    r"item\s*7a[\.\s\):]|item\s*8[\.\s\):]")
-    return {"risk_factors": risk, "mda": mda}
+    return {"business": business, "risk_factors": risk, "mda": mda}
 
 
 async def get_10k_context(symbol: str) -> dict | None:
@@ -390,7 +420,8 @@ async def get_10k_context(symbol: str) -> dict | None:
     if cache.exists() and time.time() - cache.stat().st_mtime < _FRAME_TTL:
         try:
             cached = json.loads(cache.read_text(encoding="utf-8"))
-            if cached.get("url") == url:
+            # cache เก่าอาจยังไม่มีคีย์ "business" → ดึงใหม่เพื่อเติม
+            if cached.get("url") == url and "business" in cached:
                 return cached
         except (OSError, json.JSONDecodeError):
             pass
