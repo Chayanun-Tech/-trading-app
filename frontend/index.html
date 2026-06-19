@@ -618,6 +618,12 @@
         .biz-pct{font-variant-numeric:tabular-nums; font-weight:700; text-align:right; white-space:nowrap;}
         .biz-segname{font-weight:600; color:#eef3f8;}
         .biz-prod{font-weight:500; color:#cdd8e3; font-size:12px;}
+        .biz-comp{background:rgba(255,255,255,.03); border:1px solid rgba(36,49,64,.7); border-radius:6px; padding:6px 8px;}
+        .biz-mkt{font-size:11px; color:#9fb0c0; margin-bottom:4px;}
+        table.biz-comptbl{width:100%; border-collapse:collapse; font-size:12px;}
+        table.biz-comptbl td{padding:3px 4px; border-bottom:1px solid rgba(36,49,64,.4);}
+        table.biz-comptbl tr:last-child td{border-bottom:none;}
+        .biz-vs-us td{color:#dff3e6;}
       </style>
       <div class="grid3">
         <div class="field"><label>หุ้น (US เท่านั้น)</label><input id="bizSymbol" placeholder="เช่น AAPL, NVDA, KO" /></div>
@@ -2720,13 +2726,26 @@ function renderBusiness(d) {
       const prodRows = prods.map(p => {
         const pp = (p.pct != null && !isNaN(p.pct)) ? p.pct : null;
         const pdesc = p.desc ? ` <span class="tiny" style="color:#8b99a8;">— ${escapeHtml(p.desc)}</span>` : "";
+        const rivals = (p.rivals || []).filter(r => r && (r.company || r.product));
+        let comp = "";
+        if (rivals.length || p.our_share != null || p.market) {
+          const mkt = p.market ? `<div class="biz-mkt">⚔️ ตลาด: ${escapeHtml(p.market)}</div>` : "";
+          const us = `<tr class="biz-vs-us"><td>🟢 <b>${escapeHtml(p.name)}</b> <span class="tiny">(เรา)</span></td><td class="biz-pct">${pctCell(p.our_share)}</td></tr>`;
+          const rv = rivals.map(r => {
+            const label = [r.company, r.product].filter(Boolean).map(escapeHtml).join(" · ");
+            const note = r.note ? `<div class="tiny" style="color:#8b99a8;">${escapeHtml(r.note)}</div>` : "";
+            return `<tr><td>🔴 ${label}${note}</td><td class="biz-pct tiny">${pctCell(r.share)}</td></tr>`;
+          }).join("");
+          comp = `<tr><td colspan="2" style="padding:4px 8px 8px 22px;"><div class="biz-comp">${mkt}` +
+                 `<table class="biz-comptbl"><tbody>${us}${rv}</tbody></table></div></td></tr>`;
+        }
         return `<tr><td style="padding-left:22px;"><span class="biz-prod">▪ ${escapeHtml(p.name)}</span>${pdesc}${barFor(pp)}</td>` +
-               `<td class="biz-pct tiny">${pctCell(pp)}</td></tr>`;
+               `<td class="biz-pct tiny">${pctCell(pp)}</td></tr>` + comp;
       }).join("");
       return head + prodRows;
     }).join("");
     revHtml = `<div class="biz-seg"><div class="biz-h">📊 สัดส่วนรายได้แยกส่วนงาน + ผลิตภัณฑ์</div><table class="biz-rev"><tbody>${rows}</tbody></table>` +
-              `<div class="tiny" style="margin-top:6px; color:#7d8b99;">* สัดส่วนอ้างอิงจากตารางรายได้ในแบบ 10-K/MD&A; ▪ = ชื่อผลิตภัณฑ์/แบรนด์จริงในเอกสาร; "n/a" = เอกสารไม่ได้ระบุเป็นเปอร์เซ็นต์ (บริษัทมักไม่เปิดรายได้แยกรายผลิตภัณฑ์)</div></div>`;
+              `<div class="tiny" style="margin-top:6px; color:#7d8b99;">* สัดส่วนรายได้ (ส่วนงาน/ผลิตภัณฑ์) อ้างอิงจาก 10-K/MD&A; ▪ = ชื่อผลิตภัณฑ์/แบรนด์จริงในเอกสาร; "n/a" = เอกสารไม่ได้ระบุเป็นเปอร์เซ็นต์<br>⚔️ <b>ส่วนคู่แข่ง + Market share เป็นการประมาณการโดย AI จากความรู้ทั่วไป ไม่ใช่ตัวเลขทางการจาก 10-K</b> — ใช้เทียบศักยภาพคร่าว ๆ ควรตรวจสอบกับรายงานวิจัยตลาดก่อนตัดสินใจ</div></div>`;
   }
   const src = d.filing_url ? `<a href="${d.filing_url}" target="_blank" rel="noopener" style="color:var(--accent,#2a6);">ดูเอกสารต้นฉบับ 10-K ↗</a>` : "";
   $("bizResult").innerHTML =

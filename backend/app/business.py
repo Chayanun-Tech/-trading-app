@@ -47,7 +47,15 @@ _OUTPUT_CONTRACT = """รูปแบบ JSON ที่ต้องคืน (�
      "products": [
        {"name": "<ชื่อผลิตภัณฑ์/แบรนด์จริงตามเอกสาร เช่น H100, B200, GeForce RTX, CUDA, DGX>",
         "pct": <สัดส่วนรายได้ของผลิตภัณฑ์นี้ 0-100 หรือ null ถ้าเอกสารไม่ระบุเป็นตัวเลข>,
-        "desc": "<ผลิตภัณฑ์นี้คืออะไร ใช้ทำอะไร 1 ประโยคสั้น>"}
+        "desc": "<ผลิตภัณฑ์นี้คืออะไร ใช้ทำอะไร 1 ประโยคสั้น>",
+        "market": "<ชื่อตลาด/หมวดที่ผลิตภัณฑ์นี้แข่งขัน เช่น 'Data Center AI GPU', 'PC Gaming GPU'>",
+        "our_share": <ส่วนแบ่งตลาดโดยประมาณของผลิตภัณฑ์/บริษัทนี้ในหมวดข้างต้น เป็นเปอร์เซ็นต์เต็ม 0-100 (เช่น 80 = 80%) หรือ null>,
+        "rivals": [
+          {"company": "<บริษัทคู่แข่ง เช่น AMD, Intel>",
+           "product": "<ผลิตภัณฑ์ของคู่แข่งที่ชนกันตรง ๆ เช่น Instinct MI300X, Gaudi 3>",
+           "share": <ส่วนแบ่งตลาดโดยประมาณของคู่แข่งรายนี้ในหมวดเดียวกัน เป็นเปอร์เซ็นต์เต็ม 0-100 (เช่น 12 = 12%) หรือ null>,
+           "note": "<เทียบสั้น ๆ ว่าใครเหนือกว่าตรงไหน 1 ประโยค>"}
+        ]}
      ]}
   ],
   "customers": "<ลูกค้าหลักเป็นใคร ขายแบบ B2B/B2C/ภาครัฐ อย่างไร 1-3 ประโยค>",
@@ -59,6 +67,12 @@ _OUTPUT_CONTRACT = """รูปแบบ JSON ที่ต้องคืน (�
   DRIVE, Networking/InfiniBand/Spectrum). ห้ามแต่งชื่อที่ไม่มีในเอกสาร — ถ้าเอกสารไม่ระบุชื่อผลิตภัณฑ์ในส่วนงานนั้น
   ให้ products = []
 - สัดส่วนรายได้ระดับผลิตภัณฑ์ (products[].pct) บริษัทส่วนใหญ่ 'ไม่เปิดเผยแยกรายผลิตภัณฑ์' → ใส่ null ได้ ห้ามเดาตัวเลข
+
+สำคัญมากเรื่อง rivals/market share:
+- ส่วน rivals + our_share + share เป็น 'การวิเคราะห์การแข่งขัน' ใช้ความรู้ทั่วไปของคุณได้ (ตัวเลขเหล่านี้ไม่มีใน 10-K)
+- ใส่คู่แข่งที่ 'ชนกับผลิตภัณฑ์นั้นโดยตรง' จริง ๆ พร้อมชื่อรุ่นของคู่แข่ง (เช่น H100 ชนกับ AMD Instinct MI300X, Intel Gaudi 3)
+- market share เป็น 'ค่าประมาณ' — ถ้าไม่มั่นใจตัวเลขจริง ๆ ให้ share/our_share = null อย่าเดามั่ว ส่วน note ยังบอกเชิงคุณภาพได้
+- ถ้าผลิตภัณฑ์ใดไม่มีคู่แข่งชัดเจน/ไม่ทราบ ให้ rivals = []
 - ถ้าข้อความที่ให้มาไม่พอจริง ๆ ให้เติมเท่าที่มี และระบุในฟิลด์นั้นว่า "เอกสารไม่ได้ให้รายละเอียด" """
 
 
@@ -96,10 +110,41 @@ def _clean(payload: dict) -> dict:
                 ppct = round(float(ppct), 1) if ppct is not None else None
             except (TypeError, ValueError):
                 ppct = None
+            rivals = []
+            for rv in (p.get("rivals") or [])[:8]:
+                if not isinstance(rv, dict) or not (rv.get("company") or rv.get("product")):
+                    continue
+                rshare = rv.get("share")
+                try:
+                    rshare = round(float(rshare), 1) if rshare is not None else None
+                except (TypeError, ValueError):
+                    rshare = None
+                rivals.append({
+                    "company": str(rv.get("company", ""))[:60],
+                    "product": str(rv.get("product", ""))[:80],
+                    "share": rshare,
+                    "note": str(rv.get("note", ""))[:240],
+                })
+            oshare = p.get("our_share")
+            try:
+                oshare = round(float(oshare), 1) if oshare is not None else None
+            except (TypeError, ValueError):
+                oshare = None
+            # กันโมเดลส่ง share เป็นเศษส่วน 0-1 (เช่น 0.8 = 80%): ถ้าทุกค่า ≤1 ให้คูณ 100
+            shares = [v for v in [oshare] + [r["share"] for r in rivals] if v is not None]
+            if shares and max(shares) <= 1.0:
+                if oshare is not None:
+                    oshare = round(oshare * 100, 1)
+                for r in rivals:
+                    if r["share"] is not None:
+                        r["share"] = round(r["share"] * 100, 1)
             prods.append({
                 "name": str(p.get("name", "—"))[:80],
                 "pct": ppct,
                 "desc": str(p.get("desc", ""))[:300],
+                "market": str(p.get("market", ""))[:80] or None,
+                "our_share": oshare,
+                "rivals": rivals,
             })
         segs.append({
             "name": str(s.get("name", "—"))[:80],
