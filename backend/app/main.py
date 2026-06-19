@@ -476,16 +476,29 @@ async def filings_route(symbol: str = Query(..., description="สัญลัก
         raise HTTPException(502, f"ดึงข้อมูล SEC ไม่สำเร็จ: {exc}")
 
 
+@app.get("/api/offline/status")
+async def offline_status_route(symbol: str = Query("", description="ถ้าระบุ จะบอกว่าตัวนี้มีในฐานหรือยัง")):
+    """สถานะฐานข้อมูลงบออฟไลน์: ดาวน์โหลดเก็บไว้แล้วกี่ตัว (จากทั้งตลาด US).
+    ถ้าส่ง symbol มาด้วย จะบอกว่าหุ้นตัวนั้นมีงบในฐานแล้วหรือยัง (frontend ใช้ตัดสินใจโชว์ปุ่มอัปเดต)."""
+    status = await edgar.offline_status()
+    if symbol.strip():
+        status["symbol"] = symbol.upper().strip()
+        status["symbol_offline"] = await edgar.has_offline(symbol)
+    return status
+
+
 @app.get("/api/financials")
 async def financials_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL"),
-                           freq: str = Query("annual", description="annual | quarterly")):
-    """งบการเงินย้อนหลังลึก (10-15+ ปี) จาก SEC EDGAR — รายปี/รายไตรมาส."""
+                           freq: str = Query("annual", description="annual | quarterly"),
+                           refresh: bool = Query(False, description="True = ดึงสดจาก SEC มาทับฐานออฟไลน์ (ปุ่มอัปเดต)")):
+    """งบการเงินย้อนหลังลึก (10-15+ ปี) — อ่านจากฐานออฟไลน์ก่อน (เร็ว/ไม่กลัวเน็ตล่ม).
+    ตัวที่ยังไม่มีในฐานจะดึงสดอัตโนมัติครั้งแรก; กด refresh=true เพื่อบังคับดึงใหม่ทับของเดิม."""
     if not is_equity_symbol(symbol):
         raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
     if freq not in ("annual", "quarterly"):
         raise HTTPException(400, "freq ต้องเป็น annual หรือ quarterly")
     try:
-        facts = await edgar.get_company_facts(symbol)
+        facts = await edgar.get_company_facts(symbol, force_refresh=refresh)
     except ValueError:
         raise HTTPException(404, "งบย้อนหลังลึก (SEC EDGAR) รองรับเฉพาะหุ้นสหรัฐ — "
                                  "หุ้นไทย/ต่างประเทศดูได้เฉพาะสรุปปัจจุบัน (เกรด + เมตริก) ด้านบน")

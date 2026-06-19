@@ -2759,6 +2759,7 @@ let finSymbol = null;
 let finFreq = "annual";
 let finGroupKey = "income";
 let finMetricKey = null;      // เมตริกที่เลือกแสดงกราฟ
+let finOffline = null;        // สถานะฐานออฟไลน์ของหุ้นตัวที่กำลังดู
 
 function setFinFreq(freq) {
   if (finFreq === freq) return;
@@ -2768,14 +2769,19 @@ function setFinFreq(freq) {
   if (finSymbol) loadFinancials(finSymbol, freq);
 }
 
-async function loadFinancials(symbol, freq) {
+async function loadFinancials(symbol, freq, refresh) {
   finSymbol = symbol; finFreq = freq;
   finCache[symbol] = finCache[symbol] || {};
-  $("financialsView").innerHTML = `<div class="note">กำลังโหลดงบ ${symbol} (${freq === "annual" ? "รายปี" : "ไตรมาส"})... ครั้งแรกต้องดึงจาก SEC อาจช้าสักครู่</div>`;
+  const fresh = refresh ? " (ดึงสดจาก SEC มาทับฐานออฟไลน์)" : "";
+  $("financialsView").innerHTML = `<div class="note">กำลังโหลดงบ ${symbol} (${freq === "annual" ? "รายปี" : "ไตรมาส"})${fresh}... ${refresh ? "กำลังต่อ SEC อาจช้าสักครู่" : "อ่านจากฐานออฟไลน์"}</div>`;
   try {
-    let data = finCache[symbol][freq];
+    let data = refresh ? null : finCache[symbol][freq];
     if (!data) {
-      const res = await fetch(`${API}/api/financials?symbol=${encodeURIComponent(symbol)}&freq=${freq}`);
+      // เช็คก่อนว่าหุ้นนี้มีงบในฐานออฟไลน์แล้วหรือยัง
+      finOffline = null;
+      try { finOffline = await (await fetch(`${API}/api/offline/status?symbol=${encodeURIComponent(symbol)}`)).json(); } catch {}
+      const url = `${API}/api/financials?symbol=${encodeURIComponent(symbol)}&freq=${freq}${refresh ? "&refresh=true" : ""}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error(await res.text());
       data = await res.json();
       finCache[symbol][freq] = data;
@@ -2839,7 +2845,20 @@ function renderFinancials() {
     <div style="margin:8px 0 4px;"><b>${metric.label}</b> <span class="tiny">— คลิกแถวในตารางเพื่อเปลี่ยนกราฟ</span></div>
     ${svgBars(metric.values, metric.unit)}
     <div class="table-scroll" style="margin-top:8px; overflow-x:auto;"><table class="fin-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="note" style="margin-top:8px;">${d.entity_name || ""} · ${d.freq === "annual" ? "รายปี" : "รายไตรมาส"} · ${d.disclaimer || ""}</div>`;
+    <div class="note" style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span>${d.entity_name || ""} · ${d.freq === "annual" ? "รายปี" : "รายไตรมาส"} · ${d.disclaimer || ""}</span>
+      ${finOfflineBadge()}
+      <button onclick="loadFinancials(finSymbol, finFreq, true)" title="ดึงงบสดล่าสุดจาก SEC มาทับฐานออฟไลน์">🔄 ดึงสดจาก SEC</button>
+    </div>`;
+}
+
+function finOfflineBadge() {
+  if (!finOffline) return "";
+  const have = finOffline.symbol_offline;
+  const total = finOffline.downloaded != null ? ` · ในฐานมี ${finOffline.downloaded} ตัว` : "";
+  return have
+    ? `<span class="pill" style="background:#7a5;color:#fff;" title="อ่านจากฐานข้อมูลออฟไลน์ — เร็ว ไม่ต้องต่อเน็ต">📁 มีในฐาน${total}</span>`
+    : `<span class="pill" style="background:#a76;color:#fff;" title="ยังไม่มีในฐาน — เพิ่งดึงสดมาเก็บให้แล้ว กดดึงสดอีกครั้งเพื่อรีเฟรช">🆕 เพิ่งเพิ่มเข้าฐาน${total}</span>`;
 }
 
 function previewImg() {

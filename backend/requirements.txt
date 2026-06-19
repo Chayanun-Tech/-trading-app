@@ -8,3 +8,4 @@ python-dotenv>=1.0
 python-multipart>=0.0.9
 asyncpg>=0.29
 yfinance>=0.2.40
+pypdf>=4.0  # อ่านรายชื่อดัชนีไทยจาก PDF ทางการ SET (scripts/fetch_thai_indices.py)

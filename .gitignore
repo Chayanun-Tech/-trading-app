@@ -28,6 +28,11 @@ data/autotrade_history.json
 # SEC EDGAR / financials cache (refetched on demand)
 data/financials/
 
+# Thai index PDFs + logs (รายชื่อ regen ได้ด้วย fetch_thai_indices.py; ข้อมูลเก็บใน offline_fundamentals.json)
+data/thai/*.pdf
+data/thai/_*.log
+data/thai/thai_failures.json
+
 # Local editor/agent settings
 .claude/settings.local.json
 

@@ -29,6 +29,12 @@ _CACHE_DIR = Path(__file__).resolve().parents[1].parent / "data" / "financials"
 _FACTS_TTL = 7 * 24 * 3600       # 7 วัน
 _TICKERS_TTL = 30 * 24 * 3600    # 30 วัน
 
+# ออฟไลน์ก่อน (offline-first): ถ้ามีไฟล์งบในฐานข้อมูลออฟไลน์แล้ว → เสิร์ฟทันทีไม่สนอายุ cache
+# (อ่านเร็ว/ไม่กลัวเน็ตล่ม/ไม่โดน SEC บล็อก). จะดึงสดก็ต่อเมื่อกดปุ่มอัปเดต (force_refresh)
+# หรือยังไม่เคยมีไฟล์เลย. ปิดได้ด้วย env EDGAR_OFFLINE_FIRST=0 (กลับไปใช้ TTL 7 วัน).
+import os as _os
+_OFFLINE_FIRST = _os.getenv("EDGAR_OFFLINE_FIRST", "1").strip().lower() not in ("0", "false", "no")
+
 _ticker_map: dict[str, str] | None = None
 
 
@@ -70,7 +76,9 @@ async def get_company_facts(symbol: str, *, force_refresh: bool = False) -> dict
     """ดึง companyfacts (XBRL ทั้งหมด) ของหุ้น — cache ดิสก์ TTL 7 วัน."""
     cik = await get_cik(symbol)
     cache = _CACHE_DIR / f"facts_{cik}.json"
-    if not force_refresh and cache.exists() and time.time() - cache.stat().st_mtime < _FACTS_TTL:
+    # offline-first: มีไฟล์ในฐานออฟไลน์ → ใช้เลย (ไม่สน TTL) เว้นแต่สั่ง force_refresh
+    fresh = cache.exists() and time.time() - cache.stat().st_mtime < _FACTS_TTL
+    if not force_refresh and cache.exists() and (_OFFLINE_FIRST or fresh):
         try:
             return json.loads(cache.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -82,6 +90,49 @@ async def get_company_facts(symbol: str, *, force_refresh: bool = False) -> dict
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache.write_text(json.dumps(data), encoding="utf-8")
     return data
+
+
+# ---------- ฐานข้อมูลออฟไลน์ (offline DB) — รู้ว่าตัวไหนดาวน์โหลดเก็บไว้แล้ว ----------
+def facts_file(cik: str) -> Path:
+    return _CACHE_DIR / f"facts_{str(cik).zfill(10)}.json"
+
+
+def has_offline_cik(cik: str) -> bool:
+    """มีไฟล์งบ (companyfacts) ของ CIK นี้ในฐานออฟไลน์หรือยัง."""
+    return facts_file(cik).exists()
+
+
+async def has_offline(symbol: str) -> bool:
+    """หุ้นตัวนี้มีงบเก็บไว้ในฐานออฟไลน์แล้วหรือยัง (ใช้ให้ frontend รู้ว่าต้องกดอัปเดตไหม)."""
+    try:
+        return has_offline_cik(await get_cik(symbol))
+    except ValueError:
+        return False
+
+
+def downloaded_count() -> int:
+    """จำนวนหุ้นที่ดาวน์โหลดงบเก็บไว้แล้วในฐานออฟไลน์."""
+    try:
+        return sum(1 for _ in _CACHE_DIR.glob("facts_*.json"))
+    except OSError:
+        return 0
+
+
+async def offline_status() -> dict:
+    """สรุปสถานะฐานข้อมูลออฟไลน์: ดาวน์โหลดแล้วกี่ตัว จากทั้งหมดกี่ตัวที่ SEC มี."""
+    have = downloaded_count()
+    total = None
+    try:
+        total = len(await _load_ticker_map())
+    except Exception:  # noqa: BLE001
+        pass
+    return {
+        "downloaded": have,
+        "total_us_tickers": total,
+        "pct": round(have / total * 100, 1) if total else None,
+        "cache_dir": str(_CACHE_DIR),
+        "offline_first": _OFFLINE_FIRST,
+    }
 
 
 _SUBS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
