@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 import base64
+import httpx
 
 from fastapi import (FastAPI, File, Form, HTTPException, Query, Request, UploadFile,
                      WebSocket, WebSocketDisconnect)
@@ -30,6 +31,7 @@ from app.fundamentals import (get_fundamentals, is_equity_symbol, save_ai_qualit
 from app.fundamentals_ai import analyze_fundamentals_ai
 from app.indicators import compute_indicators
 from app.math_model import DEFAULT_MODEL_PATH, load_model
+from app.multibagger_scanner import scan_small_caps
 from app.schemas import (AlertRule, AnalyzeFundamentalsRequest, AnalyzeRequest,
                          BacktestRequest, CandlesResponse, LiveSignalRequest,
                          MultiSchoolReport, ValueReport)
@@ -255,6 +257,35 @@ async def upsert_memory(req: MemoryUpsert):
 @app.get("/api/symbols")
 async def symbols():
     return settings.sample_symbols
+
+
+@app.get("/api/multibagger/scan")
+async def multibagger_scan(
+    min_market_cap: float = Query(50_000_000, ge=10_000_000),
+    max_market_cap: float = Query(3_000_000_000, ge=50_000_000),
+    min_price: float = Query(2.0, ge=0.1),
+    min_dollar_volume: float = Query(1_000_000, ge=0),
+    sector: str | None = None,
+    limit: int = Query(20, ge=5, le=50),
+    enrich_limit: int = Query(45, ge=10, le=100),
+    us_only: bool = True,
+):
+    """Discover liquid small caps, then rank fundamentals transparently."""
+    if max_market_cap <= min_market_cap:
+        raise HTTPException(status_code=400, detail="max_market_cap must exceed min_market_cap")
+    try:
+        return await scan_small_caps(
+            min_market_cap=min_market_cap,
+            max_market_cap=max_market_cap,
+            min_price=min_price,
+            min_dollar_volume=min_dollar_volume,
+            sector=sector,
+            limit=limit,
+            enrich_limit=enrich_limit,
+            us_only=us_only,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Stock universe unavailable: {exc}") from exc
 
 
 @app.get("/api/search-symbols")

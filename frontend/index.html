@@ -405,6 +405,7 @@
 
     <div class="tabs">
       <button class="tab active" id="tabReport" onclick="showTab('report')">Report</button>
+      <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">🌱 หุ้นเล็กเด้งไกล</button>
       <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">💎 VI / พื้นฐาน</button>
       <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
       <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
@@ -416,6 +417,38 @@
 
     <div id="reportPanel" class="panel-body">
       <div id="result" class="note">Ready.</div>
+    </div>
+
+    <div id="multibaggerPanel" class="panel-body hidden">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div>
+          <b style="font-size:16px;">🌱 Small-cap Opportunity Miner</b>
+          <div class="note">คัดทั้งตลาด → ตัดหุ้นบาง/Warrant/SPAC → วิเคราะห์ Growth, Quality, งบดุล, ราคา และ runway</div>
+        </div>
+        <span style="flex:1;"></span>
+        <button class="primary" onclick="runMultibaggerScan()">เริ่มขุดหุ้น</button>
+      </div>
+      <div class="grid3" style="margin-top:10px;">
+        <div class="field"><label>Market cap ต่ำสุด (ล้าน $)</label><input id="mbMinCap" type="number" value="50" min="10" /></div>
+        <div class="field"><label>Market cap สูงสุด (ล้าน $)</label><input id="mbMaxCap" type="number" value="3000" min="50" /></div>
+        <div class="field"><label>มูลค่าซื้อขายขั้นต่ำ/วัน (ล้าน $)</label><input id="mbMinDollarVolume" type="number" value="1" min="0" step="0.5" /></div>
+        <div class="field"><label>ราคาขั้นต่ำ ($)</label><input id="mbMinPrice" type="number" value="2" min="0.1" step="0.5" /></div>
+        <div class="field"><label>Sector (ไม่เลือก = ทั้งหมด)</label>
+          <select id="mbSector">
+            <option value="">ทุก Sector</option><option>Technology</option><option>Health Care</option>
+            <option>Industrials</option><option>Consumer Discretionary</option><option>Consumer Staples</option>
+            <option>Energy</option><option>Finance</option><option>Real Estate</option>
+            <option>Telecommunications</option><option>Utilities</option><option>Basic Materials</option>
+          </select>
+        </div>
+        <div class="field"><label>จำนวนผลลัพธ์</label><select id="mbLimit"><option>10</option><option selected>20</option><option>30</option></select></div>
+      </div>
+      <div class="note" style="margin-top:8px;">
+        คะแนนเต็ม 100: Growth 35 · Quality 25 · Balance Sheet 20 · Valuation 10 · Size Runway 10 แล้วหักธงแดง
+      </div>
+      <div id="multibaggerResult" style="margin-top:12px;">
+        <div class="note">กด “เริ่มขุดหุ้น” เพื่อสร้าง shortlist จากตลาดสหรัฐฯ ข้อมูลพื้นฐานอาจใช้เวลา 30–90 วินาที</div>
+      </div>
     </div>
 
     <div id="fundamentalsPanel" class="panel-body hidden">
@@ -917,7 +950,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "fundamentalsPanel", "ivPanel", "imagePanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "multibaggerPanel", "fundamentalsPanel", "ivPanel", "imagePanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -2323,7 +2356,7 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","fundamentals","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -2402,6 +2435,84 @@ function viMetric(v) {
   if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + "M";
   if (Math.abs(v) > 0 && Math.abs(v) < 1) return (v * 100).toFixed(1) + "%";
   return (+v).toFixed(2);
+}
+
+function mbMoney(v) {
+  if (v === null || v === undefined) return "—";
+  if (Math.abs(v) >= 1e9) return "$" + (v / 1e9).toFixed(2) + "B";
+  if (Math.abs(v) >= 1e6) return "$" + (v / 1e6).toFixed(1) + "M";
+  return "$" + Number(v).toLocaleString();
+}
+
+function mbPct(v) {
+  return v === null || v === undefined ? "—" : (Number(v) * 100).toFixed(1) + "%";
+}
+
+function openCandidate(symbol, target) {
+  currentSymbol = symbol;
+  if ($("symbol")) $("symbol").value = symbol;
+  if (target === "iv") {
+    $("ivSymbol").value = symbol;
+    showTab("iv");
+    runIVAnalysis();
+  } else {
+    $("viSymbol").value = symbol;
+    showTab("fundamentals");
+    runFundamentalAnalysis();
+  }
+}
+
+async function runMultibaggerScan() {
+  const box = $("multibaggerResult");
+  const params = queryString({
+    min_market_cap:Number($("mbMinCap").value || 50) * 1e6,
+    max_market_cap:Number($("mbMaxCap").value || 3000) * 1e6,
+    min_price:Number($("mbMinPrice").value || 2),
+    min_dollar_volume:Number($("mbMinDollarVolume").value || 1) * 1e6,
+    sector:$("mbSector").value,
+    limit:Number($("mbLimit").value || 20),
+    enrich_limit:45,
+    us_only:true,
+  });
+  box.innerHTML = `<div class="note">⛏️ กำลังกรองหุ้นทั้งตลาดและอ่านงบของผู้ผ่านรอบแรก... อย่าปิดหน้านี้</div>`;
+  try {
+    const res = await fetch(`${API}/api/multibagger/scan?${params}`);
+    if (!res.ok) throw new Error((await res.json().catch(()=>({detail:res.statusText}))).detail || res.statusText);
+    renderMultibagger(await res.json());
+  } catch (e) {
+    notifyError(errorMessage(e), "Small-cap scan failed");
+    box.innerHTML = `<div class="down">สแกนไม่สำเร็จ: ${escapeHtml(errorMessage(e))}</div>`;
+  }
+}
+
+function renderMultibagger(data) {
+  const rows = (data.candidates || []).map((c, i) => {
+    const m = c.metrics || {}, s = c.scorecard || {};
+    const scoreCls = c.score >= 70 ? "up" : c.score >= 50 ? "neutral" : "down";
+    const why = (c.positives || []).length ? c.positives.join(" · ") : "ข้อมูลบวกยังไม่เด่น";
+    const risks = (c.red_flags || []).length ? c.red_flags.join(" · ") : "ไม่พบธงแดงจากข้อมูลชุดนี้";
+    return `<tr>
+      <td>${i + 1}</td>
+      <td><b>${escapeHtml(c.symbol)}</b><div class="tiny">${escapeHtml(c.name || "")}</div><div class="tiny">${escapeHtml(c.sector || "")}</div></td>
+      <td class="${scoreCls}"><b style="font-size:18px;">${c.score}</b><div class="tiny">ข้อมูล ${c.confidence}%</div></td>
+      <td>${mbMoney(c.market_cap)}<div class="tiny">ซื้อขาย ${mbMoney(c.dollar_volume)}/วัน</div></td>
+      <td>${mbPct(m.revenue_growth)}<div class="tiny">กำไร ${mbPct(m.earnings_growth)}</div></td>
+      <td>${mbPct(m.operating_margin)}<div class="tiny">ROE ${mbPct(m.roe)}</div></td>
+      <td>${m.debt_to_equity == null ? "—" : Number(m.debt_to_equity).toFixed(2) + "x"}<div class="tiny">Current ${m.current_ratio == null ? "—" : Number(m.current_ratio).toFixed(2)}</div></td>
+      <td>${m.peg == null ? "—" : Number(m.peg).toFixed(2)}<div class="tiny">P/E ${m.pe == null ? "—" : Number(m.pe).toFixed(1)}</div></td>
+      <td class="note"><span class="up">${escapeHtml(why)}</span><br><span class="${(c.red_flags || []).length ? "down" : "tiny"}">${escapeHtml(risks)}</span>
+        <div class="tiny">G ${s.growth || 0} · Q ${s.quality || 0} · B ${s.balance_sheet || 0} · V ${s.valuation || 0} · R ${s.runway || 0} · หัก ${s.penalty || 0}</div>
+      </td>
+      <td style="white-space:nowrap;"><button onclick="openCandidate('${c.symbol}','vi')">VI</button> <button onclick="openCandidate('${c.symbol}','iv')">IV</button></td>
+    </tr>`;
+  }).join("");
+  $("multibaggerResult").innerHTML = `
+    <div class="note">ข้อมูล ณ ${new Date(data.as_of * 1000).toLocaleString()} · ทั้งตลาด ${data.universe_count} · ผ่านกรอง ${data.prefilter_count} · อ่านพื้นฐานสำเร็จ ${data.analyzed_count}</div>
+    <div class="table-scroll" style="max-height:620px; margin-top:8px;"><table>
+      <thead><tr><th>#</th><th>หุ้น</th><th>คะแนน</th><th>ขนาด</th><th>เติบโต</th><th>คุณภาพ</th><th>งบดุล</th><th>ราคา</th><th>เหตุผล / ธงแดง</th><th>เจาะลึก</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="10">ไม่พบหุ้นที่มีข้อมูลเพียงพอ ลองขยายช่วง Market cap หรือลดสภาพคล่องขั้นต่ำ</td></tr>`}</tbody>
+    </table></div>
+    <div class="note" style="margin-top:8px;">${escapeHtml(data.methodology || "")}<br>${escapeHtml(data.coverage_note || "")}<br>${escapeHtml(data.disclaimer || "")}</div>`;
 }
 
 async function runFundamentalAnalysis() {
