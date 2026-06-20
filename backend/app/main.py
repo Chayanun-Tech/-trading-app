@@ -23,12 +23,12 @@ from app.bitkub import BitkubClient
 from app.config import get_settings
 from app.data.base import DataProvider
 from app.db import DatabaseStore
-from app import edgar
+from app import edgar, thai_sec
 from app import business as business_explainer
 from app.engine import build_report
 from app.financials import build_financials
-from app.fundamentals import (get_fundamentals, is_equity_symbol, save_ai_qualitative,
-                              update_offline)
+from app.fundamentals import (get_fundamentals, get_offline, is_equity_symbol,
+                              save_ai_qualitative, update_offline)
 from app.fundamentals_ai import analyze_fundamentals_ai
 from app.indicators import compute_indicators
 from app.math_model import DEFAULT_MODEL_PATH, load_model
@@ -497,11 +497,44 @@ async def fundamentals_route(symbol: str = Query(..., description="สัญล�
 @app.get("/api/filings")
 async def filings_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL"),
                         limit: int = Query(25, ge=1, le=100)):
-    """ไทม์ไลน์การยื่นเอกสารล่าสุดต่อ SEC (10-K/10-Q/8-K/Form 4 ...) + ลิงก์เอกสารจริง."""
+    """เอกสารทางการล่าสุด: SEC EDGAR สำหรับ US หรือ 56-1 One Report สำหรับหุ้นไทย."""
     if not is_equity_symbol(symbol):
         raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น")
+    if thai_sec.is_thai_symbol(symbol):
+        key = symbol.upper().strip()
+        company_name = (get_offline(key) or {}).get("long_name")
+        if not company_name:
+            try:
+                search = getattr(provider, "search_symbols")
+                results = await search(key, 10)
+                exact = next(
+                    (row for row in results if str(row.get("symbol", "")).upper() == key),
+                    None,
+                )
+                company_name = (exact or {}).get("name")
+            except Exception:  # noqa: BLE001
+                company_name = None
+        try:
+            filings = await thai_sec.recent_one_reports(key, company_name or "", limit)
+            return {
+                "symbol": key,
+                "market": "TH",
+                "source": "SEC Thailand iDISC",
+                "source_url": thai_sec.source_url(),
+                "filings": filings,
+            }
+        except ValueError as exc:
+            raise HTTPException(404, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"ดึง 56-1 One Report จาก SEC Thailand ไม่สำเร็จ: {exc}")
     try:
-        return {"symbol": symbol.upper(), "filings": await edgar.recent_filings(symbol, limit)}
+        return {
+            "symbol": symbol.upper(),
+            "market": "US",
+            "source": "SEC EDGAR",
+            "source_url": "https://www.sec.gov/search-filings",
+            "filings": await edgar.recent_filings(symbol, limit),
+        }
     except ValueError:
         raise HTTPException(404, "ไทม์ไลน์เอกสาร SEC รองรับเฉพาะหุ้นสหรัฐ")
     except Exception as exc:  # noqa: BLE001

@@ -600,8 +600,8 @@
       </div>
 
       <div id="filingsSection" style="margin-top:18px; border-top:1px solid var(--border); padding-top:12px;">
-        <b>📰 ไทม์ไลน์เอกสาร SEC ล่าสุด</b>
-        <div id="filingsView" class="note" style="margin-top:8px;">กด "วิเคราะห์ VI" เพื่อโหลดเอกสารล่าสุด (เฉพาะหุ้น US)</div>
+        <b>📰 รายงานและเอกสารทางการล่าสุด</b>
+        <div id="filingsView" class="note" style="margin-top:8px;">กด "วิเคราะห์ VI" เพื่อโหลด 10-K/10-Q สำหรับหุ้นสหรัฐ หรือ 56-1 One Report สำหรับหุ้นไทย</div>
       </div>
     </div>
 
@@ -2759,6 +2759,7 @@ function renderBusiness(d) {
 }
 
 const FORM_TH = {
+  "56-1 One Report": "รายงานประจำปี (56-1 One Report)",
   "10-K": "รายงานประจำปี (10-K)", "10-Q": "รายงานไตรมาส (10-Q)", "8-K": "เหตุการณ์สำคัญ (8-K)",
   "4": "ธุรกรรมคนใน (Form 4)", "3": "รายงานถือครอง (Form 3)", "5": "รายงานถือครอง (Form 5)",
   "DEF 14A": "หนังสือเชิญประชุม (Proxy)", "SC 13G": "ผู้ถือหุ้นใหญ่ (13G)", "SC 13D": "ผู้ถือหุ้นใหญ่ (13D)",
@@ -2775,9 +2776,13 @@ async function loadFilings(symbol) {
       const link = f.url ? `<a href="${f.url}" target="_blank" rel="noopener">เปิด ↗</a>` : "";
       const items = f.items ? ` <span class="tiny">[${f.items}]</span>` : "";
       const cls = f.form === "8-K" ? "up" : (f.form === "4" ? "neutral" : "");
-      return `<tr><td class="tiny">${f.date || ""}</td><td><b class="${cls}">${FORM_TH[f.form] || f.form}</b>${items}</td><td>${link}</td></tr>`;
+      const year = f.year_label ? ` <span class="pill">${escapeHtml(f.year_label)}</span>` : "";
+      return `<tr><td class="tiny">${escapeHtml(f.date || "")}</td><td><b class="${cls}">${FORM_TH[f.form] || escapeHtml(f.form)}</b>${year}${items}</td><td>${link}</td></tr>`;
     }).join("");
-    el.innerHTML = `<div class="table-scroll"><table class="fin-table"><thead><tr><th>วันที่</th><th>เอกสาร</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const source = d.source_url
+      ? `<div class="note" style="margin-top:7px;">ที่มา: <a href="${d.source_url}" target="_blank" rel="noopener">${escapeHtml(d.source || "")}</a></div>`
+      : "";
+    el.innerHTML = `<div class="table-scroll"><table class="fin-table"><thead><tr><th>วันที่รับข้อมูล</th><th>เอกสาร</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="3">ไม่พบเอกสาร</td></tr>`}</tbody></table></div>${source}`;
   } catch (e) { el.innerHTML = `<div class="note">${e.message || e}</div>`; }
 }
 
