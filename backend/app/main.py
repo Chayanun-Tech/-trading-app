@@ -544,7 +544,7 @@ async def filings_route(symbol: str = Query(..., description="สัญลัก
 @app.get("/api/business")
 async def business_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL"),
                          refresh: bool = Query(False, description="True = ให้ AI เรียบเรียงใหม่ทับ cache")):
-    """คำอธิบายธุรกิจเชิงลึก (ภาษาไทย) + สัดส่วนรายได้แยกส่วนงาน — เรียบเรียงจาก 10-K จริง (SEC)."""
+    """คำอธิบายธุรกิจจาก 10-K (US) หรือ 56-1 One Report (ไทย)."""
     if not is_equity_symbol(symbol):
         raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
     try:

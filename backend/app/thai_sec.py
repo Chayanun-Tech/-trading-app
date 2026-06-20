@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import html
+import io
+import json
 import re
 import shutil
 import subprocess
 import time
+import zipfile
 from datetime import datetime
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
@@ -25,6 +28,10 @@ _SOURCE_URL = "https://market.sec.or.th/public/idisc/en/Viewmore/fs-r561"
 _CACHE_DIR = Path(__file__).resolve().parents[1].parent / "data" / "thai_sec"
 _CACHE_FILE = _CACHE_DIR / "fs-r561-en.html"
 _CACHE_TTL = 12 * 3600
+_DOCUMENT_TTL = 7 * 24 * 3600
+_MAX_DOWNLOAD_BYTES = 80 * 1024 * 1024
+_MAX_PDF_BYTES = 70 * 1024 * 1024
+_MAX_CONTEXT_CHARS = 48_000
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -229,3 +236,196 @@ async def recent_one_reports(
 
 def source_url() -> str:
     return _SOURCE_URL
+
+
+def _document_cache_path(symbol: str) -> Path:
+    safe = re.sub(r"[^A-Z0-9_-]+", "_", (symbol or "").upper().strip())
+    return _CACHE_DIR / f"one_report_{safe}.json"
+
+
+def _select_pdf_member(members: list[zipfile.ZipInfo]) -> zipfile.ZipInfo:
+    pdfs = [
+        item for item in members
+        if not item.is_dir() and item.filename.lower().endswith(".pdf")
+        and 0 < item.file_size <= _MAX_PDF_BYTES
+    ]
+    if not pdfs:
+        raise ValueError("ไม่พบไฟล์ PDF ในชุด 56-1 One Report")
+
+    def rank(item: zipfile.ZipInfo) -> tuple[int, int]:
+        name = item.filename.upper()
+        score = 0
+        if "ONEREPORT" in name or "ONE_REPORT" in name:
+            score += 100
+        if "56-1" in name or "56_1" in name:
+            score += 40
+        if "STRUCTURE" in name:
+            score -= 100
+        return score, item.file_size
+
+    return max(pdfs, key=rank)
+
+
+async def _download_document(url: str) -> bytes:
+    error: Exception | None = None
+    for attempt in range(3):
+        try:
+            timeout = httpx.Timeout(150, connect=20)
+            async with httpx.AsyncClient(
+                timeout=timeout, headers=_HEADERS, follow_redirects=True,
+            ) as client:
+                async with client.stream("GET", url) as response:
+                    response.raise_for_status()
+                    stated = int(response.headers.get("content-length") or 0)
+                    if stated > _MAX_DOWNLOAD_BYTES:
+                        raise ValueError("ไฟล์ One Report มีขนาดใหญ่เกินขีดจำกัด")
+                    chunks: list[bytes] = []
+                    size = 0
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > _MAX_DOWNLOAD_BYTES:
+                            raise ValueError("ไฟล์ One Report มีขนาดใหญ่เกินขีดจำกัด")
+                        chunks.append(chunk)
+                    return b"".join(chunks)
+        except ValueError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            error = exc
+            await asyncio.sleep(attempt + 1)
+    raise RuntimeError(f"ดาวน์โหลด One Report ไม่สำเร็จ: {error}") from error
+
+
+def _pdf_bytes(payload: bytes) -> tuple[bytes, str]:
+    source = io.BytesIO(payload)
+    if zipfile.is_zipfile(source):
+        with zipfile.ZipFile(source) as archive:
+            member = _select_pdf_member(archive.infolist())
+            if member.compress_size and member.file_size / member.compress_size > 200:
+                raise ValueError("ไฟล์ One Report มีอัตราการบีบอัดผิดปกติ")
+            return archive.read(member), member.filename
+    if payload[:5] == b"%PDF-":
+        if len(payload) > _MAX_PDF_BYTES:
+            raise ValueError("ไฟล์ PDF One Report มีขนาดใหญ่เกินขีดจำกัด")
+        return payload, "one-report.pdf"
+    raise ValueError("ไฟล์จาก SEC Thailand ไม่ใช่ PDF หรือ ZIP ที่รองรับ")
+
+
+_PAGE_KEYWORDS = {
+    "business overview": 12,
+    "nature of business": 12,
+    "revenue structure": 12,
+    "business operation": 8,
+    "products and services": 8,
+    "hospital network": 7,
+    "management discussion": 10,
+    "management analysis": 10,
+    "operating results": 8,
+    "segment information": 10,
+    "revenue by": 8,
+    "source of revenue": 8,
+    "customer": 3,
+    "competition": 4,
+    "competitive": 4,
+    "risk factor": 5,
+    "บริษัทประกอบธุรกิจ": 12,
+    "ลักษณะการประกอบธุรกิจ": 12,
+    "โครงสร้างรายได้": 12,
+    "ผลิตภัณฑ์และบริการ": 8,
+    "การวิเคราะห์และคำอธิบายของฝ่ายจัดการ": 10,
+    "ปัจจัยความเสี่ยง": 5,
+}
+
+
+def _select_relevant_pages(pages: list[str], max_chars: int = _MAX_CONTEXT_CHARS) -> str:
+    scored: list[tuple[int, int]] = []
+    for index, text in enumerate(pages):
+        low = text.lower()
+        score = sum(weight * low.count(term) for term, weight in _PAGE_KEYWORDS.items())
+        if score:
+            scored.append((score, index))
+
+    chosen: set[int] = {0}
+    for _, index in sorted(scored, reverse=True)[:28]:
+        chosen.update(i for i in (index - 1, index, index + 1) if 0 <= i < len(pages))
+
+    output: list[str] = []
+    total = 0
+    for index in sorted(chosen):
+        text = pages[index].strip()
+        if not text:
+            continue
+        block = f"\n\n--- PAGE {index + 1} ---\n{text}"
+        if total + len(block) > max_chars:
+            remaining = max_chars - total
+            if remaining > 500:
+                output.append(block[:remaining])
+            break
+        output.append(block)
+        total += len(block)
+    return "".join(output).strip()
+
+
+def _extract_pdf_context(pdf: bytes) -> tuple[str, int]:
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(pdf))
+    if reader.is_encrypted:
+        try:
+            reader.decrypt("")
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError("PDF One Report ถูกเข้ารหัสและไม่สามารถอ่านได้") from exc
+
+    pages: list[str] = []
+    for page in reader.pages[:800]:
+        try:
+            text = page.extract_text() or ""
+        except Exception:  # noqa: BLE001
+            text = ""
+        pages.append(re.sub(r"\s+", " ", text).strip())
+    context = _select_relevant_pages(pages)
+    if len(context) < 1_000:
+        raise ValueError("อ่านข้อความจาก PDF One Report ได้น้อยเกินไป")
+    return context, len(reader.pages)
+
+
+async def get_one_report_context(
+    symbol: str,
+    company_name: str,
+    *,
+    force_refresh: bool = False,
+) -> dict:
+    """Download the latest Thai 56-1 One Report and return AI-ready excerpts."""
+    cache = _document_cache_path(symbol)
+    if (
+        not force_refresh
+        and cache.exists()
+        and time.time() - cache.stat().st_mtime < _DOCUMENT_TTL
+    ):
+        try:
+            return json.loads(cache.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    reports = await recent_one_reports(
+        symbol, company_name, 1, force_refresh=force_refresh,
+    )
+    if not reports:
+        raise ValueError(f"ไม่พบ 56-1 One Report ของ {symbol}")
+    report = reports[0]
+    payload = await _download_document(report["url"])
+    pdf, filename = _pdf_bytes(payload)
+    context, page_count = await asyncio.to_thread(_extract_pdf_context, pdf)
+    result = {
+        "url": report["url"],
+        "filing_date": report["date"],
+        "report_year": report["year"],
+        "company_name": report["company_name"],
+        "document_name": filename,
+        "page_count": page_count,
+        "business": context,
+        "mda": context,
+        "source": "SEC Thailand 56-1 One Report",
+    }
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    return result

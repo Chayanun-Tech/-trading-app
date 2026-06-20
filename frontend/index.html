@@ -626,12 +626,12 @@
         .biz-vs-us td{color:#dff3e6;}
       </style>
       <div class="grid3">
-        <div class="field"><label>หุ้น (US เท่านั้น)</label><input id="bizSymbol" placeholder="เช่น AAPL, NVDA, KO" /></div>
+        <div class="field"><label>หุ้น (US / ไทย .BK)</label><input id="bizSymbol" placeholder="เช่น AAPL, NVDA, BDMS.BK, PTT.BK" /></div>
         <div class="field" style="align-self:end;"><button class="primary" onclick="runBusiness()">อธิบายธุรกิจ</button></div>
         <div class="field" style="align-self:end;"><button onclick="runBusiness(true)" title="ให้ AI เรียบเรียงใหม่ทับของเดิม">🔄 สร้างใหม่</button></div>
       </div>
-      <div class="note" style="margin-top:6px;">อธิบายธุรกิจเชิงลึกจากแบบ 10-K จริง (SEC EDGAR) — บริษัททำอะไร หาเงินอย่างไร พร้อมสัดส่วนรายได้แยกส่วนงาน. เรียบเรียงเป็นภาษาไทยโดย AI (เฉพาะหุ้นสหรัฐ)</div>
-      <div id="bizResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้น US แล้วกด "อธิบายธุรกิจ"</div></div>
+      <div class="note" style="margin-top:6px;">อธิบายธุรกิจเชิงลึกจากเอกสารทางการ — หุ้นสหรัฐอ่าน 10-K จาก SEC EDGAR; หุ้นไทยอ่าน 56-1 One Report จาก ก.ล.ต. พร้อมโมเดลรายได้ ส่วนงาน ผลิตภัณฑ์ คู่แข่ง และจุดแข็ง</div>
+      <div id="bizResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้น เช่น AAPL หรือ BDMS.BK แล้วกด "อธิบายธุรกิจ"</div></div>
     </div>
 
     <div id="ivPanel" class="panel-body hidden">
@@ -2698,10 +2698,11 @@ async function runFundamentalAnalysis() {
 
 async function runBusiness(refresh) {
   let sym = ($("bizSymbol").value || currentSymbol || "").trim().toUpperCase();
-  if (!sym) { $("bizResult").innerHTML = `<div class="down">กรุณาพิมพ์สัญลักษณ์หุ้น (US)</div>`; return; }
+  if (!sym) { $("bizResult").innerHTML = `<div class="down">กรุณาพิมพ์สัญลักษณ์หุ้น เช่น AAPL หรือ BDMS.BK</div>`; return; }
   $("bizSymbol").value = sym;
   showTab("business");
-  $("bizResult").innerHTML = `<div class="note">กำลังอ่าน 10-K และเรียบเรียงคำอธิบายธุรกิจ ${escapeHtml(sym)}... ${refresh ? "(สร้างใหม่)" : "(ครั้งแรกอาจช้า ต้องดึงเอกสารจาก SEC + ให้ AI เรียบเรียง)"}</div>`;
+  const reportName = sym.endsWith(".BK") ? "56-1 One Report จาก ก.ล.ต." : "10-K จาก SEC";
+  $("bizResult").innerHTML = `<div class="note">กำลังอ่าน ${reportName} และเรียบเรียงคำอธิบายธุรกิจ ${escapeHtml(sym)}... ${refresh ? "(สร้างใหม่)" : "(ครั้งแรกอาจใช้เวลาสักครู่เพื่อดาวน์โหลดและอ่านรายงาน)"}</div>`;
   try {
     const url = `${API}/api/business?symbol=${encodeURIComponent(sym)}${refresh ? "&refresh=true" : ""}`;
     const res = await fetch(url);
@@ -2745,9 +2746,10 @@ function renderBusiness(d) {
       return head + prodRows;
     }).join("");
     revHtml = `<div class="biz-seg"><div class="biz-h">📊 สัดส่วนรายได้แยกส่วนงาน + ผลิตภัณฑ์</div><table class="biz-rev"><tbody>${rows}</tbody></table>` +
-              `<div class="tiny" style="margin-top:6px; color:#7d8b99;">* สัดส่วนรายได้ (ส่วนงาน/ผลิตภัณฑ์) อ้างอิงจาก 10-K/MD&A; ▪ = ชื่อผลิตภัณฑ์/แบรนด์จริงในเอกสาร; "n/a" = เอกสารไม่ได้ระบุเป็นเปอร์เซ็นต์<br>⚔️ <b>ส่วนคู่แข่ง + Market share เป็นการประมาณการโดย AI จากความรู้ทั่วไป ไม่ใช่ตัวเลขทางการจาก 10-K</b> — ใช้เทียบศักยภาพคร่าว ๆ ควรตรวจสอบกับรายงานวิจัยตลาดก่อนตัดสินใจ</div></div>`;
+              `<div class="tiny" style="margin-top:6px; color:#7d8b99;">* สัดส่วนรายได้ (ส่วนงาน/ผลิตภัณฑ์) อ้างอิงจากรายงานประจำปีทางการ; ▪ = ชื่อผลิตภัณฑ์/แบรนด์จริงในเอกสาร; "n/a" = เอกสารไม่ได้ระบุเป็นเปอร์เซ็นต์<br>⚔️ <b>ส่วนคู่แข่ง + Market share เป็นการประมาณการโดย AI จากความรู้ทั่วไป ไม่ใช่ตัวเลขทางการจากรายงาน</b> — ใช้เทียบศักยภาพคร่าว ๆ ควรตรวจสอบกับรายงานวิจัยตลาดก่อนตัดสินใจ</div></div>`;
   }
-  const src = d.filing_url ? `<a href="${d.filing_url}" target="_blank" rel="noopener" style="color:var(--accent,#2a6);">ดูเอกสารต้นฉบับ 10-K ↗</a>` : "";
+  const docLabel = d.report_type || (d.market === "TH" ? "56-1 One Report" : "10-K");
+  const src = d.filing_url ? `<a href="${d.filing_url}" target="_blank" rel="noopener" style="color:var(--accent,#2a6);">ดูเอกสารต้นฉบับ ${escapeHtml(docLabel)} ↗</a>` : "";
   $("bizResult").innerHTML =
     (d.one_liner ? `<div class="biz-oneliner">${escapeHtml(d.one_liner)}</div>` : "") +
     sec("🔎 บริษัทนี้ทำอะไร", d.what_they_do) +
@@ -2755,7 +2757,7 @@ function renderBusiness(d) {
     revHtml +
     sec("👥 ลูกค้าหลัก", d.customers) +
     sec("🏰 จุดแข็ง / ตำแหน่งในอุตสาหกรรม", d.moat_and_position) +
-    `<div class="note" style="margin-top:14px;">ที่มา: ${escapeHtml(d.source || "SEC 10-K")}${d.filing_date ? " · ยื่นเมื่อ " + escapeHtml(d.filing_date) : ""} ${src}</div>`;
+    `<div class="note" style="margin-top:14px;">ที่มา: ${escapeHtml(d.source || docLabel)}${d.report_year ? " · ปีรายงาน " + escapeHtml(d.report_year) : ""}${d.filing_date ? " · รับข้อมูลเมื่อ " + escapeHtml(d.filing_date) : ""} ${src}</div>`;
 }
 
 const FORM_TH = {

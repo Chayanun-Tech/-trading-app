@@ -1,4 +1,5 @@
 import unittest
+import zipfile
 
 from app import thai_sec
 
@@ -46,6 +47,30 @@ class ThaiSecTests(unittest.TestCase):
         self.assertTrue(thai_sec.is_thai_symbol("KBANK.BK"))
         self.assertTrue(thai_sec.is_thai_symbol("ptt.bk"))
         self.assertFalse(thai_sec.is_thai_symbol("AAPL"))
+
+    def test_select_pdf_member_prefers_one_report(self):
+        members = [
+            zipfile.ZipInfo("STRUCTURE.PDF"),
+            zipfile.ZipInfo("ONEREPORT2025E.PDF"),
+            zipfile.ZipInfo("attachment.pdf"),
+        ]
+        members[0].file_size = 500_000
+        members[1].file_size = 2_000_000
+        members[2].file_size = 3_000_000
+        selected = thai_sec._select_pdf_member(members)
+        self.assertEqual(selected.filename, "ONEREPORT2025E.PDF")
+
+    def test_select_relevant_pages_keeps_business_and_revenue(self):
+        pages = [
+            "Cover page",
+            "Unrelated sustainability narrative",
+            "Business overview and nature of business. Products and services.",
+            "Revenue structure and revenue by operating segment.",
+            "Risk factors and competition.",
+        ]
+        text = thai_sec._select_relevant_pages(pages, max_chars=10_000)
+        self.assertIn("Business overview", text)
+        self.assertIn("Revenue structure", text)
 
 
 if __name__ == "__main__":

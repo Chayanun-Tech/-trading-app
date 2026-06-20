@@ -14,9 +14,10 @@ import json
 import time
 from pathlib import Path
 
-from app import edgar
+from app import edgar, thai_sec
 from app import llm
 from app.config import get_settings
+from app.fundamentals import get_offline
 
 _CACHE_DIR = Path(__file__).resolve().parents[1].parent / "data" / "financials"
 _BIZ_TTL = 7 * 24 * 3600
@@ -78,6 +79,11 @@ _OUTPUT_CONTRACT = """รูปแบบ JSON ที่ต้องคืน (�
 
 def _cache_path(cik: str) -> Path:
     return _CACHE_DIR / f"business_{str(cik).zfill(10)}.json"
+
+
+def _thai_cache_path(symbol: str) -> Path:
+    safe = "".join(c if c.isalnum() else "_" for c in symbol.upper().strip())
+    return _CACHE_DIR / f"business_th_{safe}.json"
 
 
 def _extract_json(text: str) -> dict:
@@ -164,21 +170,38 @@ def _clean(payload: dict) -> dict:
 
 async def get_business_explainer(symbol: str, *, refresh: bool = False) -> dict:
     """คืนคำอธิบายธุรกิจเชิงลึก + สัดส่วนรายได้ (ภาษาไทย). อ่าน cache ก่อน เว้นแต่ refresh."""
-    try:
-        cik = await edgar.get_cik(symbol)
-    except ValueError:
-        raise ValueError("แถบอธิบายธุรกิจ (จาก 10-K SEC) รองรับเฉพาะหุ้นสหรัฐเท่านั้น")
+    key = symbol.upper().strip()
+    is_thai = thai_sec.is_thai_symbol(key)
+    if is_thai:
+        company_name = (get_offline(key) or {}).get("long_name")
+        if not company_name:
+            raise ValueError(f"ไม่พบชื่อบริษัทของ {key} ในฐานข้อมูลหุ้นไทย")
+        cache = _thai_cache_path(key)
+    else:
+        try:
+            cik = await edgar.get_cik(key)
+        except ValueError:
+            raise ValueError("รองรับหุ้นสหรัฐและหุ้นไทยที่ลงท้าย .BK เท่านั้น")
+        cache = _cache_path(cik)
 
-    cache = _cache_path(cik)
     if not refresh and cache.exists() and time.time() - cache.stat().st_mtime < _BIZ_TTL:
         try:
             return json.loads(cache.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             pass
 
-    ctx = await edgar.get_10k_context(symbol)
+    if is_thai:
+        ctx = await thai_sec.get_one_report_context(
+            key, company_name, force_refresh=refresh,
+        )
+        report_type = "56-1 One Report"
+        source = "SEC Thailand 56-1 One Report"
+    else:
+        ctx = await edgar.get_10k_context(key)
+        report_type = "10-K"
+        source = "SEC 10-K (Item 1 Business + MD&A)"
     if not ctx or not ctx.get("business"):
-        raise ValueError("ไม่พบส่วน 'Business' (Item 1) ใน 10-K ล่าสุดของหุ้นตัวนี้")
+        raise ValueError(f"ไม่พบเนื้อหาธุรกิจใน {report_type} ล่าสุดของหุ้นตัวนี้")
 
     settings = get_settings()
     if not settings.llm_enabled():
@@ -187,12 +210,22 @@ async def get_business_explainer(symbol: str, *, refresh: bool = False) -> dict:
     business = (ctx.get("business") or "")[:20000]
     mda = (ctx.get("mda") or "")[:6000]
     user_msg = (
-        "อ่านข้อความจริงจาก 10-K ด้านล่าง แล้วเขียนคำอธิบายธุรกิจภาษาไทยเชิงลึกตามรูปแบบ JSON ที่กำหนด.\n"
-        "ใช้ MD&A เพื่อหา 'สัดส่วนรายได้แยกส่วนงาน' (มักอยู่ในตาราง revenue by segment/product).\n\n"
-        "=== ITEM 1: BUSINESS ===\n" + business +
-        "\n\n=== ITEM 7: MD&A (ตัดตอน) ===\n" + (mda or "(ไม่มี)")
+        f"อ่านข้อความจริงจาก {report_type} ด้านล่าง แล้วเขียนคำอธิบายธุรกิจภาษาไทยเชิงลึก"
+        "ตามรูปแบบ JSON ที่กำหนด ห้ามแต่งตัวเลขที่เอกสารไม่ได้ระบุ\n"
+        "ใช้ส่วนคำอธิบายธุรกิจและการวิเคราะห์ผลการดำเนินงานเพื่อหา "
+        "'สัดส่วนรายได้แยกส่วนงาน/ผลิตภัณฑ์' ถ้ามี\n\n"
+        f"=== {report_type}: BUSINESS AND OPERATIONS ===\n" + business +
+        f"\n\n=== {report_type}: MANAGEMENT DISCUSSION / FINANCIAL EXCERPT ===\n"
+        + (mda or "(ไม่มี)")
     )
-    system = SYSTEM_PROMPT + "\n\n" + _OUTPUT_CONTRACT
+    system = SYSTEM_PROMPT + """
+
+คำสั่งเสริมที่มีลำดับความสำคัญสูง:
+- งานนี้รองรับทั้งบริษัทสหรัฐจาก 10-K และบริษัทไทยจาก 56-1 One Report
+- สำหรับบริษัทไทย ให้อ่าน 56-1 One Report เป็นแหล่งข้อมูลหลักเช่นเดียวกับ 10-K
+- ชื่อโรงพยาบาล แบรนด์ สาขา ผลิตภัณฑ์ และส่วนงานของบริษัทไทยต้องใช้ชื่อจริงจากเอกสาร
+- ห้ามอ้างว่าเอกสารเป็น 10-K หากข้อมูลที่ได้รับเป็น 56-1 One Report
+""" + "\n\n" + _OUTPUT_CONTRACT
 
     exclude: set = set()
     last_err: Exception | None = None
@@ -214,10 +247,13 @@ async def get_business_explainer(symbol: str, *, refresh: bool = False) -> dict:
         raise ValueError(f"AI เรียบเรียงคำอธิบายธุรกิจไม่สำเร็จ: {last_err}")
 
     result = {
-        "symbol": symbol.upper().strip(),
-        "source": "SEC 10-K (Item 1 Business + MD&A)",
+        "symbol": key,
+        "market": "TH" if is_thai else "US",
+        "report_type": report_type,
+        "source": source,
         "filing_url": ctx.get("url"),
         "filing_date": ctx.get("filing_date"),
+        "report_year": ctx.get("report_year"),
         "generated_at": int(time.time()),
         **data,
     }
