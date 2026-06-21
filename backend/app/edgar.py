@@ -331,12 +331,55 @@ async def latest_filing_url(symbol: str, form: str = "10-K") -> tuple[str | None
     return None, None
 
 
+async def latest_annual_filing_url(symbol: str) -> tuple[str | None, str | None, str | None]:
+    """Return the latest annual filing for US and foreign SEC registrants.
+
+    Domestic issuers normally file 10-K, foreign private issuers file 20-F,
+    and Canadian MJDS issuers may file 40-F.
+    """
+    data = await get_submissions(symbol)
+    cik = str(data.get("cik") or "").zfill(10)
+    rec = data.get("filings", {}).get("recent", {})
+    forms = rec.get("form", [])
+    annual_forms = {"10-K", "20-F", "40-F"}
+    for i, filing_form in enumerate(forms):
+        if filing_form not in annual_forms:
+            continue
+        primary_docs = rec.get("primaryDocument") or []
+        accessions = rec.get("accessionNumber") or []
+        if i >= len(primary_docs) or i >= len(accessions):
+            continue
+        url = _doc_url(cik, accessions[i], primary_docs[i])
+        filing_dates = rec.get("filingDate") or []
+        filing_date = filing_dates[i] if i < len(filing_dates) else None
+        return url, filing_date, filing_form
+
+    # Newly listed companies may not have filed their first annual report yet.
+    # Their final prospectus/registration statement still contains a detailed
+    # audited business description and is preferable to returning no data.
+    registration_forms = {"424B4", "S-1", "S-1/A", "F-1", "F-1/A"}
+    for i, filing_form in enumerate(forms):
+        if filing_form not in registration_forms:
+            continue
+        primary_docs = rec.get("primaryDocument") or []
+        accessions = rec.get("accessionNumber") or []
+        if i >= len(primary_docs) or i >= len(accessions):
+            continue
+        url = _doc_url(cik, accessions[i], primary_docs[i])
+        filing_dates = rec.get("filingDate") or []
+        filing_date = filing_dates[i] if i < len(filing_dates) else None
+        return url, filing_date, filing_form
+    return None, None, None
+
+
 async def fetch_document_text(url: str, max_chars: int = 4_000_000) -> str:
     """ดึงเอกสาร (HTML) จาก EDGAR Archives แล้วถอดเป็นข้อความล้วน."""
     async with httpx.AsyncClient(timeout=60, headers=_HEADERS, follow_redirects=True) as client:
         res = await client.get(url)
         res.raise_for_status()
-        html = res.text[:max_chars]
+        # Do not truncate the HTML before parsing. Large inline-XBRL annual
+        # reports can exceed 20 MB and place Item 1/Item 4 after the first 4 MB.
+        html = res.text
     try:
         from bs4 import BeautifulSoup
         text = BeautifulSoup(html, "html.parser").get_text(" ")
@@ -348,7 +391,7 @@ async def fetch_document_text(url: str, max_chars: int = 4_000_000) -> str:
     # SEC HTML มัก double-escape (&amp;#160;) → unescape สองชั้นให้ entity เช่น &#160; (nbsp),
     # &#8221; (”) กลายเป็นอักขระจริง ไม่งั้นหัวข้อ "Item 1.&#160;&#160;Business" จะ match ไม่ติด
     text = _html.unescape(_html.unescape(text))
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+", " ", text).strip()[:max_chars]
 
 
 async def get_frame(concept: str, unit: str, period: str) -> dict:
@@ -366,10 +409,23 @@ def _section(text: str, start_re: str, end_re: str, cap: int = 8000) -> str | No
     best, best_span = None, 0
     for m in re.finditer(start_re, low):
         si = m.start()
+        # Ignore prose references such as “Item 7—Management's Discussion and
+        # Analysis” and keep actual headings, whose title is followed by body text.
+        after_heading = text[m.end():m.end() + 3].lstrip()
+        if after_heading[:1] in ('"', "'", "”", "’", "»"):
+            continue
         if len(re.findall(r"item\s+\d", low[si:si + 1500])) >= 5:  # หัวสารบัญ
             continue
-        em = re.search(end_re, low[si + 50:])
-        end = si + 50 + em.start() if em else si + cap
+        end = si + cap
+        for em in re.finditer(end_re, low[si + 50:]):
+            candidate_end = si + 50 + em.start()
+            after_end_heading = text[si + 50 + em.end():si + 50 + em.end() + 3].lstrip()
+            # Skip cross-references such as “Item 8. Financial Statements” of
+            # this report; continue until the real next section heading.
+            if after_end_heading[:1] in ('"', "'", "”", "’", "»"):
+                continue
+            end = candidate_end
+            break
         span = end - si
         if span > best_span:
             best, best_span = text[si:min(end, si + cap)], span
@@ -385,9 +441,15 @@ def _business_section(text: str, cap: int = 32000) -> str | None:
     import re
     low = text.lower()
     starts = []
-    for m in re.finditer(r"item\s*1[\.\)\s\xa0]{1,6}business", low):
-        nxt = text[m.end():m.end() + 2].lstrip()[:1]
-        if nxt in ("”", '"', "”", "’"):   # การอ้างอิง เช่น 'Item 1. Business” of this report'
+    for m in re.finditer(
+        r"items?\s*1\b(?:\s+and\s+2\b)?[^a-z0-9]{1,12}"
+        r"b\s*u\s*s\s*i\s*n\s*e\s*s\s*s\b"
+        r"(?:\s+and\s+properties\b)?"
+        r"(?:\s+description\b)?",
+        low,
+    ):
+        nxt = text[m.end():m.end() + 3].lstrip()[:1]
+        if nxt in ("”", '"', "’", "'", "»"):   # การอ้างอิง เช่น 'Item 1. Business” of this report'
             continue
         if len(re.findall(r"item\s+\d", low[m.start():m.start() + 1500])) >= 5:  # หัวสารบัญ
             continue
@@ -395,8 +457,17 @@ def _business_section(text: str, cap: int = 32000) -> str | None:
     if not starts:
         return None
     si = min(starts)
-    em = re.search(r"item\s*1a[\.\)\s\xa0]{0,4}risk\s+factors", low[si + 50:])
-    end = si + 50 + em.start() if em else si + cap
+    end = si + cap
+    for em in re.finditer(
+        r"item\s*1a\b[^a-z0-9]{0,12}r\s*i\s*s\s*k\s+f\s*a\s*c\s*t\s*o\s*r\s*s\b",
+        low[si + 50:],
+    ):
+        candidate_end = si + 50 + em.start()
+        after_end_heading = text[si + 50 + em.end():si + 50 + em.end() + 3].lstrip()
+        if after_end_heading[:1] in ('"', "'", "”", "’", "»"):
+            continue
+        end = candidate_end
+        break
     section = text[si:min(end, si + cap)].strip()
     return section if len(section.split()) >= 80 else None
 
@@ -404,30 +475,198 @@ def _business_section(text: str, cap: int = 32000) -> str | None:
 def extract_filing_sections(text: str) -> dict:
     """แยกส่วน Business (Item 1), Risk Factors (Item 1A) และ MD&A (Item 7) จากข้อความ 10-K."""
     business = _business_section(text)
-    risk = _section(text, r"item\s*1a[\.\s\):]{0,4}risk\s+factors", r"item\s*1b[\.\s\):]")
-    mda = _section(text, r"item\s*7[\.\s\):]{1,4}management.{0,6}s discussion",
-                   r"item\s*7a[\.\s\):]|item\s*8[\.\s\):]")
+    # SEC filings use many heading separators, including em/en dashes. Restrict
+    # separators to non-alphanumeric characters so Item 10 cannot match Item 1.
+    risk = _section(
+        text,
+        r"item\s*1a\b[^a-z0-9]{0,12}r\s*i\s*s\s*k\s+f\s*a\s*c\s*t\s*o\s*r\s*s\b",
+        r"item\s*1b\b[^a-z0-9]{0,12}u\s*n\s*r\s*e\s*s\s*o\s*l\s*v\s*e\s*d"
+        r"\s+staff\s+comments\b",
+    )
+    mda = _section(
+        text,
+        r"item\s*7\b[^a-z0-9]{1,12}management(?:\s*['’]\s*s)?\s+discussion\s+and\s+analysis"
+        r"\s+of\s+financial\s+condition\s+and\s+results\s+of\s+operations\b",
+        r"item\s*7a\b[^a-z0-9]{0,12}quantitative\s+and\s+qualitative\s+disclosures"
+        r"|item\s*8\b[^a-z0-9]{0,12}financial\s+statements\b",
+    )
     return {"business": business, "risk_factors": risk, "mda": mda}
 
 
-async def get_10k_context(symbol: str) -> dict | None:
-    """ดึง+แคชส่วน Risk Factors/MD&A จาก 10-K ล่าสุด (ไว้ป้อน AI). คืน None ถ้าไม่มี 10-K."""
-    url, date = await latest_filing_url(symbol, "10-K")
+def extract_20f_sections(text: str) -> dict:
+    """Extract the equivalent business/risk/operating sections from Form 20-F."""
+    business = _section(
+        text,
+        r"item\s*4\b[^a-z0-9]{1,12}information\s+on\s+the\s+company\b",
+        r"item\s*4a\b[^a-z0-9]{0,12}unresolved\s+staff\s+comments\b"
+        r"|item\s*5\b[^a-z0-9]{0,12}operating\s+and\s+financial\s+reviews?",
+        cap=32000,
+    )
+    risk = _section(
+        text,
+        r"item\s*3\b[^a-z0-9]{1,12}key\s+information\b",
+        r"item\s*4\b[^a-z0-9]{0,12}information\s+on\s+the\s+company\b",
+        cap=12000,
+    )
+    mda = _section(
+        text,
+        r"item\s*5\b[^a-z0-9]{1,12}operating\s+and\s+financial\s+reviews?\s+and\s+prospects\b",
+        r"item\s*6\b[^a-z0-9]{0,12}directors\b",
+        cap=12000,
+    )
+    return {"business": business, "risk_factors": risk, "mda": mda}
+
+
+def _generic_business_section(text: str, cap: int = 32000) -> str | None:
+    """Fallback for annual reports whose headings are not SEC item headings."""
+    import re
+    low = text.lower()
+    patterns = (
+        r"\bour\s+b\s*u\s*s\s*i\s*n\s*e\s*s\s*s\b",
+        r"\bb\s*u\s*s\s*i\s*n\s*e\s*s\s*s\s+overview\b",
+        r"\bb\s*u\s*s\s*i\s*n\s*e\s*s\s*s\s+and\s+properties\b",
+        r"\bdescription\s+of\s+(?:our\s+)?b\s*u\s*s\s*i\s*n\s*e\s*s\s*s\b",
+    )
+    candidates = []
+    for pattern in patterns:
+        candidates.extend(m.start() for m in re.finditer(pattern, low))
+    for start in sorted(set(candidates)):
+        excerpt = text[start:start + cap].strip()
+        if len(excerpt.split()) >= 120:
+            return excerpt
+    return None
+
+
+def _generic_named_section(text: str, patterns: tuple[str, ...], cap: int) -> str | None:
+    """Return a useful excerpt after a non-standard annual-report heading."""
+    import re
+    low = text.lower()
+    candidates = []
+    for pattern in patterns:
+        candidates.extend((m.start(), m.end()) for m in re.finditer(pattern, low))
+    for start, _ in sorted(set(candidates)):
+        # Table-of-contents entries usually contain many nearby numbered items.
+        if len(re.findall(r"\bitem\s+\d", low[start:start + 1200])) >= 5:
+            continue
+        excerpt = text[start:start + cap].strip()
+        if len(excerpt.split()) >= 100:
+            return excerpt
+    return None
+
+
+def extract_annual_filing_sections(text: str, filing_form: str) -> dict:
+    if filing_form == "10-K":
+        sections = extract_filing_sections(text)
+    elif filing_form == "20-F":
+        sections = extract_20f_sections(text)
+    else:
+        sections = {"business": None, "risk_factors": None, "mda": None}
+    if not sections.get("business"):
+        sections["business"] = _generic_business_section(text)
+    if not sections.get("risk_factors"):
+        sections["risk_factors"] = _generic_named_section(
+            text,
+            (r"\brisk\s+factors\b", r"\bprincipal\s+risks\b", r"\brisk\s+review\b"),
+            8000,
+        )
+    if not sections.get("mda"):
+        sections["mda"] = _generic_named_section(
+            text,
+            (
+                r"\bmanagement(?:\s*['’]\s*s)?\s+discussion\s+and\s+analysis\b",
+                r"\boperating\s+and\s+financial\s+reviews?\b",
+                r"\bresults\s+of\s+operations\b",
+                r"\bfinancial\s+performance\b",
+            ),
+            12000,
+        )
+    if not sections.get("business") and filing_form in {"S-1", "S-1/A", "F-1", "F-1/A", "424B4"}:
+        sections["business"] = _generic_named_section(
+            text,
+            (
+                r"\bprospectus\s+summary\b",
+                r"\bthe\s+company\b",
+                r"\bcompany\s+overview\b",
+                r"\boverview\b",
+            ),
+            32000,
+        )
+    if not sections.get("business") and filing_form == "40-F":
+        sections["business"] = _generic_named_section(
+            text,
+            (
+                r"\boverview\s+of\s+the\s+trust\b",
+                r"\bthe\s+trust\b",
+                r"\binvestment\s+objective\b",
+                r"\bdescription\s+of\s+the\s+fund\b",
+            ),
+            32000,
+        )
+    return sections
+
+
+async def _fetch_annual_filing_text(
+    symbol: str, primary_url: str, filing_form: str,
+) -> str:
+    text = await fetch_document_text(primary_url)
+    if filing_form != "40-F":
+        return text
+
+    # A 40-F is often only a cover form. The Canadian annual information form,
+    # MD&A, and financial statements live in separate HTML exhibits.
+    try:
+        base = primary_url.rsplit("/", 1)[0]
+        cik = await get_cik(symbol)
+        listing = await _cached_json(
+            f"{base}/index.json", f"annual_index_{cik}.json", _FACTS_TTL,
+        )
+        primary_name = primary_url.rsplit("/", 1)[-1].lower()
+        candidates = []
+        for item in listing.get("directory", {}).get("item", []):
+            name = str(item.get("name") or "")
+            low_name = name.lower()
+            if low_name == primary_name or not low_name.endswith((".htm", ".html")):
+                continue
+            if low_name.startswith("r") and low_name[1:-4].isdigit():
+                continue
+            if "_htm." in low_name:
+                continue
+            size = int(item.get("size") or 0)
+            if size >= 100_000:
+                candidates.append((size, name))
+        # The relevant documents are normally exhibits. Read several because
+        # issuers split the AIF, MD&A, and audited statements differently.
+        for _, name in sorted(candidates, reverse=True)[:4]:
+            exhibit_text = await fetch_document_text(f"{base}/{name}", max_chars=2_000_000)
+            text += "\n\n" + exhibit_text
+    except Exception:  # noqa: BLE001
+        pass
+    return text[:6_000_000]
+
+
+async def get_10k_context(symbol: str, *, force_refresh: bool = False) -> dict | None:
+    """Fetch/cache business context from the latest 10-K, 20-F, or 40-F."""
+    url, date, filing_form = await latest_annual_filing_url(symbol)
     if not url:
         return None
     cik = (await get_cik(symbol))
     cache = _CACHE_DIR / f"tenk_{cik}.json"
-    if cache.exists() and time.time() - cache.stat().st_mtime < _FRAME_TTL:
+    if not force_refresh and cache.exists() and time.time() - cache.stat().st_mtime < _FRAME_TTL:
         try:
             cached = json.loads(cache.read_text(encoding="utf-8"))
-            # cache เก่าอาจยังไม่มีคีย์ "business" → ดึงใหม่เพื่อเติม
-            if cached.get("url") == url and "business" in cached:
+            # Never preserve a failed extraction. Older parser versions cached
+            # null sections, which made every retry fail until the TTL expired.
+            if (
+                cached.get("url") == url
+                and cached.get("business")
+                and cached.get("report_type")
+            ):
                 return cached
         except (OSError, json.JSONDecodeError):
             pass
-    text = await fetch_document_text(url)
-    sections = extract_filing_sections(text)
-    out = {"url": url, "filing_date": date, **sections}
+    text = await _fetch_annual_filing_text(symbol, url, filing_form or "10-K")
+    sections = extract_annual_filing_sections(text, filing_form or "10-K")
+    out = {"url": url, "filing_date": date, "report_type": filing_form, **sections}
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
     return out

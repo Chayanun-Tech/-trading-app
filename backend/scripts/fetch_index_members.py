@@ -28,6 +28,7 @@ HEADERS = {"User-Agent": "ChayanunOperating-trading-app chayanun250841@gmail.com
 
 SP500_CSV = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv"
 RUSSELL_CSV = "https://raw.githubusercontent.com/ikoniaris/Russell2000/master/russell_2000_components.csv"
+SEC_TICKERS = "https://www.sec.gov/files/company_tickers.json"
 
 # Nasdaq-100 — snapshot จาก Wikipedia (อัปเดตได้เองเมื่อดัชนีปรับสมาชิก)
 NASDAQ100 = ("ADBE AMD ABNB ALNY GOOGL GOOG AMZN AEP AMGN ADI AAPL AMAT APP ARM ASML ADSK ADP "
@@ -58,6 +59,12 @@ def fetch_csv_column(url: str, col_names: list[str]) -> list[str]:
     return out
 
 
+def fetch_current_sec_tickers() -> set[str]:
+    res = httpx.get(SEC_TICKERS, headers=HEADERS, timeout=60, follow_redirects=True)
+    res.raise_for_status()
+    return {_norm(str(row.get("ticker", ""))) for row in res.json().values()}
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     print("ดึง S&P 500 ...")
@@ -69,13 +76,24 @@ def main() -> None:
     nasdaq100 = sorted(set(_norm(t) for t in NASDAQ100))
     print(f"Nasdaq-100 (snapshot) → {len(nasdaq100)} ตัว")
 
-    union = sorted(set(sp500) | set(nasdaq100) | set(russell))
+    raw_union = set(sp500) | set(nasdaq100) | set(russell)
+    print("ตรวจสถานะ ticker ปัจจุบันกับ SEC ...")
+    current_sec = fetch_current_sec_tickers()
+    stale = sorted(raw_union - current_sec)
+    union = sorted(raw_union & current_sec)
+    # Keep each component list internally consistent with the usable union.
+    sp500 = sorted(set(sp500) & current_sec)
+    nasdaq100 = sorted(set(nasdaq100) & current_sec)
+    russell = sorted(set(russell) & current_sec)
+    print(f"  → ตัด ticker ที่เพิกถอน/เปลี่ยนชื่อแล้ว {len(stale)} ตัว")
     members = {
         "sp500": sp500,
         "nasdaq100": nasdaq100,
         "russell2000": russell,
+        "excluded_stale": stale,
         "counts": {"sp500": len(sp500), "nasdaq100": len(nasdaq100),
-                   "russell2000": len(russell), "union": len(union)},
+                   "russell2000": len(russell), "union": len(union),
+                   "excluded_stale": len(stale)},
     }
     (OUT_DIR / "index_members.json").write_text(
         json.dumps(members, ensure_ascii=False, indent=1), encoding="utf-8")

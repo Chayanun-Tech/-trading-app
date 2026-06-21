@@ -17,7 +17,7 @@ from pathlib import Path
 from app import edgar, thai_sec
 from app import llm
 from app.config import get_settings
-from app.fundamentals import get_offline
+from app.fundamentals import get_fundamentals, get_offline
 
 _CACHE_DIR = Path(__file__).resolve().parents[1].parent / "data" / "financials"
 _BIZ_TTL = 7 * 24 * 3600
@@ -197,9 +197,32 @@ async def get_business_explainer(symbol: str, *, refresh: bool = False) -> dict:
         report_type = "56-1 One Report"
         source = "SEC Thailand 56-1 One Report"
     else:
-        ctx = await edgar.get_10k_context(key)
-        report_type = "10-K"
-        source = "SEC 10-K (Item 1 Business + MD&A)"
+        ctx = await edgar.get_10k_context(key, force_refresh=refresh)
+        if ctx and ctx.get("business"):
+            report_type = ctx.get("report_type") or "10-K"
+            if report_type in {"10-K", "20-F", "40-F"}:
+                source = f"SEC {report_type} annual filing"
+            else:
+                source = f"SEC {report_type} registration filing"
+        else:
+            # Some ADRs only register depositary receipts on SEC Form F-6 and
+            # do not file a 20-F under that ticker/CIK. Keep the feature useful
+            # with a clearly labelled company-profile fallback.
+            profile = await get_fundamentals(key, force_refresh=refresh)
+            summary = (profile.get("summary") or "").strip()
+            if not summary:
+                raise ValueError(
+                    "ไม่พบรายงานประจำปี หนังสือชี้ชวน หรือโปรไฟล์ธุรกิจของหุ้นตัวนี้"
+                )
+            ctx = {
+                "url": None,
+                "filing_date": None,
+                "business": summary,
+                "mda": "",
+                "report_type": "Company Profile",
+            }
+            report_type = "Company Profile"
+            source = f"Market company profile ({profile.get('_source') or 'data provider'})"
     if not ctx or not ctx.get("business"):
         raise ValueError(f"ไม่พบเนื้อหาธุรกิจใน {report_type} ล่าสุดของหุ้นตัวนี้")
 
@@ -221,10 +244,12 @@ async def get_business_explainer(symbol: str, *, refresh: bool = False) -> dict:
     system = SYSTEM_PROMPT + """
 
 คำสั่งเสริมที่มีลำดับความสำคัญสูง:
-- งานนี้รองรับทั้งบริษัทสหรัฐจาก 10-K และบริษัทไทยจาก 56-1 One Report
+- งานนี้รองรับบริษัทสหรัฐจาก 10-K, บริษัทต่างชาติที่ยื่นต่อ SEC จาก 20-F/40-F และบริษัทไทยจาก 56-1 One Report
+- สำหรับ 20-F/40-F ให้ใช้ส่วน Information on the Company / Business Overview และ Operating and Financial Review / MD&A เป็นแหล่งหลัก
+- หากแหล่งข้อมูลระบุเป็น Company Profile ให้สรุปเฉพาะข้อมูลที่โปรไฟล์ให้มา ช่องใดข้อมูลไม่พอให้ใส่ null/ข้อความว่าไม่มีรายละเอียด ห้ามอ้างว่าอ่านจากเอกสาร SEC
 - สำหรับบริษัทไทย ให้อ่าน 56-1 One Report เป็นแหล่งข้อมูลหลักเช่นเดียวกับ 10-K
 - ชื่อโรงพยาบาล แบรนด์ สาขา ผลิตภัณฑ์ และส่วนงานของบริษัทไทยต้องใช้ชื่อจริงจากเอกสาร
-- ห้ามอ้างว่าเอกสารเป็น 10-K หากข้อมูลที่ได้รับเป็น 56-1 One Report
+- ห้ามอ้างว่าเอกสารเป็น 10-K หากข้อมูลที่ได้รับเป็น 20-F, 40-F หรือ 56-1 One Report
 """ + "\n\n" + _OUTPUT_CONTRACT
 
     exclude: set = set()
