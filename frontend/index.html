@@ -494,6 +494,7 @@
       <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
       <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
       <button class="tab" id="tabBusiness" onclick="showTab('business')">ธุรกิจ</button>
+      <button class="tab" id="tabMacro" onclick="showTab('macro')">มหภาค→ธุรกิจ</button>
       <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">VIพื้นฐาน</button>
       <button class="tab" id="tabIv" onclick="showTab('iv')">มูลค่าIV</button>
       <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">หุ้นเล็กเด้งไกล</button>
@@ -716,6 +717,41 @@
       </div>
       <div class="note" style="margin-top:6px;">อธิบายธุรกิจเชิงลึกจากเอกสารทางการ — หุ้นสหรัฐอ่าน 10-K จาก SEC EDGAR; หุ้นไทยอ่าน 56-1 One Report จาก ก.ล.ต. พร้อมโมเดลรายได้ ส่วนงาน ผลิตภัณฑ์ คู่แข่ง และจุดแข็ง</div>
       <div id="bizResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้น เช่น AAPL หรือ BDMS.BK แล้วกด "อธิบายธุรกิจ"</div></div>
+    </div>
+
+    <div id="macroPanel" class="panel-body hidden">
+      <style>
+        .mac-card{margin-top:14px; background:rgba(255,255,255,.025); border:1px solid rgba(36,49,64,.7); border-radius:10px; padding:12px 14px;}
+        .mac-h{font-size:14px; font-weight:700; color:var(--accent,#2a6); margin:0 0 8px; display:flex; align-items:center; gap:6px;}
+        .mac-p{font-size:13px; line-height:1.65; color:#dfe6ee; margin:0 0 4px; white-space:pre-line;}
+        .mac-thesis{font-size:15px; line-height:1.55; color:#fff; font-weight:600; padding:11px 13px; border-left:3px solid var(--accent,#2a6); background:rgba(42,160,102,.08); border-radius:0 8px 8px 0;}
+        .mac-tag{display:inline-block; font-size:12px; font-weight:700; padding:1px 7px; border-radius:10px; white-space:nowrap;}
+        .mac-tail{background:rgba(42,160,102,.18); color:#5fd39a;}
+        .mac-head{background:rgba(220,80,80,.18); color:#ff8c8c;}
+        .mac-neu{background:rgba(150,160,170,.15); color:#aebdcb;}
+        table.mac-tbl{width:100%; border-collapse:collapse; font-size:13px; margin-top:4px;}
+        table.mac-tbl td,table.mac-tbl th{padding:6px 8px; border-bottom:1px solid rgba(36,49,64,.5); vertical-align:top; text-align:left;}
+        table.mac-tbl th{color:#9fb0c0; font-weight:600; font-size:12px;}
+        .mac-imp{letter-spacing:1px; color:#e2b93b; white-space:nowrap;}
+        .mac-pct{font-variant-numeric:tabular-nums; font-weight:700; text-align:right; white-space:nowrap;}
+        .mac-chain{position:relative; margin:0; padding:0; list-style:none;}
+        .mac-chain li{position:relative; padding:0 0 12px 22px; border-left:2px solid rgba(42,160,102,.4); margin-left:6px;}
+        .mac-chain li:last-child{border-left-color:transparent;}
+        .mac-chain li::before{content:"●"; position:absolute; left:-8px; top:-2px; color:var(--accent,#2a6); font-size:13px;}
+        .mac-chain .cause{font-weight:600; color:#eef3f8; font-size:13px;}
+        .mac-chain .effect{color:#9fb0c0; font-size:13px; margin-top:2px;}
+        .mac-scen{border-radius:8px; padding:9px 11px; margin-top:8px; border:1px solid rgba(36,49,64,.7);}
+        .mac-scen-bull{border-left:3px solid #5fd39a;} .mac-scen-base{border-left:3px solid #aebdcb;} .mac-scen-bear{border-left:3px solid #ff8c8c;}
+        .mac-pill{display:inline-block; font-size:12px; background:rgba(255,255,255,.06); color:#cdd8e3; padding:2px 8px; border-radius:10px; margin:2px 4px 2px 0;}
+        .mac-note{font-size:12px; color:#7d8b99; margin-top:3px;}
+      </style>
+      <div class="grid3">
+        <div class="field"><label>หุ้น (US / ไทย .BK)</label><input id="macroSymbol" placeholder="เช่น NVDA, AAPL, PTT.BK" /></div>
+        <div class="field" style="align-self:end;"><button class="primary" onclick="runMacro()">วิเคราะห์มหภาค→ธุรกิจ</button></div>
+        <div class="field" style="align-self:end;"><button onclick="runMacro(true)" title="ให้ AI วิเคราะห์ใหม่ทับของเดิม">🔄 สร้างใหม่</button></div>
+      </div>
+      <div class="note" style="margin-top:6px;">วิเคราะห์หุ้นแบบ Ray Dalio — มองจากปัจจัยมหภาคโลก/ธีมโลก ไล่ลงมาที่ห่วงโซ่อุปทาน (suppliers/วัตถุดิบ การพึ่งพา) ฝั่งอุปสงค์ (ลูกค้า/ดีมานด์) จนถึงโครงสร้างรายได้-กำไรแยกตามสินค้า และปัจจัยที่กระทบกำไรมากที่สุด · ยึดข้อเท็จจริงจาก 10-K/56-1 ส่วนภาพมหภาคเป็นการวิเคราะห์ของ AI</div>
+      <div id="macroResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้น เช่น NVDA แล้วกด "วิเคราะห์มหภาค→ธุรกิจ"</div></div>
     </div>
 
     <div id="ivPanel" class="panel-body hidden">
@@ -1268,7 +1304,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -2698,7 +2734,7 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -2956,6 +2992,137 @@ function renderBusiness(d) {
     sec("👥 ลูกค้าหลัก", d.customers) +
     sec("🏰 จุดแข็ง / ตำแหน่งในอุตสาหกรรม", d.moat_and_position) +
     `<div class="note" style="margin-top:14px;">ที่มา: ${escapeHtml(d.source || docLabel)}${d.report_year ? " · ปีรายงาน " + escapeHtml(d.report_year) : ""}${d.filing_date ? " · รับข้อมูลเมื่อ " + escapeHtml(d.filing_date) : ""} ${src}</div>`;
+}
+
+async function runMacro(refresh) {
+  let sym = ($("macroSymbol").value || currentSymbol || "").trim().toUpperCase();
+  if (!sym) { $("macroResult").innerHTML = `<div class="down">กรุณาพิมพ์สัญลักษณ์หุ้น เช่น NVDA หรือ PTT.BK</div>`; return; }
+  $("macroSymbol").value = sym;
+  showTab("macro");
+  const reportName = sym.endsWith(".BK") ? "56-1 One Report จาก ก.ล.ต." : "10-K จาก SEC";
+  $("macroResult").innerHTML = `<div class="note">กำลังอ่าน ${reportName} และวิเคราะห์มหภาค→ธุรกิจ ${escapeHtml(sym)}... ${refresh ? "(สร้างใหม่)" : "(ครั้งแรกอาจใช้เวลาสักครู่)"}</div>`;
+  try {
+    const url = `${API}/api/macro-analysis?symbol=${encodeURIComponent(sym)}${refresh ? "&refresh=true" : ""}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: res.statusText }))).detail || res.statusText);
+    renderMacro(await res.json());
+  } catch (e) { notifyError(errorMessage(e), "วิเคราะห์มหภาคไม่สำเร็จ"); $("macroResult").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`; }
+}
+
+function renderMacro(d) {
+  const E = escapeHtml;
+  const stars = n => (n != null && !isNaN(n)) ? `<span class="mac-imp" title="ระดับผลกระทบ ${n}/5">${"●".repeat(Math.round(n))}${"○".repeat(Math.max(0,5-Math.round(n)))}</span>` : "";
+  const pctCell = p => (p != null && !isNaN(p)) ? p + "%" : "<span class='tiny' style='color:#7d8b99'>n/a</span>";
+  const stanceTag = s => s === "tailwind" ? `<span class="mac-tag mac-tail">ลมส่ง ▲</span>`
+    : s === "headwind" ? `<span class="mac-tag mac-head">ลมต้าน ▼</span>`
+    : `<span class="mac-tag mac-neu">เป็นกลาง</span>`;
+  const card = (icon, title, body) => body ? `<div class="mac-card"><div class="mac-h">${icon} ${title}</div>${body}</div>` : "";
+  const para = t => t ? `<div class="mac-p">${E(t)}</div>` : "";
+  let html = d.thesis ? `<div class="mac-thesis">🧭 ${E(d.thesis)}</div>` : "";
+
+  // 1) Macro regime
+  const mr = d.macro_regime || {};
+  if ((mr.summary) || (mr.factors || []).length) {
+    let body = para(mr.summary);
+    const fs = (mr.factors || []).filter(f => f && f.name);
+    if (fs.length) {
+      const rows = fs.map(f => `<tr><td><b>${E(f.name)}</b>${f.desc ? `<div class="mac-note">${E(f.desc)}</div>` : ""}</td>`
+        + `<td>${stanceTag(f.stance)}</td><td>${stars(f.impact)}</td></tr>`).join("");
+      body += `<table class="mac-tbl"><thead><tr><th>ปัจจัยมหภาค</th><th>ทิศทาง</th><th>ผลกระทบ</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    html += card("🌍", "ภาพมหภาคโลกตอนนี้", body);
+  }
+
+  // 2) World trends
+  const wt = (d.world_trends || []).filter(t => t && t.name);
+  if (wt.length) {
+    const rows = wt.map(t => `<tr><td><b>${E(t.name)}</b>${t.desc ? `<div class="mac-note">${E(t.desc)}</div>` : ""}</td><td>${stars(t.impact)}</td></tr>`).join("");
+    html += card("🌊", "ธีม/เทรนด์โลกที่เกี่ยวข้อง", `<table class="mac-tbl"><tbody>${rows}</tbody></table>`);
+  }
+
+  // 3) Supply chain
+  const sc = d.supply_chain || {};
+  if (sc.summary || (sc.suppliers || []).length || (sc.key_inputs || []).length || sc.concentration_risk) {
+    let body = para(sc.summary);
+    const sup = (sc.suppliers || []).filter(s => s && s.name);
+    if (sup.length) {
+      const rows = sup.map(s => `<tr><td><b>${E(s.name)}</b>${s.country ? ` <span class="tiny" style="color:#9fb0c0;">(${E(s.country)})</span>` : ""}`
+        + `${s.supplies ? `<div class="mac-note">${E(s.supplies)}</div>` : ""}${s.substitutable ? `<div class="mac-note">หาแทน: ${E(s.substitutable)}</div>` : ""}</td>`
+        + `<td>${s.criticality ? `<span class="mac-tag ${s.criticality === "สูง" ? "mac-head" : s.criticality === "ต่ำ" ? "mac-tail" : "mac-neu"}">${E(s.criticality)}</span>` : ""}</td></tr>`).join("");
+      body += `<table class="mac-tbl"><thead><tr><th>Supplier</th><th>ความสำคัญ</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    const ki = (sc.key_inputs || []).filter(k => k && k.material);
+    if (ki.length) {
+      const rows = ki.map(k => `<tr><td><b>${E(k.material)}</b>${k.source ? `<div class="mac-note">มาจาก: ${E(k.source)}</div>` : ""}</td><td>${k.risk ? E(k.risk) : ""}</td></tr>`).join("");
+      body += `<div class="mac-note" style="margin-top:8px;font-weight:600;color:#9fb0c0;">วัตถุดิบ/ปัจจัยการผลิตหลัก</div><table class="mac-tbl"><tbody>${rows}</tbody></table>`;
+    }
+    if (sc.concentration_risk) body += `<div class="mac-p" style="margin-top:8px;">⚠️ <b>ความเสี่ยงการพึ่งพา:</b> ${E(sc.concentration_risk)}</div>`;
+    html += card("🔗", "ห่วงโซ่อุปทาน (Suppliers / วัตถุดิบ)", body);
+  }
+
+  // 4) Demand side
+  const ds = d.demand_side || {};
+  if (ds.summary || (ds.drivers || []).length || (ds.customers || []).length || ds.concentration_risk) {
+    let body = para(ds.summary);
+    if ((ds.drivers || []).length) body += `<div style="margin-top:6px;">${ds.drivers.map(x => `<span class="mac-pill">▶ ${E(x)}</span>`).join("")}</div>`;
+    const cu = (ds.customers || []).filter(c => c && c.name);
+    if (cu.length) {
+      const rows = cu.map(c => `<tr><td><b>${E(c.name)}</b>${c.note ? `<div class="mac-note">${E(c.note)}</div>` : ""}</td><td class="mac-pct">${pctCell(c.pct)}</td></tr>`).join("");
+      body += `<table class="mac-tbl"><thead><tr><th>ลูกค้าหลัก</th><th>สัดส่วนรายได้</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    if (ds.concentration_risk) body += `<div class="mac-p" style="margin-top:8px;">⚠️ <b>การกระจุกตัวลูกค้า:</b> ${E(ds.concentration_risk)}</div>`;
+    html += card("📈", "ฝั่งอุปสงค์ (ดีมานด์ / ลูกค้า)", body);
+  }
+
+  // 5) Revenue & profit structure
+  const rps = d.revenue_profit_structure || {};
+  if (rps.summary || (rps.products || []).length) {
+    let body = para(rps.summary);
+    const pr = (rps.products || []).filter(p => p && p.name);
+    if (pr.length) {
+      const rows = pr.map(p => `<tr><td><b>${E(p.name)}</b>`
+        + `${p.margin_note ? `<div class="mac-note">มาร์จิ้น: ${E(p.margin_note)}</div>` : ""}`
+        + `${p.cost_driver ? `<div class="mac-note">ต้นทุนหลัก: ${E(p.cost_driver)}</div>` : ""}`
+        + `${p.demand_sensitivity ? `<div class="mac-note">ไวต่อ: ${E(p.demand_sensitivity)}</div>` : ""}</td>`
+        + `<td class="mac-pct">${pctCell(p.rev_share)}</td></tr>`).join("");
+      body += `<table class="mac-tbl"><thead><tr><th>สินค้า / ส่วนงาน</th><th>สัดส่วนรายได้</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    html += card("💰", "โครงสร้างรายได้ & กำไร (แยกตามสินค้า)", body);
+  }
+
+  // 6) Sensitivity
+  const se = (d.sensitivity || []).filter(s => s && s.factor);
+  if (se.length) {
+    const rows = se.map(s => `<tr><td><b>${E(s.factor)}</b>${s.explain ? `<div class="mac-note">${E(s.explain)}</div>` : ""}</td>`
+      + `<td>${s.affects ? `<span class="mac-pill">${E(s.affects)}</span>` : ""}</td>`
+      + `<td>${s.direction ? E(s.direction) : ""}</td><td>${stars(s.magnitude)}</td></tr>`).join("");
+    html += card("🎚️", "ปัจจัยที่กระทบกำไรมากสุด (Sensitivity)",
+      `<table class="mac-tbl"><thead><tr><th>ปัจจัย</th><th>กระทบ</th><th>ถ้าปัจจัยแย่ลง</th><th>แรง</th></tr></thead><tbody>${rows}</tbody></table>`);
+  }
+
+  // 7) Dalio cause→effect chain
+  const ch = (d.dalio_chain || []).filter(c => c && (c.cause || c.effect));
+  if (ch.length) {
+    const items = ch.map(c => `<li><div class="cause">${E(c.cause || "")}</div>${c.effect ? `<div class="effect">↳ ${E(c.effect)}</div>` : ""}</li>`).join("");
+    html += card("⛓️", "ห่วงโซ่เหตุ→ผล (มหภาค → กำไรบริษัท)", `<ul class="mac-chain">${items}</ul>`);
+  }
+
+  // 8) Scenarios
+  const scn = (d.scenarios || []).filter(s => s && s.name);
+  if (scn.length) {
+    const body = scn.map(s => {
+      const cls = /bull|ขึ้น/i.test(s.name) ? "mac-scen-bull" : /bear|ลง/i.test(s.name) ? "mac-scen-bear" : "mac-scen-base";
+      return `<div class="mac-scen ${cls}"><b>${E(s.name)}</b>${s.trigger ? `<div class="mac-note">เงื่อนไข: ${E(s.trigger)}</div>` : ""}${s.impact_on_profit ? `<div class="mac-p" style="margin-top:3px;">${E(s.impact_on_profit)}</div>` : ""}</div>`;
+    }).join("");
+    html += card("🔮", "ฉากอนาคต (Scenarios)", body);
+  }
+
+  if (d.bottom_line) html += card("🏁", "บรรทัดสุดท้าย", para(d.bottom_line));
+
+  const docLabel = d.report_type || (d.market === "TH" ? "56-1 One Report" : "10-K");
+  const src = d.filing_url ? `<a href="${d.filing_url}" target="_blank" rel="noopener" style="color:var(--accent,#2a6);">ดูเอกสารต้นฉบับ ${E(docLabel)} ↗</a>` : "";
+  html += `<div class="note" style="margin-top:14px;">ยึดข้อเท็จจริงบริษัท (สินค้า/supplier/ลูกค้า) จาก ${E(d.source || docLabel)}${d.report_year ? " · ปีรายงาน " + E(d.report_year) : ""}${d.filing_date ? " · รับข้อมูลเมื่อ " + E(d.filing_date) : ""} ${src}<br>🧠 <b>ภาพมหภาคโลก ธีมโลก ส่วนแบ่งตลาด และฉากอนาคต เป็นการวิเคราะห์/ประมาณการของ AI ไม่ใช่ตัวเลขทางการ</b> — ใช้ประกอบการคิด ควรตรวจสอบเพิ่มก่อนตัดสินใจลงทุน</div>`;
+  $("macroResult").innerHTML = html || `<div class="note">ไม่มีข้อมูลเพียงพอ</div>`;
 }
 
 const FORM_TH = {

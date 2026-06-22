@@ -25,6 +25,7 @@ from app.data.base import DataProvider
 from app.db import DatabaseStore
 from app import edgar, thai_sec
 from app import business as business_explainer
+from app import macro_business
 from app.engine import build_report
 from app.financials import build_financials
 from app.fundamentals import (get_fundamentals, get_offline, is_equity_symbol,
@@ -553,6 +554,21 @@ async def business_route(symbol: str = Query(..., description="สัญลั�
         raise HTTPException(404, str(exc))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"สร้างคำอธิบายธุรกิจไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/macro-analysis")
+async def macro_analysis_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น NVDA"),
+                               refresh: bool = Query(False, description="True = ให้ AI วิเคราะห์ใหม่ทับ cache")):
+    """วิเคราะห์หุ้นแบบมหภาค→ธุรกิจ (Ray Dalio style): ปัจจัยมหภาค ห่วงโซ่อุปทาน อุปสงค์
+    โครงสร้างรายได้/กำไรแยกสินค้า และ sensitivity จาก 10-K (US) / 56-1 One Report (ไทย)."""
+    if not is_equity_symbol(symbol):
+        raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
+    try:
+        return await macro_business.get_macro_analysis(symbol, refresh=refresh)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"วิเคราะห์มหภาค→ธุรกิจไม่สำเร็จ: {exc}")
 
 
 @app.get("/api/offline/status")
