@@ -36,6 +36,60 @@
   h3 { font-size:14px; margin:0 0 10px; }
   .badge { color:#c7d2e1; border:1px solid rgba(148,163,184,.23); border-radius:999px; padding:4px 9px; font-size:12px; background:#0f1720; }
   .badge-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; min-width:0; }
+  .portfolio-launch {
+    margin-left:auto; display:flex; align-items:center; gap:9px; min-height:40px; padding:6px 12px;
+    border-color:rgba(34,211,238,.36); background:linear-gradient(135deg,rgba(15,118,110,.2),rgba(30,64,175,.2));
+  }
+  .portfolio-launch:hover { border-color:var(--cyan); background:linear-gradient(135deg,rgba(15,118,110,.3),rgba(30,64,175,.3)); }
+  .portfolio-launch-icon { display:grid; place-items:center; width:25px; height:25px; border-radius:7px; color:#a5f3fc; background:rgba(34,211,238,.12); }
+  .portfolio-launch-copy { display:flex; flex-direction:column; align-items:flex-start; line-height:1.15; }
+  .portfolio-launch-copy strong { font-size:12px; }
+  .portfolio-launch-copy span { color:var(--muted); font-size:10px; font-variant-numeric:tabular-nums; }
+  .portfolio-modal { display:none; position:fixed; inset:0; z-index:9500; padding:22px; overflow:auto; background:rgba(2,6,12,.82); backdrop-filter:blur(7px); }
+  .portfolio-shell { width:min(1240px,100%); margin:0 auto; border:1px solid #263447; border-radius:16px; background:#09111a; box-shadow:0 30px 100px #000b; overflow:hidden; }
+  .portfolio-head { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:17px 20px; border-bottom:1px solid var(--border); background:linear-gradient(120deg,#0d1b28,#0b141e 56%,#102037); }
+  .portfolio-title { display:flex; align-items:center; gap:12px; }
+  .portfolio-title-mark { display:grid; place-items:center; width:42px; height:42px; border-radius:12px; color:#a5f3fc; background:linear-gradient(135deg,rgba(34,211,238,.2),rgba(47,125,246,.2)); border:1px solid rgba(34,211,238,.24); font-size:20px; }
+  .portfolio-title h2 { margin:0; font-size:19px; }
+  .portfolio-title p { margin:3px 0 0; color:var(--muted); font-size:11px; }
+  .portfolio-head-actions { display:flex; align-items:center; gap:7px; }
+  .portfolio-close { width:36px; padding:5px; font-size:20px; background:transparent; }
+  .portfolio-body { padding:16px; }
+  .portfolio-metrics { display:grid; grid-template-columns:1.35fr repeat(3,1fr); gap:10px; }
+  .portfolio-metric { min-width:0; padding:14px; border:1px solid rgba(148,163,184,.16); border-radius:11px; background:#0d1721; }
+  .portfolio-metric.hero { background:linear-gradient(135deg,rgba(8,145,178,.13),rgba(37,99,235,.13)); border-color:rgba(34,211,238,.28); }
+  .portfolio-metric span { display:block; color:var(--muted); font-size:11px; }
+  .portfolio-metric b { display:block; margin-top:5px; font-size:20px; font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .portfolio-metric small { display:block; margin-top:4px; color:var(--muted); font-size:10px; }
+  .portfolio-grid { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(270px,.8fr); gap:12px; margin-top:12px; }
+  .portfolio-panel { border:1px solid rgba(148,163,184,.16); border-radius:11px; background:#0c151f; overflow:hidden; }
+  .portfolio-panel-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-bottom:1px solid var(--border); }
+  .portfolio-panel-head h3 { margin:0; }
+  .portfolio-panel-body { padding:13px 14px; }
+  .portfolio-table-wrap { overflow:auto; }
+  .portfolio-table { min-width:720px; }
+  .portfolio-table td, .portfolio-table th { white-space:nowrap; }
+  .portfolio-symbol { display:flex; flex-direction:column; gap:2px; }
+  .portfolio-symbol b { color:#dbeafe; }
+  .portfolio-symbol span { color:var(--muted); font-size:10px; }
+  .portfolio-row-actions { display:flex; gap:5px; }
+  .portfolio-row-actions button { min-height:28px; padding:3px 7px; font-size:11px; }
+  .portfolio-empty { padding:38px 16px; text-align:center; color:var(--muted); }
+  .portfolio-empty-icon { font-size:30px; margin-bottom:7px; color:#64748b; }
+  .allocation-list { display:grid; gap:11px; }
+  .allocation-line { display:grid; gap:5px; }
+  .allocation-meta { display:flex; justify-content:space-between; gap:8px; font-size:11px; }
+  .allocation-meta span:last-child { color:var(--muted); font-variant-numeric:tabular-nums; }
+  .allocation-track { height:8px; overflow:hidden; border-radius:999px; background:#172231; }
+  .allocation-track i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--accent2),var(--accent)); }
+  .goal-block { margin-top:15px; padding-top:14px; border-top:1px solid var(--border); }
+  .goal-meta { display:flex; justify-content:space-between; margin-bottom:6px; font-size:11px; }
+  .goal-track { height:10px; overflow:hidden; border-radius:999px; background:#172231; }
+  .goal-track i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#22c55e,#22d3ee); }
+  .portfolio-form { display:grid; grid-template-columns:1.2fr .7fr .9fr .75fr 1fr auto; gap:8px; align-items:end; }
+  .portfolio-form .field input, .portfolio-form .field select { width:100%; }
+  .portfolio-settings { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .portfolio-disclaimer { margin-top:10px; color:#64748b; font-size:10px; line-height:1.5; }
   .app { display:grid; grid-template-columns:minmax(0,1fr) minmax(330px,360px); gap:10px; height:calc(100vh - 62px); height:calc(100dvh - 62px); padding:10px; overflow:hidden; }
   body.controls-collapsed .app { grid-template-columns:minmax(0,1fr); }
   .left { min-width:0; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(9,15,22,.94); display:flex; flex-direction:column; min-height:0; overflow:hidden; }
@@ -241,6 +295,10 @@
   .toast-title { font-weight:700; margin-bottom:2px; }
   .hidden { display:none !important; }
   @media (max-width:1100px) {
+    .portfolio-metrics { grid-template-columns:repeat(2,1fr); }
+    .portfolio-grid { grid-template-columns:1fr; }
+    .portfolio-form { grid-template-columns:repeat(3,1fr); }
+    .portfolio-form button { width:100%; }
     .app { grid-template-columns:1fr; height:auto; min-height:calc(100vh - 62px); min-height:calc(100dvh - 62px); overflow:visible; }
     .left { min-height:0; overflow:visible; }
     .right { max-height:none; }
@@ -259,6 +317,17 @@
     .brand-block { width:100%; min-width:0; }
     h1 { width:100%; font-size:15px; }
     .badge-row { width:100%; gap:5px; }
+    .portfolio-launch { margin-left:0; width:100%; justify-content:center; }
+    .portfolio-modal { padding:0; }
+    .portfolio-shell { min-height:100%; border-radius:0; border-left:0; border-right:0; }
+    .portfolio-head { padding:13px 12px; align-items:flex-start; }
+    .portfolio-title-mark { display:none; }
+    .portfolio-head-actions button:not(.portfolio-close) { display:none; }
+    .portfolio-body { padding:10px; }
+    .portfolio-metrics { grid-template-columns:1fr 1fr; }
+    .portfolio-metric { padding:11px; }
+    .portfolio-metric b { font-size:16px; }
+    .portfolio-form, .portfolio-settings { grid-template-columns:1fr 1fr; }
     .badge {
       max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
       font-size:11px; padding:2px 7px;
@@ -336,6 +405,13 @@
     <span class="badge" id="aiBadge">AI: ...</span>
     <span class="badge" id="activeBadge">AAPL 1h</span>
   </div>
+  <button class="portfolio-launch" onclick="openPortfolio()" aria-label="เปิดพอร์ตของฉัน">
+    <span class="portfolio-launch-icon">◫</span>
+    <span class="portfolio-launch-copy">
+      <strong>พอร์ตของฉัน</strong>
+      <span id="portfolioHeaderValue">ยังไม่มีสินทรัพย์</span>
+    </span>
+  </button>
 </header>
 <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
 <div id="controlBackdrop" class="control-backdrop hidden" onclick="setControlDockMode('normal')"></div>
@@ -869,6 +945,89 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- Growth Dashboard Modal                                            -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="portfolioModal" class="portfolio-modal" role="dialog" aria-modal="true" aria-labelledby="portfolioTitle">
+  <div class="portfolio-shell">
+    <div class="portfolio-head">
+      <div class="portfolio-title">
+        <div class="portfolio-title-mark">◫</div>
+        <div>
+          <h2 id="portfolioTitle">พอร์ตของฉัน</h2>
+          <p>ติดตามเงินลงทุน ผลตอบแทน และการกระจายความเสี่ยงในที่เดียว</p>
+        </div>
+      </div>
+      <div class="portfolio-head-actions">
+        <button onclick="refreshPortfolioQuotes()">รีเฟรชราคา</button>
+        <button class="primary" onclick="focusPortfolioForm()">+ เพิ่มสินทรัพย์</button>
+        <button class="portfolio-close" onclick="closePortfolio()" aria-label="ปิด">×</button>
+      </div>
+    </div>
+
+    <div class="portfolio-body">
+      <div class="portfolio-metrics">
+        <div class="portfolio-metric hero"><span>มูลค่าพอร์ตรวม</span><b id="portfolioTotalValue">฿0.00</b><small id="portfolioUpdated">ข้อมูลเก็บไว้ในเครื่องนี้</small></div>
+        <div class="portfolio-metric"><span>กำไร / ขาดทุนรวม</span><b id="portfolioTotalPnl">฿0.00</b><small id="portfolioTotalPnlPct">0.00% จากเงินต้น</small></div>
+        <div class="portfolio-metric"><span>เงินต้น</span><b id="portfolioCostValue">฿0.00</b><small id="portfolioHoldingCount">0 สินทรัพย์</small></div>
+        <div class="portfolio-metric"><span>เงินสดพร้อมลงทุน</span><b id="portfolioCashValue">฿0.00</b><small id="portfolioInvestedPct">ลงทุนแล้ว 0%</small></div>
+      </div>
+
+      <div class="portfolio-grid">
+        <section class="portfolio-panel">
+          <div class="portfolio-panel-head"><h3>รายการถือครอง</h3><span class="tiny" id="portfolioQuoteStatus">พร้อมใช้งาน</span></div>
+          <div class="portfolio-table-wrap">
+            <table class="portfolio-table">
+              <thead><tr><th>สินทรัพย์</th><th>จำนวน</th><th>ต้นทุนเฉลี่ย</th><th>ราคาล่าสุด</th><th>มูลค่า</th><th>กำไร/ขาดทุน</th><th>สัดส่วน</th><th></th></tr></thead>
+              <tbody id="portfolioRows"></tbody>
+            </table>
+            <div id="portfolioEmpty" class="portfolio-empty">
+              <div class="portfolio-empty-icon">◎</div>
+              <b>เริ่มสร้างพอร์ตลงทุนของคุณ</b>
+              <div class="tiny" style="margin-top:5px;">เพิ่มหุ้น คริปโต หรือสินทรัพย์ที่ถืออยู่ด้านล่าง</div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="portfolio-panel">
+          <div class="portfolio-panel-head"><h3>การกระจายสินทรัพย์</h3><span class="tiny">Asset allocation</span></div>
+          <div class="portfolio-panel-body">
+            <div id="portfolioAllocation" class="allocation-list"></div>
+            <div class="goal-block">
+              <div class="goal-meta"><span>เป้าหมายพอร์ต</span><b id="portfolioGoalLabel">฿0 / ฿1,000,000</b></div>
+              <div class="goal-track"><i id="portfolioGoalBar" style="width:0%"></i></div>
+              <div class="tiny" id="portfolioGoalNote" style="margin-top:7px;">กำหนดเป้าหมายด้านล่าง</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <section class="portfolio-panel" style="margin-top:12px;">
+        <div class="portfolio-panel-head"><h3>เพิ่มสินทรัพย์</h3><span class="tiny">ใช้สัญลักษณ์เดียวกับช่องค้นหากราฟ</span></div>
+        <div class="portfolio-panel-body">
+          <form id="portfolioForm" class="portfolio-form" onsubmit="addPortfolioHolding(event)">
+            <div class="field"><label>Symbol</label><input id="portfolioSymbol" required placeholder="เช่น PTT.BK, AAPL, BTC_THB" autocomplete="off"></div>
+            <div class="field"><label>จำนวน</label><input id="portfolioQuantity" required type="number" min="0.00000001" step="any" placeholder="0"></div>
+            <div class="field"><label>ต้นทุนเฉลี่ย</label><input id="portfolioAverageCost" required type="number" min="0" step="any" placeholder="0.00"></div>
+            <div class="field"><label>สกุลเงิน</label><select id="portfolioCurrency"><option value="THB">THB</option><option value="USD">USD</option></select></div>
+            <div class="field"><label>ประเภท</label><select id="portfolioAssetClass"><option value="หุ้นไทย">หุ้นไทย</option><option value="หุ้นต่างประเทศ">หุ้นต่างประเทศ</option><option value="คริปโต">คริปโต</option><option value="กองทุน / ETF">กองทุน / ETF</option><option value="สินค้าโภคภัณฑ์">สินค้าโภคภัณฑ์</option><option value="อื่น ๆ">อื่น ๆ</option></select></div>
+            <button class="primary" type="submit">เพิ่มเข้าพอร์ต</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="portfolio-panel" style="margin-top:12px;">
+        <div class="portfolio-panel-head"><h3>ตั้งค่าพอร์ต</h3><span class="tiny">สกุลเงินหลัก: บาท</span></div>
+        <div class="portfolio-panel-body">
+          <div class="portfolio-settings">
+            <div class="field"><label>เงินสดพร้อมลงทุน (บาท)</label><input id="portfolioCash" type="number" min="0" step="any" onchange="savePortfolioSettings()"></div>
+            <div class="field"><label>เป้าหมายพอร์ต (บาท)</label><input id="portfolioGoal" type="number" min="0" step="any" onchange="savePortfolioSettings()"></div>
+            <div class="field"><label>อัตรา USD / THB</label><input id="portfolioFx" type="number" min="0.01" step="0.01" onchange="savePortfolioSettings()"></div>
+          </div>
+          <div class="portfolio-disclaimer">พอร์ตนี้เป็นเครื่องมือติดตามและวางแผน ไม่ได้ส่งคำสั่งซื้อขายจริง ราคาจากผู้ให้บริการข้อมูลอาจล่าช้า และควรตรวจสอบก่อนตัดสินใจลงทุน</div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
 <div id="dashModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);overflow:auto;">
   <div style="max-width:1200px;margin:32px auto;background:#161b22;border:1px solid #30363d;border-radius:14px;padding:20px 24px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -2065,10 +2224,33 @@ function clearAllSeries() {
     .filter(Boolean).forEach(series => series.setData([]));
 }
 
+// เมื่อสลับหุ้นหลัก ให้ทุกคอนโซลวิเคราะห์ (ธุรกิจ / VI / IV / Report / งบ / ไฟลิ่ง)
+// เปลี่ยนช่องสัญลักษณ์ตามหุ้นใหม่ทันที + ล้างผลลัพธ์ของหุ้นเดิม กันอาการ "ค้างหุ้นตัวเก่า"
+function resetAnalysisConsoles(sym) {
+  const s = (sym || "").toUpperCase();
+  ["viSymbol", "bizSymbol", "ivSymbol"].forEach(id => {
+    const el = $(id);
+    if (el) el.value = s;
+  });
+  const prompt = label =>
+    `<div class="note">พร้อมวิเคราะห์ <b>${escapeHtml(s)}</b> — กด${label}เพื่อโหลดข้อมูลหุ้นตัวนี้</div>`;
+  const set = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  set("bizResult", prompt("อธิบายธุรกิจ"));
+  set("viResult", prompt("วิเคราะห์ปัจจัยพื้นฐาน"));
+  set("ivResult", prompt("คำนวณมูลค่า"));
+  set("result", prompt("วิเคราะห์"));
+  set("financialsView", `<div class="note">งบการเงินของ ${escapeHtml(s)} จะแสดงเมื่อกดวิเคราะห์ปัจจัยพื้นฐาน</div>`);
+  set("filingsView", `<div class="note">เอกสาร/ไฟลิ่งของ ${escapeHtml(s)} จะแสดงเมื่อกดวิเคราะห์ปัจจัยพื้นฐาน</div>`);
+  set("viUpdateStatus", "");
+  // ล้าง state งบเดิม เพื่อให้โหลดใหม่ตามหุ้นที่เลือก
+  finSymbol = null;
+}
+
 async function selectSymbol(symbol) {
   backtestMode = false;
   closeRealtimeStream();
   currentSymbol = normalizeSymbolInput(symbol);
+  resetAnalysisConsoles(currentSymbol);
   saveChartState();
   if (liveMode) {
     latestLiveSignal = null;
@@ -4637,6 +4819,239 @@ function loadSymbol(sym) {
 document.getElementById("dashModal").addEventListener("click", function(e) {
   if (e.target === this) closeDashboard();
 });
+</script>
+<script>
+const PORTFOLIO_STORAGE_KEY = "aiTradePortfolioV1";
+const portfolioDefaults = { holdings:[], cash:0, goal:1000000, usdThb:35 };
+let portfolioState = loadPortfolioState();
+let portfolioQuotes = {};
+
+function loadPortfolioState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PORTFOLIO_STORAGE_KEY) || "null");
+    return { ...portfolioDefaults, ...(saved || {}), holdings:Array.isArray(saved?.holdings) ? saved.holdings : [] };
+  } catch (_) {
+    return { ...portfolioDefaults, holdings:[] };
+  }
+}
+
+function persistPortfolio() {
+  localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(portfolioState));
+}
+
+function portfolioFx(currency) {
+  return currency === "USD" ? Number(portfolioState.usdThb || 0) : 1;
+}
+
+function portfolioMoney(value, digits=2) {
+  return new Intl.NumberFormat("th-TH", {
+    style:"currency", currency:"THB", minimumFractionDigits:digits, maximumFractionDigits:digits,
+  }).format(Number(value || 0));
+}
+
+function portfolioNumber(value, digits=2) {
+  return new Intl.NumberFormat("th-TH", { maximumFractionDigits:digits }).format(Number(value || 0));
+}
+
+function portfolioQuoteFor(holding) {
+  const quote = portfolioQuotes[holding.symbol];
+  const price = Number(quote?.price);
+  return Number.isFinite(price) && price > 0 ? price : Number(holding.lastPrice || holding.averageCost || 0);
+}
+
+function portfolioSnapshot() {
+  const rows = portfolioState.holdings.map(holding => {
+    const fx = portfolioFx(holding.currency);
+    const price = portfolioQuoteFor(holding);
+    const cost = Number(holding.quantity) * Number(holding.averageCost) * fx;
+    const value = Number(holding.quantity) * price * fx;
+    return { ...holding, price, cost, value, pnl:value - cost };
+  });
+  const investedValue = rows.reduce((sum,row) => sum + row.value, 0);
+  const cost = rows.reduce((sum,row) => sum + row.cost, 0);
+  const cash = Number(portfolioState.cash || 0);
+  return { rows, investedValue, cost, cash, total:investedValue + cash, pnl:investedValue - cost };
+}
+
+function renderPortfolio() {
+  const snapshot = portfolioSnapshot();
+  const pnlPct = snapshot.cost ? snapshot.pnl / snapshot.cost * 100 : 0;
+  const investedPct = snapshot.total ? snapshot.investedValue / snapshot.total * 100 : 0;
+  const setText = (id,value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+
+  setText("portfolioTotalValue", portfolioMoney(snapshot.total));
+  setText("portfolioCostValue", portfolioMoney(snapshot.cost));
+  setText("portfolioCashValue", portfolioMoney(snapshot.cash));
+  setText("portfolioHoldingCount", `${snapshot.rows.length} สินทรัพย์`);
+  setText("portfolioInvestedPct", `ลงทุนแล้ว ${portfolioNumber(investedPct,1)}%`);
+  setText("portfolioTotalPnl", `${snapshot.pnl >= 0 ? "+" : ""}${portfolioMoney(snapshot.pnl)}`);
+  setText("portfolioTotalPnlPct", `${pnlPct >= 0 ? "+" : ""}${portfolioNumber(pnlPct,2)}% จากเงินต้น`);
+  setText("portfolioHeaderValue", snapshot.rows.length ? portfolioMoney(snapshot.total,0) : "ยังไม่มีสินทรัพย์");
+
+  const pnlEl = document.getElementById("portfolioTotalPnl");
+  if (pnlEl) pnlEl.className = snapshot.pnl > 0 ? "up" : snapshot.pnl < 0 ? "down" : "";
+
+  const body = document.getElementById("portfolioRows");
+  const empty = document.getElementById("portfolioEmpty");
+  if (body) {
+    body.innerHTML = snapshot.rows.map((row,index) => {
+      const weight = snapshot.investedValue ? row.value / snapshot.investedValue * 100 : 0;
+      const pnlPctRow = row.cost ? row.pnl / row.cost * 100 : 0;
+      const pricePrefix = row.currency === "USD" ? "$" : "฿";
+      return `<tr>
+        <td><div class="portfolio-symbol"><b>${escapeHtml(row.symbol)}</b><span>${escapeHtml(row.assetClass)} · ${row.currency}</span></div></td>
+        <td>${portfolioNumber(row.quantity,8)}</td>
+        <td>${pricePrefix}${portfolioNumber(row.averageCost,4)}</td>
+        <td>${pricePrefix}${portfolioNumber(row.price,4)}</td>
+        <td><b>${portfolioMoney(row.value)}</b></td>
+        <td class="${row.pnl >= 0 ? "up" : "down"}">${row.pnl >= 0 ? "+" : ""}${portfolioMoney(row.pnl)}<div class="tiny">${pnlPctRow >= 0 ? "+" : ""}${portfolioNumber(pnlPctRow,2)}%</div></td>
+        <td>${portfolioNumber(weight,1)}%</td>
+        <td><div class="portfolio-row-actions"><button onclick="viewPortfolioSymbol('${row.symbol}')">กราฟ</button><button onclick="removePortfolioHolding(${index})" title="ลบ">×</button></div></td>
+      </tr>`;
+    }).join("");
+  }
+  if (empty) empty.classList.toggle("hidden", snapshot.rows.length > 0);
+
+  const grouped = {};
+  snapshot.rows.forEach(row => { grouped[row.assetClass] = (grouped[row.assetClass] || 0) + row.value; });
+  const allocation = document.getElementById("portfolioAllocation");
+  if (allocation) {
+    allocation.innerHTML = Object.entries(grouped).sort((a,b) => b[1]-a[1]).map(([name,value]) => {
+      const pct = snapshot.investedValue ? value / snapshot.investedValue * 100 : 0;
+      return `<div class="allocation-line">
+        <div class="allocation-meta"><b>${escapeHtml(name)}</b><span>${portfolioNumber(pct,1)}% · ${portfolioMoney(value,0)}</span></div>
+        <div class="allocation-track"><i style="width:${Math.min(100,pct)}%"></i></div>
+      </div>`;
+    }).join("") || `<div class="note">เพิ่มสินทรัพย์เพื่อดูสัดส่วนการลงทุน</div>`;
+  }
+
+  const goal = Number(portfolioState.goal || 0);
+  const goalPct = goal ? Math.min(100, snapshot.total / goal * 100) : 0;
+  setText("portfolioGoalLabel", `${portfolioMoney(snapshot.total,0)} / ${portfolioMoney(goal,0)}`);
+  setText("portfolioGoalNote", goal ? `ถึงเป้าหมายแล้ว ${portfolioNumber(goalPct,1)}%` : "ยังไม่ได้กำหนดเป้าหมาย");
+  const goalBar = document.getElementById("portfolioGoalBar");
+  if (goalBar) goalBar.style.width = `${goalPct}%`;
+
+  const cashInput = document.getElementById("portfolioCash");
+  const goalInput = document.getElementById("portfolioGoal");
+  const fxInput = document.getElementById("portfolioFx");
+  if (cashInput && document.activeElement !== cashInput) cashInput.value = portfolioState.cash;
+  if (goalInput && document.activeElement !== goalInput) goalInput.value = portfolioState.goal;
+  if (fxInput && document.activeElement !== fxInput) fxInput.value = portfolioState.usdThb;
+}
+
+function openPortfolio() {
+  document.getElementById("portfolioModal").style.display = "block";
+  document.body.style.overflow = "hidden";
+  renderPortfolio();
+  if (portfolioState.holdings.length) refreshPortfolioQuotes();
+}
+
+function closePortfolio() {
+  document.getElementById("portfolioModal").style.display = "none";
+  document.body.style.overflow = "";
+}
+
+function focusPortfolioForm() {
+  document.getElementById("portfolioSymbol")?.scrollIntoView({ behavior:"smooth", block:"center" });
+  document.getElementById("portfolioSymbol")?.focus();
+}
+
+function inferPortfolioDefaults(symbol) {
+  const upper = symbol.toUpperCase();
+  if (!upper || upper.endsWith(".BK")) return { currency:"THB", assetClass:"หุ้นไทย" };
+  if (upper.endsWith("_THB")) return { currency:"THB", assetClass:"คริปโต" };
+  if (upper.includes("-USD")) return { currency:"USD", assetClass:"คริปโต" };
+  if (upper.endsWith("=F")) return { currency:"USD", assetClass:"สินค้าโภคภัณฑ์" };
+  return { currency:"USD", assetClass:"หุ้นต่างประเทศ" };
+}
+
+function addPortfolioHolding(event) {
+  event.preventDefault();
+  const symbol = normalizeSymbolInput(document.getElementById("portfolioSymbol").value);
+  const quantity = Number(document.getElementById("portfolioQuantity").value);
+  const averageCost = Number(document.getElementById("portfolioAverageCost").value);
+  const currency = document.getElementById("portfolioCurrency").value;
+  const assetClass = document.getElementById("portfolioAssetClass").value;
+  if (!symbol || !/^[A-Z0-9._=^/-]+$/.test(symbol) || !(quantity > 0) || averageCost < 0) {
+    notifyError("กรุณาตรวจ Symbol, จำนวน และต้นทุนเฉลี่ย", "เพิ่มสินทรัพย์ไม่สำเร็จ");
+    return;
+  }
+
+  const existing = portfolioState.holdings.find(item => item.symbol === symbol && item.currency === currency);
+  if (existing) {
+    const oldCost = Number(existing.quantity) * Number(existing.averageCost);
+    const addedCost = quantity * averageCost;
+    existing.quantity = Number(existing.quantity) + quantity;
+    existing.averageCost = existing.quantity ? (oldCost + addedCost) / existing.quantity : averageCost;
+    existing.assetClass = assetClass;
+  } else {
+    portfolioState.holdings.push({ symbol, quantity, averageCost, currency, assetClass, lastPrice:averageCost });
+  }
+  persistPortfolio();
+  event.target.reset();
+  renderPortfolio();
+  refreshPortfolioQuotes();
+}
+
+function removePortfolioHolding(index) {
+  portfolioState.holdings.splice(index,1);
+  persistPortfolio();
+  renderPortfolio();
+}
+
+function savePortfolioSettings() {
+  portfolioState.cash = Math.max(0,Number(document.getElementById("portfolioCash").value || 0));
+  portfolioState.goal = Math.max(0,Number(document.getElementById("portfolioGoal").value || 0));
+  portfolioState.usdThb = Math.max(.01,Number(document.getElementById("portfolioFx").value || 35));
+  persistPortfolio();
+  renderPortfolio();
+}
+
+async function refreshPortfolioQuotes() {
+  const symbols = [...new Set(portfolioState.holdings.map(item => item.symbol))];
+  if (!symbols.length) return;
+  const status = document.getElementById("portfolioQuoteStatus");
+  if (status) status.textContent = "กำลังอัปเดตราคา...";
+  try {
+    const res = await fetch(`${API}/api/quotes?symbols=${encodeURIComponent(symbols.join(","))}`);
+    if (!res.ok) throw new Error(await res.text());
+    const quotes = await res.json();
+    quotes.forEach(quote => {
+      if (!quote.error && Number.isFinite(Number(quote.price))) {
+        portfolioQuotes[quote.symbol] = quote;
+        const holding = portfolioState.holdings.find(item => item.symbol.toUpperCase() === String(quote.symbol).toUpperCase());
+        if (holding) holding.lastPrice = Number(quote.price);
+      }
+    });
+    persistPortfolio();
+    const now = new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});
+    if (status) status.textContent = `อัปเดต ${now}`;
+    const updated = document.getElementById("portfolioUpdated");
+    if (updated) updated.textContent = `ราคาล่าสุด ${now} · เก็บข้อมูลในเครื่องนี้`;
+  } catch (_) {
+    if (status) status.textContent = "ใช้ราคาที่บันทึกล่าสุด";
+  }
+  renderPortfolio();
+}
+
+function viewPortfolioSymbol(symbol) {
+  closePortfolio();
+  selectSymbol(symbol);
+}
+
+document.getElementById("portfolioSymbol")?.addEventListener("input", event => {
+  const defaults = inferPortfolioDefaults(event.target.value);
+  document.getElementById("portfolioCurrency").value = defaults.currency;
+  document.getElementById("portfolioAssetClass").value = defaults.assetClass;
+});
+document.getElementById("portfolioModal")?.addEventListener("click", event => {
+  if (event.target.id === "portfolioModal") closePortfolio();
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && document.getElementById("portfolioModal")?.style.display === "block") closePortfolio();
+});
+renderPortfolio();
 </script>
 </body>
 </html>
