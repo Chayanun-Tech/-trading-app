@@ -244,6 +244,14 @@
   .g-up { background:rgba(34,197,94,.24); color:var(--green); }
   .g-down { background:rgba(239,68,68,.24); color:var(--red); }
   .note { color:var(--muted); font-size:12px; line-height:1.5; }
+  .watch-section { padding-top:10px; }
+  .watch-title {
+    display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;
+  }
+  .watch-title h3 { margin:0; }
+  .watch-summary { color:var(--muted); font-size:11px; margin-left:auto; white-space:nowrap; }
+  .watch-toggle { min-height:28px; padding:4px 10px; font-size:12px; }
+  .watch-section.collapsed .watch-body { display:none; }
   .watch-head { display:grid; grid-template-columns:1fr 72px 70px 34px; gap:8px; color:var(--muted); font-size:11px; padding:0 10px 6px; }
   .watch-row { grid-template-columns:1fr 72px 70px 34px; border-left:0; border-right:0; border-top:0; border-radius:0; padding:8px 10px; }
   .watch-row { cursor:pointer; }
@@ -480,16 +488,16 @@
     <div class="summary" id="summary"></div>
 
     <div class="tabs">
+      <button class="tab" onclick="openDashboard()" style="background:var(--accent);border-color:var(--accent);color:#fff;">DASH BOARD</button>
       <button class="tab active" id="tabReport" onclick="showTab('report')">Report</button>
-      <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">🌱 หุ้นเล็กเด้งไกล</button>
-      <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">💎 VI / พื้นฐาน</button>
-      <button class="tab" id="tabBusiness" onclick="showTab('business')">🏢 ธุรกิจ</button>
-      <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
-      <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
-      <button class="tab" id="tabIv" onclick="showTab('iv')">📐 มูลค่า IV</button>
+      <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
+      <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
+      <button class="tab" id="tabBusiness" onclick="showTab('business')">ธุรกิจ</button>
+      <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">VIพื้นฐาน</button>
+      <button class="tab" id="tabIv" onclick="showTab('iv')">มูลค่าIV</button>
+      <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">หุ้นเล็กเด้งไกล</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
-      <button class="tab" onclick="openDashboard()" style="background:var(--accent);border-color:var(--accent);color:#fff;">📊 Dashboard</button>
     </div>
 
     <div id="reportPanel" class="panel-body">
@@ -909,15 +917,21 @@
       </div>
     </div>
 
-    <div class="section">
-      <h3>Watchlist</h3>
-      <div class="grid2">
-        <input id="watchInput" placeholder="Add symbol" />
-        <button onclick="addWatchSymbol()">Add</button>
+    <div class="section watch-section collapsed" id="watchSection">
+      <div class="watch-title">
+        <h3>Watch list</h3>
+        <span class="watch-summary" id="watchSummary">0 symbols</span>
+        <button class="watch-toggle" id="watchToggleBtn" onclick="toggleWatchlistPanel()" aria-expanded="false">ดู</button>
       </div>
-      <div class="watch-head" style="margin-top:10px;"><span>Symbol</span><span>Last</span><span>Change</span><span></span></div>
-      <div id="watchList"></div>
-      <div class="tiny" id="watchUpdated" style="padding:8px 10px 0;">Waiting...</div>
+      <div class="watch-body" id="watchBody">
+        <div class="grid2">
+          <input id="watchInput" placeholder="Add symbol" />
+          <button onclick="addWatchSymbol()">Add</button>
+        </div>
+        <div class="watch-head" style="margin-top:10px;"><span>Symbol</span><span>Last</span><span>Change</span><span></span></div>
+        <div id="watchList"></div>
+        <div class="tiny" id="watchUpdated" style="padding:8px 10px 0;">Waiting...</div>
+      </div>
     </div>
 
     <div class="section">
@@ -1154,6 +1168,7 @@ let priceLines = [];
 let trendLines = [];
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618];
 let watchlist = JSON.parse(localStorage.getItem("watchlist") || '["AAPL","NVDA","PTT.BK","BTC-USD","GC=F"]');
+let watchlistCollapsed = localStorage.getItem("watchlistCollapsed") !== "false";
 let searchTimer = null;
 let searchRows = [];
 let searchIndex = -1;
@@ -1253,7 +1268,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "multibaggerPanel", "fundamentalsPanel", "businessPanel", "ivPanel", "imagePanel", "indicatorsPanel", "strategyPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -2009,6 +2024,7 @@ async function loadModelStatus() {
 async function init() {
   preventImplicitButtonSubmit();
   dockDetailPanels();
+  applyWatchlistPanelState();
   const h = await fetch(API + "/api/health").then(r => r.json());
   $("providerBadge").textContent = "provider: " + h.data_provider;
   $("aiBadge").textContent = "AI: " + (h.ai_enabled ? `${h.ai_provider} (${h.model})` : "rule-based");
@@ -3467,6 +3483,28 @@ async function runImageAnalysis() {
 function saveWatchlist() {
   watchlist = [...new Set(watchlist.map(s => s.trim().toUpperCase()).filter(Boolean))].slice(0, 40);
   localStorage.setItem("watchlist", JSON.stringify(watchlist));
+  updateWatchlistSummary();
+}
+
+function updateWatchlistSummary() {
+  const count = watchlist.length;
+  if ($("watchSummary")) $("watchSummary").textContent = `${count} symbol${count === 1 ? "" : "s"}`;
+}
+
+function applyWatchlistPanelState() {
+  const section = $("watchSection");
+  const btn = $("watchToggleBtn");
+  if (!section || !btn) return;
+  section.classList.toggle("collapsed", watchlistCollapsed);
+  btn.textContent = watchlistCollapsed ? "ดู" : "ซ่อน";
+  btn.setAttribute("aria-expanded", String(!watchlistCollapsed));
+  updateWatchlistSummary();
+}
+
+function toggleWatchlistPanel() {
+  watchlistCollapsed = !watchlistCollapsed;
+  localStorage.setItem("watchlistCollapsed", String(watchlistCollapsed));
+  applyWatchlistPanelState();
 }
 
 function addWatchSymbol() {
@@ -3487,8 +3525,10 @@ function removeWatchSymbol(symbol, event) {
 
 async function refreshWatchlist() {
   if (watchInFlight) return;
+  updateWatchlistSummary();
   if (!watchlist.length) {
     $("watchList").innerHTML = `<div class="note" style="padding:8px 10px;">Empty</div>`;
+    if ($("watchUpdated")) $("watchUpdated").textContent = "No symbols";
     return;
   }
   watchInFlight = true;
