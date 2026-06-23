@@ -3092,6 +3092,38 @@ function renderRadar(d) {
       wins.forEach(x => { b += `<div class="rad-win"><b>${E(x.who)}</b>${x.role ? `<span class="rad-role">${E(x.role)}</span>` : ""}${x.why ? `<div style="color:#9fb0c0;font-size:12px;margin-top:2px;">${E(x.why)}</div>` : ""}</div>`; });
     }
 
+    const players = (t.players || []).filter(x => x && x.name);
+    if (players.length) {
+      const retCell = r => (r == null || isNaN(r)) ? "<span class='tiny' style='color:#7d8b99'>—</span>"
+        : `<span style="color:${r >= 0 ? "#39d98a" : "#ff6b6b"};">${r >= 0 ? "▲ +" : "▼ "}${E(r)}%</span>`;
+      const row = p => {
+        const win = p.side !== "เสียเปรียบ";
+        const tk = p.ticker ? ` <span class="tiny" style="color:#7d8b99;">${E(p.ticker)}</span>` : "";
+        const ind = p.industry ? `<div class="tiny" style="color:#7d8b99;">${E(p.industry)}</div>` : "";
+        const why = p.why ? `<div class="tiny" style="color:#9fb0c0;margin-top:2px;">${E(p.why)}</div>` : "";
+        if (!p.has_real_data) {
+          return `<tr style="border-left:3px solid ${win ? "#39d98a" : "#ff6b6b"};opacity:.65;">`
+            + `<td style="padding:5px 8px;">${win ? "🟢" : "🔴"} <b>${E(p.name)}</b>${tk}${ind}${why}</td>`
+            + `<td colspan="3" style="padding:5px 8px;text-align:center;" class="tiny">ไม่มีข้อมูลราคาจริง</td></tr>`;
+        }
+        return `<tr style="border-left:3px solid ${win ? "#39d98a" : "#ff6b6b"};">`
+          + `<td style="padding:5px 8px;">${win ? "🟢" : "🔴"} <b>${E(p.name)}</b>${tk}${ind}${why}</td>`
+          + `<td style="padding:5px 8px;text-align:right;white-space:nowrap;">${p.price != null ? "$" + E(p.price) : "—"}</td>`
+          + `<td style="padding:5px 8px;text-align:right;white-space:nowrap;font-size:12px;">${retCell(p.ret_6m)}</td>`
+          + `<td style="padding:5px 8px;text-align:right;white-space:nowrap;font-size:12px;">${retCell(p.ret_1y)}</td></tr>`;
+      };
+      const wins2 = players.filter(p => p.side !== "เสียเปรียบ").map(row).join("");
+      const lose2 = players.filter(p => p.side === "เสียเปรียบ").map(row).join("");
+      b += `<div class="rad-sub">💹 หุ้นที่ได้เปรียบ–เสียเปรียบ + ผลตอบแทนจริง</div>`
+        + `<table class="biz-rev" style="width:100%;"><thead><tr style="color:#9fb0c0;font-size:12px;">`
+        + `<th style="text-align:left;padding:4px 8px;">บริษัท (หุ้น)</th>`
+        + `<th style="text-align:right;padding:4px 8px;">ราคา</th>`
+        + `<th style="text-align:right;padding:4px 8px;">6 เดือน</th>`
+        + `<th style="text-align:right;padding:4px 8px;">1 ปี</th></tr></thead>`
+        + `<tbody>${wins2}${lose2}</tbody></table>`
+        + `<div class="tiny" style="margin-top:4px;color:#7d8b99;">* ราคาและผลตอบแทนเป็น 'ข้อมูลจริง' จากตลาด (ดึงสด) · 🟢/🔴 ได้เปรียบ–เสียเปรียบ เป็นมุมมองเชิงวิเคราะห์ของ AI · ไม่ใช่คำแนะนำซื้อขาย</div>`;
+    }
+
     const wf = (t.watch_for || []).filter(Boolean);
     if (wf.length) b += `<div class="rad-sub">👀 สัญญาณยืนยันที่ต้องจับตา</div>` + wf.map(w => `<span class="rad-pill">${E(w)}</span>`).join("");
     if (t.risks) b += `<div class="rad-p" style="font-size:12px;color:#ff9f9f;margin-top:8px;">⛔ ความเสี่ยง/อาจไม่เกิด: ${E(t.risks)}</div>`;

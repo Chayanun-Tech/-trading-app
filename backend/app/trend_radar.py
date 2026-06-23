@@ -234,6 +234,13 @@ _OUTPUT_CONTRACT = """รูปแบบ JSON ที่ต้องคืน (�
          "role": "<ผู้นำเทรนด์ | ผู้ขายจอบเสียม (picks&shovels) | ผู้ปรับตัวได้>",
          "why": "<ได้ประโยชน์อย่างไร 1 ประโยค>"}
       ],
+      "players": [
+        {"name": "<ชื่อบริษัทมหาชนที่ลงทุนได้จริง>",
+         "ticker": "<ticker ที่ถูกต้องแน่นอน เช่น NVDA, MSFT, GOOGL — เน้นหุ้นสหรัฐ/ตะวันตกที่เป็นผู้นำโลก. ห้ามเดา ticker; ถ้าไม่แน่ใจ ticker จริงให้ข้ามบริษัทนั้นไป>",
+         "side": "<ได้เปรียบ | เสียเปรียบ>",
+         "industry": "<อุตสาหกรรม/เซกเมนต์ที่บริษัทนี้แข่งอยู่>",
+         "why": "<ทำไมถึงได้เปรียบ/เสียเปรียบจากเทรนด์นี้ 1 ประโยค>"}
+      ],
       "watch_for": ["<สัญญาณ/เหตุการณ์ที่ถ้าเกิดแปลว่าเทรนด์นี้ของจริงและเร่งขึ้น 2-4 ข้อสั้น ๆ>"],
       "risks": "<อะไรที่อาจทำให้เทรนด์นี้ไม่เกิด/ช้า/ตายกลางทาง 1-2 ประโยค>",
       "evidence": ["<อ้างหัวข้อสัญญาณดิบจริงที่ทำให้สรุปเทรนด์นี้ 2-4 ข้อ ลอกหัวข้อมาสั้น ๆ>"]
@@ -250,6 +257,12 @@ _OUTPUT_CONTRACT = """รูปแบบ JSON ที่ต้องคืน (�
 - คืน trends 'ไม่เกิน 5 อัน' เรียงจาก (momentum × conviction) มากไปน้อย — เลือกเฉพาะเทรนด์ที่ชัดสุด
   ให้น้ำหนักเทรนด์ 'ต้นเทรนด์' ที่มีหลายแหล่งยืนยัน
 - แต่ละเทรนด์: incumbents_at_risk 1-2 อัน, winners 1-3 อัน, watch_for/evidence อย่างละ 2-3 ข้อ
+- players (สำคัญมาก ห้ามข้าม): ทุกเทรนด์ต้องมี players 4-6 ตัว และ 'บังคับ' ให้มีครบทั้งสองฝั่ง:
+  * ฝั่ง 'ได้เปรียบ' อย่างน้อย 2 ตัว = หุ้นที่ได้ประโยชน์จากเทรนด์ (เน้นหุ้นสหรัฐ/ตะวันตกผู้นำโลก)
+  * ฝั่ง 'เสียเปรียบ' อย่างน้อย 2 ตัว = บริษัทมหาชนของ 'อุตสาหกรรมเดิม' ที่เทรนด์นี้กำลังดิสรัป/กินส่วนแบ่ง
+    (ต้องเป็นบริษัทจริงที่มีหุ้นซื้อขายได้ เช่น เทรนด์รถ EV → ฝั่งเสียเปรียบคือค่ายรถน้ำมันเดิม)
+  สำคัญสุด: ใส่เฉพาะบริษัทที่คุณ 'มั่นใจ ticker จริง 100%' เท่านั้น ห้ามเดา ticker เด็ดขาด
+  ถ้านึก ticker ที่แน่ใจไม่ได้ ให้เปลี่ยนเป็นบริษัทอื่นที่แน่ใจ (ระบบจะดึงราคา/ผลตอบแทนจริงมาเติมเอง ไม่ต้องใส่ตัวเลขใด ๆ)
 - เขียนกระชับ ตรงประเด็น ทุกฟิลด์คำอธิบายไม่เกิน 2 ประโยค
 - evidence ต้องอ้างจากหัวข้อสัญญาณดิบที่ให้มาเท่านั้น ห้ามแต่งหัวข้อที่ไม่มี
 - wildcards ไม่เกิน 3 อัน; ถ้าสัญญาณไม่พอจะสรุปเป็นเทรนด์ ให้ใส่ใน wildcards แทน อย่าปั้นเป็น trend เต็ม
@@ -364,6 +377,21 @@ def _clean(payload: dict) -> dict:
             winners.append({"who": _s(w.get("who"), 120),
                             "role": _s(w.get("role"), 60),
                             "why": _s(w.get("why"), 240)})
+        players = []
+        for p in _list(t, "players")[:8]:
+            if not isinstance(p, dict) or not p.get("name"):
+                continue
+            side = str(p.get("side", "")).strip()
+            side = ("เสียเปรียบ" if "เสีย" in side or "lose" in side.lower() or "risk" in side.lower()
+                    else "ได้เปรียบ")
+            players.append({
+                "name": _s(p.get("name"), 80),
+                "ticker": _s((p.get("ticker") or "").strip().upper() or None, 16),
+                "side": side,
+                "industry": _s(p.get("industry"), 80),
+                "why": _s(p.get("why"), 240),
+                # ตัวเลขจริงเติมทีหลังจาก provider (price/ret_6m/ret_1y) — ไม่ให้ AI เดา
+            })
         trends.append({
             "name": _s(t.get("name"), 120),
             "stage": stage,
@@ -378,6 +406,7 @@ def _clean(payload: dict) -> dict:
                 "analogy": _s(dis.get("analogy"), 200),
             },
             "winners": winners,
+            "players": players,
             "watch_for": [_s(x, 160) for x in _list(t, "watch_for")[:5] if x],
             "risks": _s(t.get("risks"), 300),
             "evidence": [_s(x, 200) for x in _list(t, "evidence")[:4] if x],
@@ -395,7 +424,7 @@ def _clean(payload: dict) -> dict:
     }
 
 
-def _signals_digest(signals: list[dict], limit: int = 130) -> str:
+def _signals_digest(signals: list[dict], limit: int = 95) -> str:
     """ทำสัญญาณดิบเป็นข้อความให้ LLM อ่าน: [แหล่ง · อายุ · คะแนน] หัวข้อ."""
     now = time.time()
     lines = []
@@ -434,6 +463,55 @@ async def _topic_to_keywords(topic: str, exclude: set) -> dict:
     except Exception:  # noqa: BLE001 — แปลไม่ได้ก็ใช้ธีมเดิม
         pass
     return fallback
+
+
+async def _real_stock_stats(ticker: str) -> dict | None:
+    """ดึง 'ข้อมูลจริง' ของหุ้นจาก provider: ราคาล่าสุด + ผลตอบแทน 6 เดือน/1 ปี.
+
+    คืน None ถ้า ticker ดึงไม่ได้ (ไม่มีจริง/หาไม่เจอ) — เราจะไม่โชว์ตัวเลขปลอม."""
+    from app.main import provider  # lazy เพื่อเลี่ยง circular import
+    get_history = getattr(provider, "get_history", None)
+    if not get_history:
+        return None
+    try:
+        candles = await get_history(ticker, "1d", max_bars=400)
+    except Exception:  # noqa: BLE001 — หาไม่เจอ/แหล่งล่ม = ถือว่าไม่มีข้อมูลจริง
+        return None
+    closes = [c.close for c in candles if getattr(c, "close", None)]
+    if len(closes) < 30:  # ข้อมูลน้อยเกินจะเชื่อถือได้
+        return None
+    last = closes[-1]
+
+    def _ret(bars_ago: int):
+        if len(closes) <= bars_ago:
+            return None
+        old = closes[-bars_ago - 1]
+        return round((last / old - 1) * 100, 1) if old else None
+
+    return {"price": round(last, 2), "ret_6m": _ret(126), "ret_1y": _ret(252)}
+
+
+async def _enrich_players_with_real_data(trends: list[dict]) -> None:
+    """เติม 'ราคา/ผลตอบแทนจริง' ลงใน players ทุกตัวที่มี ticker. ดึงพร้อมกันทุกตัว.
+
+    ตัวที่ดึงไม่ได้: คง ticker ไว้แต่ไม่มีตัวเลข (frontend จะโชว์ว่า 'ไม่มีข้อมูลจริง')."""
+    tickers = sorted({p["ticker"] for t in trends for p in t.get("players", [])
+                      if p.get("ticker")})
+    if not tickers:
+        return
+    stats = await asyncio.gather(*(_real_stock_stats(tk) for tk in tickers))
+    by_ticker = dict(zip(tickers, stats))
+    for t in trends:
+        kept = []
+        for p in t.get("players", []):
+            st = by_ticker.get(p.get("ticker")) if p.get("ticker") else None
+            if st:
+                p.update(st)
+                p["has_real_data"] = True
+            else:
+                p["has_real_data"] = False
+            kept.append(p)
+        t["players"] = kept
 
 
 async def get_trend_radar(topic: str = "", *, refresh: bool = False) -> dict:
@@ -519,6 +597,12 @@ async def get_trend_radar(topic: str = "", *, refresh: bool = False) -> dict:
             raise ValueError(f"AI วิเคราะห์เทรนด์ไม่สำเร็จ: {exc}") from exc
     else:  # pragma: no cover
         raise ValueError(f"AI วิเคราะห์เทรนด์ไม่สำเร็จ: {last_err}")
+
+    # เติมราคา/ผลตอบแทน 'จริง' ลงในหุ้นแต่ละตัว (ไม่ให้ AI เดาตัวเลข)
+    try:
+        await _enrich_players_with_real_data(data.get("trends", []))
+    except Exception:  # noqa: BLE001 — ดึงราคาไม่ได้ก็ยังคืนผลวิเคราะห์ได้
+        pass
 
     result = {
         "topic": topic or None,
