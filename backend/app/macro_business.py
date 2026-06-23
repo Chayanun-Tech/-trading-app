@@ -14,6 +14,7 @@ cache ผลลัพธ์ลงดิสก์ (TTL ~7 วัน) เพื่
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
@@ -314,6 +315,80 @@ def _clean(payload: dict) -> dict:
     }
 
 
+# ---- บังคับให้ทุกฟิลด์มีคำแปลไทย (กันกรณี LLM ไม่ทำตามกฎภาษา) ----------------
+_THAI_RE = re.compile(r"[฀-๿]")
+_LATIN_RE = re.compile(r"[A-Za-z]")
+# ฟิลด์ชื่อสั้น → ใส่คำแปลในวงเล็บ; ฟิลด์อื่น ๆ → ขึ้นบรรทัดใหม่ 'ไทย: '
+_NAME_KEYS = {"name", "factor", "material"}
+
+
+def _needs_thai(text) -> bool:
+    """ข้อความนี้เป็นอังกฤษล้วน (มีตัวอักษรลาติน แต่ไม่มีอักษรไทย) หรือไม่."""
+    if not isinstance(text, str) or not text.strip():
+        return False
+    if _THAI_RE.search(text):
+        return False
+    return bool(_LATIN_RE.search(text))
+
+
+def _collect_thai_targets(obj) -> list:
+    """เดินทั้งโครงสร้างผล เก็บฟิลด์อังกฤษล้วนที่ต้องเติมคำแปล.
+
+    คืน list ของ (text, is_name, set_fn) เพื่อแก้ค่ากลับภายหลัง."""
+    items: list = []
+
+    def visit(container, key, is_name):
+        val = container[key]
+        if isinstance(val, str):
+            if _needs_thai(val):
+                items.append((val, is_name,
+                              lambda nv, c=container, k=key: c.__setitem__(k, nv)))
+        elif isinstance(val, dict):
+            for k in val:
+                visit(val, k, k in _NAME_KEYS)
+        elif isinstance(val, list):
+            for i, el in enumerate(val):
+                if isinstance(el, str):
+                    if _needs_thai(el):
+                        items.append((el, True,
+                                      lambda nv, c=val, k=i: c.__setitem__(k, nv)))
+                elif isinstance(el, (dict, list)):
+                    visit(val, i, False)
+
+    visit({"_": obj}, "_", False)
+    return items
+
+
+async def _ensure_thai(data: dict, exclude: set) -> dict:
+    """แปลฟิลด์ที่ยังเป็นอังกฤษล้วนเป็นไทยด้วย LLM (เรียกครั้งเดียวแบบ batch).
+
+    ถ้าแปลไม่สำเร็จ คืนข้อมูลเดิมโดยไม่ทำให้ทั้งคำขอล้มเหลว."""
+    items = _collect_thai_targets(data)
+    if not items:
+        return data
+    numbered = "\n".join(f"{i}. {t}" for i, (t, _, _) in enumerate(items))
+    sys = ("คุณเป็นนักแปลการเงิน/การลงทุน แปลข้อความอังกฤษเป็นไทยให้กระชับ ถูกต้อง "
+           "ตามบริบทตลาดทุน เก็บชื่อเฉพาะ/ตัวย่อ (เช่น TSMC, AI, EV) ไว้ตามเดิม "
+           "ตอบเป็น JSON เท่านั้น")
+    um = ('แปลข้อความแต่ละบรรทัดต่อไปนี้เป็นภาษาไทย แล้วคืน JSON รูปแบบ '
+          '{"0":"<คำแปล>","1":"<คำแปล>", ...} โดยคีย์เป็นเลขลำดับตรงกับต้นฉบับ '
+          'และต้องครบทุกหมายเลข\n\n' + numbered)
+    try:
+        txt = await llm.complete(sys, um, exclude=exclude)
+        trans = _extract_json(txt)
+    except Exception:  # noqa: BLE001 — แปลไม่ได้ก็ปล่อยข้อมูลเดิม
+        return data
+    for i, (orig, is_name, set_fn) in enumerate(items):
+        th = trans.get(str(i))
+        if not isinstance(th, str) or not th.strip():
+            continue
+        th = th.strip()
+        if _THAI_RE.search(th) is None:
+            continue
+        set_fn(f"{orig} ({th})" if is_name else f"{orig}\nไทย: {th}")
+    return data
+
+
 async def get_macro_analysis(symbol: str, *, refresh: bool = False) -> dict:
     """คืนผลวิเคราะห์มหภาค→ธุรกิจ (Ray Dalio style) ภาษาไทย. อ่าน cache ก่อน เว้นแต่ refresh."""
     key = symbol.upper().strip()
@@ -394,6 +469,9 @@ async def get_macro_analysis(symbol: str, *, refresh: bool = False) -> dict:
             raise ValueError(f"AI วิเคราะห์มหภาค→ธุรกิจไม่สำเร็จ: {exc}") from exc
     else:  # pragma: no cover
         raise ValueError(f"AI วิเคราะห์มหภาค→ธุรกิจไม่สำเร็จ: {last_err}")
+
+    # บังคับให้ทุกฟิลด์มีคำแปลไทย เผื่อโมเดลไม่ทำตามกฎภาษาในรอบแรก
+    data = await _ensure_thai(data, exclude)
 
     result = {
         "symbol": key,
