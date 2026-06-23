@@ -44,11 +44,20 @@ _ARXIV_CATS = ["cs.AI", "cs.LG", "cs.RO", "q-bio", "cond-mat.mtrl-sci", "quant-p
 
 
 # ---------------------------------------------------------------- harvesters --
-async def _hn_signals(client: httpx.AsyncClient) -> list[dict]:
-    """Hacker News (Algolia) — สตอรี่ใหม่ที่คะแนนพุ่ง = สิ่งที่ผู้สร้างกำลังตื่นเต้น."""
-    cutoff = int(time.time()) - 14 * 24 * 3600
-    url = ("https://hn.algolia.com/api/v1/search_by_date?tags=story"
-           f"&numericFilters=created_at_i>{cutoff},points>80&hitsPerPage=60")
+async def _hn_signals(client: httpx.AsyncClient, query: str = "") -> list[dict]:
+    """Hacker News (Algolia) — สตอรี่ใหม่ที่คะแนนพุ่ง = สิ่งที่ผู้สร้างกำลังตื่นเต้น.
+
+    ถ้ามี query: ค้นตามคำ (เกณฑ์คะแนนต่ำลงเพราะธีมเจาะจงมีของน้อยกว่า)."""
+    cutoff = int(time.time()) - 30 * 24 * 3600
+    if query:
+        params = httpx.QueryParams({
+            "query": query, "tags": "story", "hitsPerPage": "50",
+            "numericFilters": f"created_at_i>{cutoff},points>10"})
+        url = f"https://hn.algolia.com/api/v1/search?{params}"
+    else:
+        cutoff = int(time.time()) - 14 * 24 * 3600
+        url = ("https://hn.algolia.com/api/v1/search_by_date?tags=story"
+               f"&numericFilters=created_at_i>{cutoff},points>80&hitsPerPage=60")
     r = await client.get(url, headers=_UA)
     r.raise_for_status()
     out = []
@@ -65,11 +74,17 @@ async def _hn_signals(client: httpx.AsyncClient) -> list[dict]:
     return out
 
 
-async def _arxiv_signals(client: httpx.AsyncClient) -> list[dict]:
-    """arXiv — เปเปอร์ล่าสุดในหมวดเทคโนโลยี = สัญญาณต้นน้ำที่สุด."""
-    cats = "+OR+".join(f"cat:{c}" for c in _ARXIV_CATS)
-    url = ("http://export.arxiv.org/api/query?search_query=" + cats +
-           "&sortBy=submittedDate&sortOrder=descending&max_results=50")
+async def _arxiv_signals(client: httpx.AsyncClient, query: str = "") -> list[dict]:
+    """arXiv — เปเปอร์ล่าสุด = สัญญาณต้นน้ำที่สุด. ถ้ามี query: ค้นทุกหมวดตามคำ."""
+    if query:
+        params = httpx.QueryParams({
+            "search_query": f"all:{query}", "sortBy": "relevance",
+            "sortOrder": "descending", "max_results": "50"})
+        url = f"http://export.arxiv.org/api/query?{params}"
+    else:
+        cats = "+OR+".join(f"cat:{c}" for c in _ARXIV_CATS)
+        url = ("http://export.arxiv.org/api/query?search_query=" + cats +
+               "&sortBy=submittedDate&sortOrder=descending&max_results=50")
     r = await client.get(url, headers=_UA)
     r.raise_for_status()
     ns = {"a": "http://www.w3.org/2005/Atom"}
@@ -89,28 +104,36 @@ async def _arxiv_signals(client: httpx.AsyncClient) -> list[dict]:
     return out
 
 
-async def _reddit_signals(client: httpx.AsyncClient) -> list[dict]:
-    """Reddit — โพสต์ที่กำลังมาแรงในซับเทคโนโลยี/อนาคต = adoption รุ่นแรก."""
-    subs = ["technology", "Futurology", "artificial", "singularity"]
+async def _reddit_signals(client: httpx.AsyncClient, query: str = "") -> list[dict]:
+    """Reddit — โพสต์ที่กำลังมาแรง = adoption รุ่นแรก.
+
+    ถ้ามี query: ค้นทั้ง Reddit ตามคำ; ไม่งั้นดึง top ของซับเทคโนโลยี/อนาคต."""
+    if query:
+        endpoints = [(f"https://www.reddit.com/search.json?q={httpx.QueryParams({'q': query})['q']}"
+                      "&sort=top&t=month&limit=30", "Reddit")]
+    else:
+        subs = ["technology", "Futurology", "artificial", "singularity"]
+        endpoints = [(f"https://www.reddit.com/r/{s}/top.json?t=week&limit=20",
+                      f"Reddit r/{s}") for s in subs]
     out: list[dict] = []
-    for sub in subs:
+    for url, label in endpoints:
         try:
-            r = await client.get(
-                f"https://www.reddit.com/r/{sub}/top.json?t=week&limit=20",
-                headers=_UA)
+            r = await client.get(url, headers=_UA)
             r.raise_for_status()
             for c in r.json().get("data", {}).get("children", []):
                 d = c.get("data", {})
                 title = (d.get("title") or "").strip()
                 if not title:
                     continue
+                sub = d.get("subreddit")
                 out.append({
-                    "title": title, "source": f"Reddit r/{sub}",
+                    "title": title,
+                    "source": f"Reddit r/{sub}" if query and sub else label,
                     "url": "https://www.reddit.com" + (d.get("permalink") or ""),
                     "ts": int(d.get("created_utc") or 0),
                     "score": int(d.get("score") or 0),
                 })
-        except Exception:  # noqa: BLE001 — ซับใดล้มก็ข้าม
+        except Exception:  # noqa: BLE001 — แหล่งใดล้มก็ข้าม
             continue
     return out
 
@@ -383,6 +406,36 @@ def _signals_digest(signals: list[dict], limit: int = 130) -> str:
     return "\n".join(lines)
 
 
+_ASCII_RE = re.compile(r"^[\x00-\x7f]+$")
+
+
+async def _topic_to_keywords(topic: str, exclude: set) -> dict:
+    """แปลงธีม (ไทย/อังกฤษ) เป็นคำค้นภาษาอังกฤษ เพราะแหล่งต้นน้ำเป็นภาษาอังกฤษ.
+
+    คืน {'search': '<คำค้นรวมสำหรับ arXiv/HN/Reddit>',
+         'news': ['<วลีข่าว 1>', '<วลีข่าว 2>', ...]}.
+    ถ้าธีมเป็นอังกฤษอยู่แล้วและแปลไม่ได้ ใช้ธีมเดิมเป็น fallback."""
+    fallback = {"search": topic, "news": [topic, f"{topic} startup", f"{topic} breakthrough"]}
+    sys = ("คุณเป็นผู้ช่วยทำคำค้น (search query) ภาษาอังกฤษสำหรับค้นงานวิจัยและข่าวเทคโนโลยี "
+           "รับ 'ธีม' ที่ผู้ใช้สนใจ (อาจเป็นไทยหรืออังกฤษ) แล้วคืนคำค้นภาษาอังกฤษที่ดีที่สุด "
+           "ตอบเป็น JSON เท่านั้น")
+    um = (f"ธีมที่ผู้ใช้สนใจ: \"{topic}\"\n"
+          "คืน JSON รูปแบบนี้เท่านั้น:\n"
+          '{"search": "<คำค้นภาษาอังกฤษ 2-5 คำ คั่นด้วยช่องว่าง ครอบคลุมแก่นของธีมนี้ '
+          'เช่น space → space exploration satellite launch>", '
+          '"news": ["<วลีข่าวอังกฤษ 1>", "<วลีข่าวอังกฤษ 2>", "<วลีข่าวอังกฤษ 3>"]}')
+    try:
+        txt = await llm.complete(sys, um, exclude=exclude)
+        data = _extract_json(txt)
+        search = str(data.get("search") or "").strip()
+        news = [str(x).strip() for x in (data.get("news") or []) if str(x).strip()]
+        if search and news:
+            return {"search": search[:120], "news": news[:4]}
+    except Exception:  # noqa: BLE001 — แปลไม่ได้ก็ใช้ธีมเดิม
+        pass
+    return fallback
+
+
 async def get_trend_radar(topic: str = "", *, refresh: bool = False) -> dict:
     """สแกนสัญญาณต้นน้ำ + ให้ AI วิเคราะห์เทรนด์ที่กำลังโผล่. อ่าน cache ก่อน เว้นแต่ refresh.
 
@@ -399,14 +452,17 @@ async def get_trend_radar(topic: str = "", *, refresh: bool = False) -> dict:
     if not settings.llm_enabled():
         raise ValueError("ต้องตั้งค่าคีย์ AI (เช่น Gemini ฟรี) เพื่อให้ AI วิเคราะห์เทรนด์")
 
-    topics = [topic] if topic else _DEFAULT_TOPICS
-    # ถ้าเจาะ topic เดียว ขยายคำค้นข่าวให้ครอบคลุมขึ้นเล็กน้อย
-    news_topics = ([topic, f"{topic} startup", f"{topic} breakthrough"]
-                   if topic else _DEFAULT_TOPICS)
+    # โหมดเจาะธีม: แปลงเป็นคำค้นภาษาอังกฤษก่อน (แหล่งต้นน้ำเป็นภาษาอังกฤษ)
+    # แล้วสั่งให้ 'ทุกแหล่ง' ค้นตามธีม ไม่ใช่ดึงข่าวทั่วไป
+    search_q, news_topics, kw = "", _DEFAULT_TOPICS, None
+    if topic:
+        kw = await _topic_to_keywords(topic, set())
+        search_q = kw["search"]
+        news_topics = kw["news"]
     async with httpx.AsyncClient(timeout=25, follow_redirects=True) as client:
         harvested = await asyncio.gather(
-            _hn_signals(client), _arxiv_signals(client),
-            _reddit_signals(client), _gnews_signals(client, news_topics),
+            _hn_signals(client, search_q), _arxiv_signals(client, search_q),
+            _reddit_signals(client, search_q), _gnews_signals(client, news_topics),
             return_exceptions=True,
         )
     signals: list[dict] = []
@@ -424,8 +480,13 @@ async def get_trend_radar(topic: str = "", *, refresh: bool = False) -> dict:
             seen.add(k)
             dedup.append(s)
 
-    if len(dedup) < 8:
-        raise ValueError("ดึงสัญญาณต้นน้ำได้น้อยเกินไป (แหล่งข้อมูลอาจถูกบล็อก/เน็ตมีปัญหา) — ลองใหม่อีกครั้ง")
+    min_needed = 4 if topic else 8
+    if len(dedup) < min_needed:
+        extra = (f" สำหรับธีม '{topic}'" if topic else "")
+        raise ValueError(
+            f"ดึงสัญญาณต้นน้ำได้น้อยเกินไป{extra} "
+            "(ธีมอาจเฉพาะเกินไป หรือแหล่งข้อมูลถูกบล็อก/เน็ตมีปัญหา) — "
+            "ลองใช้คำที่กว้างขึ้น หรือเว้นว่างเพื่อกวาดทั้งโลก")
 
     digest = _signals_digest(dedup)
     focus = (f"ผู้ใช้สนใจเจาะลึกธีม: '{topic}'\n" if topic
@@ -461,11 +522,12 @@ async def get_trend_radar(topic: str = "", *, refresh: bool = False) -> dict:
 
     result = {
         "topic": topic or None,
+        "search_terms": (kw["search"] if kw else None),
         "scope": "เจาะลึกธีม" if topic else "กวาดกว้างทั้งโลก",
         "sources": sources_ok,
         "signal_count": len(dedup),
         "top_signals": [{"title": s["title"], "source": s["source"], "url": s.get("url")}
-                        for s in dedup[:25]],
+                        for s in dedup[:30]],
         "generated_at": int(time.time()),
         **data,
     }

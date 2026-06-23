@@ -3043,6 +3043,23 @@ async function runRadar(refresh) {
 
 function renderRadar(d) {
   const E = escapeHtml;
+  const sigList = d.top_signals || [];
+  // โยงข้อความหลักฐานกลับไปแหล่งต้นฉบับ: หาสัญญาณดิบที่ข้อความทับซ้อนมากสุด
+  const norm = s => (s || "").toLowerCase().replace(/[^a-z0-9ก-๙ ]+/g, " ").split(/\s+/).filter(w => w.length > 3);
+  const linkFor = txt => {
+    const w = norm(txt); if (!w.length) return null;
+    let best = null, bestN = 0;
+    for (const s of sigList) {
+      if (!s.url) continue;
+      const sw = new Set(norm(s.title));
+      const n = w.filter(x => sw.has(x)).length;
+      if (n > bestN) { bestN = n; best = s; }
+    }
+    return bestN >= 2 ? best : null;
+  };
+  const evLine = e => { const s = linkFor(e); return s
+    ? `<div class="rad-ev"><a href="${E(s.url)}" target="_blank" rel="noopener" title="เปิดต้นฉบับ: ${E(s.title)} [${E(s.source)}]">${E(e)} 🔗</a></div>`
+    : `<div class="rad-ev">${E(e)}</div>`; };
   const bars = (n, label) => (n != null && !isNaN(n)) ? `<span class="rad-bars" title="${label} ${n}/5">${"●".repeat(Math.round(n))}${"○".repeat(Math.max(0,5-Math.round(n)))}</span>` : "";
   const stageTag = s => !s ? "" : s.includes("ต้น") ? `<span class="rad-stage rad-early">🌱 ${E(s)}</span>`
     : s.includes("ปลาย") ? `<span class="rad-stage rad-late">🍂 ${E(s)}</span>`
@@ -3079,7 +3096,7 @@ function renderRadar(d) {
     if (wf.length) b += `<div class="rad-sub">👀 สัญญาณยืนยันที่ต้องจับตา</div>` + wf.map(w => `<span class="rad-pill">${E(w)}</span>`).join("");
     if (t.risks) b += `<div class="rad-p" style="font-size:12px;color:#ff9f9f;margin-top:8px;">⛔ ความเสี่ยง/อาจไม่เกิด: ${E(t.risks)}</div>`;
     const ev = (t.evidence || []).filter(Boolean);
-    if (ev.length) b += `<div class="rad-sub">🔎 สัญญาณดิบที่อ้างอิง</div>` + ev.map(e => `<div class="rad-ev">${E(e)}</div>`).join("");
+    if (ev.length) b += `<div class="rad-sub">🔎 สัญญาณดิบที่อ้างอิง (คลิกเปิดต้นฉบับ)</div>` + ev.map(evLine).join("");
     html += `<div class="rad-trend">${b}</div>`;
   });
 
@@ -3092,13 +3109,13 @@ function renderRadar(d) {
 
   if (d.bottom_line) html += `<div class="mac-card"><div class="mac-h">🧭 สรุป: ถ้าจะเป็นต้นเทรนด์ ควรโฟกัสอะไร</div><div class="mac-p">${E(d.bottom_line)}</div></div>`;
 
-  const sigs = (d.top_signals || []).slice(0, 20);
+  const sigs = sigList.slice(0, 30);
   if (sigs.length) {
     const items = sigs.map(s => `<div class="rad-sig">• <span style="color:#7d8b99">[${E(s.source)}]</span> ${s.url ? `<a href="${E(s.url)}" target="_blank" rel="noopener">${E(s.title)}</a>` : E(s.title)}</div>`).join("");
-    html += `<details style="margin-top:14px;"><summary style="cursor:pointer;color:#9fb0c0;font-size:13px;">📡 ดูสัญญาณดิบที่สแกนได้ (${d.signal_count || sigs.length} รายการ จาก ${E((d.sources||[]).join(", "))})</summary><div style="margin-top:8px;">${items}</div></details>`;
+    html += `<details open style="margin-top:14px;"><summary style="cursor:pointer;color:#9fb0c0;font-size:13px;">📡 แหล่งที่มา — สัญญาณดิบที่สแกนได้ (${d.signal_count || sigs.length} รายการ จาก ${E((d.sources||[]).join(", "))}) · คลิกเปิดต้นฉบับ</summary><div style="margin-top:8px;">${items}</div></details>`;
   }
   const when = d.generated_at ? new Date(d.generated_at * 1000).toLocaleString("th-TH") : "";
-  html += `<div class="note" style="margin-top:14px;">โหมด: <b>${E(d.scope || "")}</b>${d.topic ? " · ธีม " + E(d.topic) : ""}${when ? " · วิเคราะห์เมื่อ " + E(when) : ""}<br>🧠 <b>นี่คือการวิเคราะห์/สมมติฐานของ AI จากสัญญาณต้นน้ำ ไม่ใช่คำทำนายที่แน่นอน</b> — เทรนด์อาจไม่เกิดหรือช้ากว่าคาด ใช้เป็นจุดตั้งต้นค้นคว้าต่อ ไม่ใช่คำแนะนำซื้อขาย</div>`;
+  html += `<div class="note" style="margin-top:14px;">โหมด: <b>${E(d.scope || "")}</b>${d.topic ? " · ธีม " + E(d.topic) : ""}${d.search_terms ? " · คำค้น(EN): <b>" + E(d.search_terms) + "</b>" : ""}${when ? " · วิเคราะห์เมื่อ " + E(when) : ""}<br>🧠 <b>นี่คือการวิเคราะห์/สมมติฐานของ AI จากสัญญาณต้นน้ำ ไม่ใช่คำทำนายที่แน่นอน</b> — เทรนด์อาจไม่เกิดหรือช้ากว่าคาด ใช้เป็นจุดตั้งต้นค้นคว้าต่อ ไม่ใช่คำแนะนำซื้อขาย</div>`;
   $("radarResult").innerHTML = html || `<div class="note">ไม่พบเทรนด์ที่ชัดเจนพอจากสัญญาณรอบนี้ ลองสแกนใหม่</div>`;
 }
 
