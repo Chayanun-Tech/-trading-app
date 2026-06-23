@@ -26,6 +26,7 @@ from app.db import DatabaseStore
 from app import edgar, thai_sec
 from app import business as business_explainer
 from app import macro_business
+from app import trend_radar
 from app.engine import build_report
 from app.financials import build_financials
 from app.fundamentals import (get_fundamentals, get_offline, is_equity_symbol,
@@ -569,6 +570,20 @@ async def macro_analysis_route(symbol: str = Query(..., description="สัญ�
         raise HTTPException(404, str(exc))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"วิเคราะห์มหภาค→ธุรกิจไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/trend-radar")
+async def trend_radar_route(topic: str = Query("", description="ธีมที่อยากเจาะลึก เช่น 'AI agent', 'หุ่นยนต์' (ว่าง = กวาดกว้างทั้งโลก)"),
+                           refresh: bool = Query(False, description="True = สแกนสัญญาณใหม่ + ให้ AI วิเคราะห์ใหม่ทับ cache")):
+    """เรดาร์ดักจับเทรนด์โลก: สแกนสัญญาณต้นน้ำ (งานวิจัย/นักพัฒนา/ชุมชน/ข่าว)
+    แล้วให้ AI จัดกลุ่มเป็นเทรนด์ที่กำลังโผล่ พร้อมระบุระยะของเทรนด์ อุตสาหกรรมที่จะถูกดิสรัป
+    และผู้ได้-เสียประโยชน์ เพื่อช่วยจับ 'ต้นเทรนด์' ก่อนเข้ากระแสหลัก."""
+    try:
+        return await trend_radar.get_trend_radar(topic, refresh=refresh)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สแกนเทรนด์ไม่สำเร็จ: {exc}")
 
 
 @app.get("/api/offline/status")

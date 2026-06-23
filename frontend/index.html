@@ -498,6 +498,7 @@
       <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">VIพื้นฐาน</button>
       <button class="tab" id="tabIv" onclick="showTab('iv')">มูลค่าIV</button>
       <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">หุ้นเล็กเด้งไกล</button>
+      <button class="tab" id="tabRadar" onclick="showTab('radar')">เรดาร์เทรนด์โลก</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
     </div>
 
@@ -753,6 +754,38 @@
       </div>
       <div class="note" style="margin-top:6px;">วิเคราะห์หุ้นแบบ Ray Dalio — มองจากปัจจัยมหภาคโลก/ธีมโลก ไล่ลงมาที่ห่วงโซ่อุปทาน (suppliers/วัตถุดิบ การพึ่งพา) ฝั่งอุปสงค์ (ลูกค้า/ดีมานด์) จนถึงโครงสร้างรายได้-กำไรแยกตามสินค้า และปัจจัยที่กระทบกำไรมากที่สุด · ยึดข้อเท็จจริงจาก 10-K/56-1 ส่วนภาพมหภาคเป็นการวิเคราะห์ของ AI</div>
       <div id="macroResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้น เช่น NVDA แล้วกด "วิเคราะห์มหภาค→ธุรกิจ"</div></div>
+    </div>
+
+    <div id="radarPanel" class="panel-body hidden">
+      <style>
+        .rad-stage{display:inline-block; font-size:12px; font-weight:700; padding:1px 8px; border-radius:10px; white-space:nowrap;}
+        .rad-early{background:rgba(42,160,102,.20); color:#5fd39a;}
+        .rad-mid{background:rgba(226,185,59,.18); color:#e2b93b;}
+        .rad-late{background:rgba(220,80,80,.18); color:#ff8c8c;}
+        .rad-trend{margin-top:14px; background:rgba(255,255,255,.025); border:1px solid rgba(36,49,64,.7); border-radius:10px; padding:13px 15px;}
+        .rad-trend h3{font-size:15px; font-weight:700; color:#fff; margin:0 0 6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+        .rad-meta{font-size:12px; color:#9fb0c0; margin:0 0 8px; display:flex; gap:14px; flex-wrap:wrap;}
+        .rad-meta b{color:#cdd8e3;}
+        .rad-p{font-size:13px; line-height:1.65; color:#dfe6ee; margin:6px 0; white-space:pre-line;}
+        .rad-sub{font-size:12px; font-weight:700; color:#9fb0c0; margin:10px 0 4px; text-transform:uppercase; letter-spacing:.5px;}
+        .rad-lose{border-left:3px solid #ff8c8c; padding:6px 10px; margin:5px 0; background:rgba(220,80,80,.06); border-radius:0 6px 6px 0; font-size:13px; color:#e8d0d0;}
+        .rad-win{border-left:3px solid #5fd39a; padding:6px 10px; margin:5px 0; background:rgba(42,160,102,.06); border-radius:0 6px 6px 0; font-size:13px; color:#d2e8da;}
+        .rad-role{display:inline-block; font-size:11px; font-weight:700; background:rgba(255,255,255,.08); color:#aebdcb; padding:0 6px; border-radius:8px; margin-left:6px;}
+        .rad-pill{display:inline-block; font-size:12px; background:rgba(255,255,255,.06); color:#cdd8e3; padding:2px 8px; border-radius:10px; margin:2px 4px 2px 0;}
+        .rad-ev{font-size:11px; color:#7d8b99; margin:2px 0 2px 14px; position:relative;}
+        .rad-ev::before{content:"›"; position:absolute; left:-12px; color:#586672;}
+        .rad-analogy{font-size:12px; color:#e2b93b; font-style:italic; margin-top:4px;}
+        .rad-bars{letter-spacing:1px; color:#e2b93b;}
+        .rad-wild{border-left:3px solid #b48ce6; padding:6px 11px; margin:6px 0; background:rgba(150,100,220,.07); border-radius:0 6px 6px 0; font-size:13px; color:#ddd2ee;}
+        .rad-sig a{color:#7fa8d0; text-decoration:none; font-size:12px;} .rad-sig a:hover{text-decoration:underline;}
+      </style>
+      <div class="grid3">
+        <div class="field"><label>เจาะธีม (เว้นว่าง = กวาดทั้งโลก)</label><input id="radarTopic" placeholder="เช่น AI agent, หุ่นยนต์, แบตเตอรี่" /></div>
+        <div class="field" style="align-self:end;"><button class="primary" onclick="runRadar()">🛰️ สแกนเทรนด์</button></div>
+        <div class="field" style="align-self:end;"><button onclick="runRadar(true)" title="ดึงสัญญาณใหม่ + ให้ AI วิเคราะห์ใหม่">🔄 สแกนใหม่</button></div>
+      </div>
+      <div class="note" style="margin-top:6px;">ดักสัญญาณ <b>ต้นน้ำ</b> ของเทรนด์โลก (งานวิจัย arXiv · นักพัฒนา Hacker News · ชุมชน Reddit · ข่าว Google News) แล้วให้ AI จัดกลุ่มเป็นเทรนด์ที่กำลังโผล่ · บอก <b>ระยะของเทรนด์</b> (ต้น/กลาง/ปลาย) · อุตสาหกรรมที่จะถูก<b>ดิสรัป</b> (แบบ Kodak) · และ<b>ผู้ได้-เสียประโยชน์</b> เพื่อจับต้นเทรนด์ก่อนเข้ากระแสหลัก · 🧠 เป็นการวิเคราะห์ของ AI ไม่ใช่คำทำนายแน่นอน</div>
+      <div id="radarResult" style="margin-top:12px;"><div class="note">กด "สแกนเทรนด์" เพื่อกวาดทั้งโลก หรือพิมพ์ธีมที่อยากเจาะลึกก่อน</div></div>
     </div>
 
     <div id="ivPanel" class="panel-body hidden">
@@ -1305,7 +1338,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "radarPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -2735,7 +2768,7 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","macro","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","radar","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -2993,6 +3026,80 @@ function renderBusiness(d) {
     sec("👥 ลูกค้าหลัก", d.customers) +
     sec("🏰 จุดแข็ง / ตำแหน่งในอุตสาหกรรม", d.moat_and_position) +
     `<div class="note" style="margin-top:14px;">ที่มา: ${escapeHtml(d.source || docLabel)}${d.report_year ? " · ปีรายงาน " + escapeHtml(d.report_year) : ""}${d.filing_date ? " · รับข้อมูลเมื่อ " + escapeHtml(d.filing_date) : ""} ${src}</div>`;
+}
+
+async function runRadar(refresh) {
+  const topic = ($("radarTopic").value || "").trim();
+  showTab("radar");
+  const what = topic ? `เจาะธีม "${escapeHtml(topic)}"` : "กวาดเทรนด์ทั้งโลก";
+  $("radarResult").innerHTML = `<div class="note">🛰️ กำลังสแกนสัญญาณต้นน้ำ (${what}) จาก arXiv · Hacker News · Reddit · Google News แล้วให้ AI วิเคราะห์... ${refresh ? "(สแกนใหม่)" : "(ครั้งแรกอาจใช้เวลา 10-30 วินาที)"}</div>`;
+  try {
+    const url = `${API}/api/trend-radar?topic=${encodeURIComponent(topic)}${refresh ? "&refresh=true" : ""}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: res.statusText }))).detail || res.statusText);
+    renderRadar(await res.json());
+  } catch (e) { notifyError(errorMessage(e), "สแกนเทรนด์ไม่สำเร็จ"); $("radarResult").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`; }
+}
+
+function renderRadar(d) {
+  const E = escapeHtml;
+  const bars = (n, label) => (n != null && !isNaN(n)) ? `<span class="rad-bars" title="${label} ${n}/5">${"●".repeat(Math.round(n))}${"○".repeat(Math.max(0,5-Math.round(n)))}</span>` : "";
+  const stageTag = s => !s ? "" : s.includes("ต้น") ? `<span class="rad-stage rad-early">🌱 ${E(s)}</span>`
+    : s.includes("ปลาย") ? `<span class="rad-stage rad-late">🍂 ${E(s)}</span>`
+    : `<span class="rad-stage rad-mid">🌿 ${E(s)}</span>`;
+  let html = d.overview ? `<div class="mac-thesis">🌍 ${E(d.overview)}</div>` : "";
+
+  (d.trends || []).forEach((t, i) => {
+    if (!t || !t.name) return;
+    let b = `<h3>#${i+1} ${E(t.name)} ${stageTag(t.stage)}</h3>`;
+    const meta = [];
+    if (t.momentum != null) meta.push(`<span>โมเมนตัม ${bars(t.momentum,"โมเมนตัม")}</span>`);
+    if (t.conviction != null) meta.push(`<span>ความมั่นใจ ${bars(t.conviction,"ความมั่นใจ")}</span>`);
+    if (t.horizon) meta.push(`<span>⏳ <b>${E(t.horizon)}</b></span>`);
+    if (meta.length) b += `<div class="rad-meta">${meta.join("")}</div>`;
+    if (t.stage_reason) b += `<div class="rad-p" style="color:#9fb0c0;font-size:12px;">📍 ${E(t.stage_reason)}</div>`;
+    if (t.summary) b += `<div class="rad-p">${E(t.summary)}</div>`;
+    if (t.why_now) b += `<div class="rad-p">⚡ <b>ทำไมต้องตอนนี้:</b> ${E(t.why_now)}</div>`;
+
+    const dis = t.disruption || {};
+    const inc = (dis.incumbents_at_risk || []).filter(x => x && x.who);
+    if (inc.length || dis.analogy) {
+      b += `<div class="rad-sub">⚠️ ใครจะถูกดิสรัป (ผู้แพ้)</div>`;
+      inc.forEach(x => { b += `<div class="rad-lose"><b>${E(x.who)}</b>${x.why ? ` — ${E(x.why)}` : ""}</div>`; });
+      if (dis.analogy) b += `<div class="rad-analogy">📼 เทียบอดีต: ${E(dis.analogy)}</div>`;
+    }
+
+    const wins = (t.winners || []).filter(x => x && x.who);
+    if (wins.length) {
+      b += `<div class="rad-sub">🚀 ใครได้ประโยชน์ (ผู้ชนะ)</div>`;
+      wins.forEach(x => { b += `<div class="rad-win"><b>${E(x.who)}</b>${x.role ? `<span class="rad-role">${E(x.role)}</span>` : ""}${x.why ? `<div style="color:#9fb0c0;font-size:12px;margin-top:2px;">${E(x.why)}</div>` : ""}</div>`; });
+    }
+
+    const wf = (t.watch_for || []).filter(Boolean);
+    if (wf.length) b += `<div class="rad-sub">👀 สัญญาณยืนยันที่ต้องจับตา</div>` + wf.map(w => `<span class="rad-pill">${E(w)}</span>`).join("");
+    if (t.risks) b += `<div class="rad-p" style="font-size:12px;color:#ff9f9f;margin-top:8px;">⛔ ความเสี่ยง/อาจไม่เกิด: ${E(t.risks)}</div>`;
+    const ev = (t.evidence || []).filter(Boolean);
+    if (ev.length) b += `<div class="rad-sub">🔎 สัญญาณดิบที่อ้างอิง</div>` + ev.map(e => `<div class="rad-ev">${E(e)}</div>`).join("");
+    html += `<div class="rad-trend">${b}</div>`;
+  });
+
+  const wc = (d.wildcards || []).filter(x => x && x.name);
+  if (wc.length) {
+    html += `<div class="mac-card"><div class="mac-h">🃏 ไพ่ตาย (สัญญาณเล็กที่ถ้าจริงจะพลิกเกม)</div>`;
+    wc.forEach(w => { html += `<div class="rad-wild"><b>${E(w.name)}</b>${w.note ? ` — ${E(w.note)}` : ""}</div>`; });
+    html += `</div>`;
+  }
+
+  if (d.bottom_line) html += `<div class="mac-card"><div class="mac-h">🧭 สรุป: ถ้าจะเป็นต้นเทรนด์ ควรโฟกัสอะไร</div><div class="mac-p">${E(d.bottom_line)}</div></div>`;
+
+  const sigs = (d.top_signals || []).slice(0, 20);
+  if (sigs.length) {
+    const items = sigs.map(s => `<div class="rad-sig">• <span style="color:#7d8b99">[${E(s.source)}]</span> ${s.url ? `<a href="${E(s.url)}" target="_blank" rel="noopener">${E(s.title)}</a>` : E(s.title)}</div>`).join("");
+    html += `<details style="margin-top:14px;"><summary style="cursor:pointer;color:#9fb0c0;font-size:13px;">📡 ดูสัญญาณดิบที่สแกนได้ (${d.signal_count || sigs.length} รายการ จาก ${E((d.sources||[]).join(", "))})</summary><div style="margin-top:8px;">${items}</div></details>`;
+  }
+  const when = d.generated_at ? new Date(d.generated_at * 1000).toLocaleString("th-TH") : "";
+  html += `<div class="note" style="margin-top:14px;">โหมด: <b>${E(d.scope || "")}</b>${d.topic ? " · ธีม " + E(d.topic) : ""}${when ? " · วิเคราะห์เมื่อ " + E(when) : ""}<br>🧠 <b>นี่คือการวิเคราะห์/สมมติฐานของ AI จากสัญญาณต้นน้ำ ไม่ใช่คำทำนายที่แน่นอน</b> — เทรนด์อาจไม่เกิดหรือช้ากว่าคาด ใช้เป็นจุดตั้งต้นค้นคว้าต่อ ไม่ใช่คำแนะนำซื้อขาย</div>`;
+  $("radarResult").innerHTML = html || `<div class="note">ไม่พบเทรนด์ที่ชัดเจนพอจากสัญญาณรอบนี้ ลองสแกนใหม่</div>`;
 }
 
 async function runMacro(refresh) {
