@@ -529,20 +529,103 @@ async def _do_single(mode: str, symbol: str, *, horizon="", risk="", reason="") 
     return data
 
 
+async def _discover_peers(main: str, ctx: dict, want: int = 4) -> list[str]:
+    """ให้ AI เสนอ 'คู่แข่ง/หุ้นในอุตสาหกรรมเดียวกัน' แล้วคืนเฉพาะ ticker (ยังไม่ตรวจของจริง).
+
+    เลียน trend_radar: AI เก่งเรื่อง 'ใครแข่งกับใคร' — ติกเกอร์จะถูกตรวจด้วยข้อมูลจริงทีหลัง."""
+    snap = ctx.get("snapshot") or {}
+    sector = snap.get("sector") or "-"
+    industry = snap.get("industry") or "-"
+    summary = (snap.get("summary") or ctx.get("business_text") or "")[:1200]
+    system = (
+        "คุณคือนักวิเคราะห์ที่รู้จักบริษัทจดทะเบียนทั่วโลก หน้าที่: หา 'คู่แข่งโดยตรง/บริษัทในกลุ่ม"
+        "อุตสาหกรรมเดียวกัน' ของหุ้นที่กำหนด เพื่อเอาไปเปรียบเทียบ\n"
+        "- เลือกบริษัทที่ 'แข่งในตลาดเดียวกันจริง ๆ' และมีหุ้นซื้อขายได้ (มี ticker จริง)\n"
+        "- เน้นตลาดเดียวกับหุ้นต้นทาง (หุ้นไทย .BK → คู่แข่งไทย .BK; หุ้นสหรัฐ → คู่แข่งสหรัฐ)\n"
+        "- ใส่เฉพาะ ticker ที่มั่นใจว่าถูกต้อง 100% ห้ามเดา ถ้าไม่แน่ใจให้ข้าม\n"
+        "ตอบเป็น JSON เท่านั้น"
+    )
+    um = (
+        f"หุ้นต้นทาง: {ctx.get('name')} ({main})\n"
+        f"Sector: {sector} | Industry: {industry}\n"
+        f"คำอธิบายธุรกิจ: {summary}\n\n"
+        'คืน JSON: {"peers": ["<ticker1>", "<ticker2>", ...]} '
+        f"ราว {want}-{want + 1} ตัว (ห้ามใส่ {main} ซ้ำ; ใช้รูปแบบ ticker เดียวกับ {main} เช่นหุ้นไทยต้องมี .BK)"
+    )
+    try:
+        data = await _run_llm(system, um)
+    except Exception:  # noqa: BLE001
+        return []
+    out, seen = [], {main.upper()}
+    for t in (data.get("peers") or []):
+        tk = str(t or "").strip().upper()
+        if tk and tk not in seen and re.match(r"^[A-Z0-9.\-]{1,15}$", tk):
+            seen.add(tk)
+            out.append(tk)
+    return out[: want + 2]
+
+
 async def _do_compare(symbols: str) -> dict:
     syms = [s.strip().upper() for s in re.split(r"[,\s]+", symbols or "") if s.strip()]
     syms = list(dict.fromkeys(syms))[:5]
-    if len(syms) < 2:
-        raise ValueError("โหมดเปรียบเทียบต้องระบุหุ้นอย่างน้อย 2 ตัว (คั่นด้วยคอมมา เช่น AAPL,MSFT,GOOGL)")
+    if not syms:
+        raise ValueError("กรุณาระบุสัญลักษณ์หุ้นอย่างน้อย 1 ตัว")
 
-    ctxs = await asyncio.gather(
-        *(_gather(s, with_financials=True, with_business=False, with_news=False) for s in syms),
-        return_exceptions=True,
-    )
+    def _sector(c: dict) -> str:
+        return str(((c.get("snapshot") or {}).get("sector") or "")).strip().lower()
+
+    ctx_by: dict[str, dict] = {}
+    auto_peers = False
+    if len(syms) == 1:
+        # โหมดอัตโนมัติ: หาคู่แข่งใน sector/อุตสาหกรรมเดียวกันให้เอง ผู้ใช้ไม่ต้องกรอก
+        auto_peers = True
+        main = syms[0]
+        seed = await _gather(main, with_financials=True, with_business=True, with_news=False)
+        ctx_by[main] = seed
+        cands = await _discover_peers(main, seed)
+        # ดึงข้อมูลจริงของผู้สมัครทุกตัว → กรองด้วย 'sector ต้องตรงกับหุ้นต้นทาง' (ตัด ticker มั่ว/คนละกลุ่ม)
+        pctxs = await asyncio.gather(
+            *(_gather(p, with_financials=True, with_business=False, with_news=False) for p in cands),
+            return_exceptions=True,
+        )
+        main_sec = _sector(seed)
+        same_sec, fallback = [], []
+        for p, c in zip(cands, pctxs):
+            if not isinstance(c, dict) or not c.get("price"):
+                continue  # ดึงราคาไม่ได้ = ไม่มีจริง
+            ctx_by[p] = c
+            if main_sec and _sector(c) == main_sec:
+                same_sec.append(p)
+            else:
+                fallback.append(p)
+        # เลือก sector เดียวกันก่อน; ถ้าไม่พอ (หรือไม่รู้ sector) ค่อยเสริมจาก fallback
+        peers = (same_sec + fallback)[:4]
+        syms = [main] + peers
+        if len(syms) < 2:
+            raise ValueError(
+                f"หาคู่แข่งใน sector เดียวกันของ {main} อัตโนมัติไม่สำเร็จ — "
+                "ลองใส่หลายตัวเองคั่นคอมมา เช่น AAPL,MSFT,GOOGL")
+
+    # ดึง ctx ของหุ้นที่ยังไม่มี (กรณีผู้ใช้กรอกหลายตัวเอง)
+    missing = [s for s in syms if s not in ctx_by]
+    if missing:
+        got = await asyncio.gather(
+            *(_gather(s, with_financials=True, with_business=False, with_news=False) for s in missing),
+            return_exceptions=True,
+        )
+        for s, c in zip(missing, got):
+            if isinstance(c, dict):
+                ctx_by[s] = c
+
     blocks, ok = [], []
-    for s, c in zip(syms, ctxs):
+    for s in syms:
+        c = ctx_by.get(s)
         if isinstance(c, dict):
-            blocks.append(_context_block(c, business=False, financials=True, news=False))
+            # ใช้ตัวเลขพื้นฐานล่าสุด (มี growth/margin/PE/ROE/หนี้ครบ) — กระชับพอสำหรับเทียบหลายตัว
+            # ไม่ใส่งบลึกราย period ของทุกตัว เพราะ context จะใหญ่เกิน TPM ของ LLM
+            sec = (c.get("snapshot") or {}).get("sector") or "-"
+            blocks.append(_context_block(c, business=False, financials=False, news=False)
+                          + f"\nSector: {sec}")
             ok.append({"symbol": s, "name": c["name"], "price": c.get("price")})
     if len(ok) < 2:
         raise ValueError("ดึงข้อมูลได้ไม่ถึง 2 ตัว — ลองตรวจสัญลักษณ์หุ้นอีกครั้ง")
@@ -552,4 +635,7 @@ async def _do_compare(symbols: str) -> dict:
     system = _BASE_RULES + "\n\n" + _CONTRACTS["compare"]
     data = await _run_llm(system, user_msg)
     data["symbols"] = ok
+    data["auto_peers"] = auto_peers
+    if auto_peers and len(ok) > 1:
+        data["peers_found"] = [o["symbol"] for o in ok[1:]]
     return data

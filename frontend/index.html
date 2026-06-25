@@ -3096,7 +3096,7 @@ let anMode = "financial";
 const AN_HINTS = {
   financial: "สแกนสุขภาพการเงิน 3-5 ปี + สรุปงบล่าสุด ว่าควรดีใจหรือกังวล (ดึงงบ SEC/พื้นฐานจริง)",
   news: "ดึงข่าว 30 วันล่าสุดเอง แล้วแกะว่ากระทบหุ้นยังไง แยกข้อเท็จจริงจากการคาดเดา",
-  compare: "ใส่หลายตัวคั่นคอมมา (เช่น AAPL,MSFT,GOOGL) — เทียบจุดแข็ง/อ่อน/เติบโต/ความถูกแพง",
+  compare: "ใส่หุ้นตัวเดียว ระบบจะหาคู่แข่งในอุตสาหกรรม/เซกเตอร์เดียวกันมาเทียบให้เอง (หรือใส่หลายตัวคั่นคอมมาเองก็ได้)",
   bull_bear: "ฟังสองฝั่งไม่เข้าข้างใคร: Bull เชียร์ซื้อ vs Bear เตือนระวัง + ปัจจัยชี้ขาด",
   decision: "จัดระบบความคิด ซื้อ/ขาย/ถือ + เช็กลิสต์ความเสี่ยงทุกด้าน (ใส่บริบทตัวเองได้ optional)",
 };
@@ -3106,7 +3106,7 @@ function setAnMode(m) {
   $("anDecFields").classList.toggle("show", m === "decision");
   const lbl = $("anSymbolField").querySelector("label");
   const inp = $("anSymbol");
-  if (m === "compare") { lbl.textContent = "หุ้นหลายตัว (คั่นคอมมา, 2-5 ตัว)"; inp.placeholder = "เช่น AAPL,MSFT,GOOGL"; }
+  if (m === "compare") { lbl.textContent = "หุ้น (ใส่ตัวเดียว ระบบหาคู่แข่งให้ หรือหลายตัวคั่นคอมมา)"; inp.placeholder = "เช่น MU (หาคู่แข่งให้) หรือ AAPL,MSFT,GOOGL"; }
   else { lbl.textContent = "หุ้น (US / ไทย .BK)"; inp.placeholder = "เช่น AAPL, NVDA, KBANK.BK"; }
   $("anHint").textContent = AN_HINTS[m];
 }
@@ -3171,6 +3171,7 @@ function renderAnalyst(d) {
   } else if (d.mode === "compare") {
     const cell = a => (a || []).map(x => `• ${E(x)}`).join("<br>");
     html = `<div class="an-card"><h3>⚖️ เปรียบเทียบ ${(d.symbols || []).map(s => E(s.symbol)).join(" · ")}</h3>` +
+      (d.auto_peers && (d.peers_found || []).length ? `<div class="note" style="margin-bottom:8px;">🔎 ระบบหาคู่แข่งในอุตสาหกรรมเดียวกันให้อัตโนมัติ: <b>${(d.peers_found || []).map(E).join(", ")}</b></div>` : "") +
       `<table class="an-tbl"><tr><th>หุ้น</th><th>จุดแข็ง</th><th>จุดอ่อน</th><th>เติบโต</th><th>มั่นคง</th><th>ราคา</th><th>เสี่ยงเด่น</th><th>เหมาะกับ</th></tr>` +
       (d.table || []).map(r => `<tr><td><b>${E(r.symbol)}</b></td><td>${cell(r.strengths)}</td><td>${cell(r.weaknesses)}</td><td>${E(r.growth || "")}</td><td>${E(r.stability || "")}</td><td>${E(r.valuation || "")}</td><td>${E(r.key_risk || "")}</td><td>${E(r.fits || "")}</td></tr>`).join("") +
       `</table>` +
