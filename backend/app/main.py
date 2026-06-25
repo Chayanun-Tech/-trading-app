@@ -24,6 +24,7 @@ from app.config import get_settings
 from app.data.base import DataProvider
 from app.db import DatabaseStore
 from app import edgar, thai_sec
+from app import ai_analyst
 from app import business as business_explainer
 from app import macro_business
 from app import trend_radar
@@ -584,6 +585,28 @@ async def trend_radar_route(topic: str = Query("", description="ธีมที�
         raise HTTPException(404, str(exc))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"สแกนเทรนด์ไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/ai-analyst")
+async def ai_analyst_route(
+    mode: str = Query(..., description="financial | news | compare | bull_bear | decision"),
+    symbol: str = Query("", description="สัญลักษณ์หุ้น (ทุกโหมดยกเว้น compare)"),
+    symbols: str = Query("", description="หลายตัวคั่นคอมมา เช่น AAPL,MSFT,GOOGL (เฉพาะ compare)"),
+    horizon: str = Query("", description="ระยะเวลาลงทุน (เฉพาะ decision, optional)"),
+    risk: str = Query("", description="ระดับรับความเสี่ยง (เฉพาะ decision, optional)"),
+    reason: str = Query("", description="เหตุผลที่สนใจหุ้น (เฉพาะ decision, optional)"),
+    refresh: bool = Query(False, description="True = วิเคราะห์ใหม่ทับ cache"),
+):
+    """ผู้ช่วยวิเคราะห์ AI — ดึงข้อมูลจริงออนไลน์เอง (งบ/ข่าว/พื้นฐาน/IV) แล้ววิเคราะห์ 5 โหมด."""
+    try:
+        return await ai_analyst.get_analysis(
+            mode, symbol, symbols=symbols, horizon=horizon, risk=risk,
+            reason=reason, refresh=refresh,
+        )
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ผู้ช่วยวิเคราะห์ทำงานไม่สำเร็จ: {exc}")
 
 
 @app.get("/api/offline/status")

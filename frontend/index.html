@@ -461,6 +461,7 @@
       <button id="toolFib" onclick="setDrawTool('fib')">Fibonacci</button>
       <button onclick="clearDrawings()">Clear drawings</button>
       <button id="toolCDC" onclick="toggleCDC()">CDC Zone</button>
+      <button onclick="openAnalyst()" title="วิเคราะห์หุ้นที่เลือกด้วยผู้ช่วย AI (งบ/ข่าว/Bull-Bear/ตัดสินใจ)">🧠 ผู้ช่วย AI</button>
       <button id="autoRefreshBtn" class="live-toggle active" onclick="toggleAutoRefresh()">Live On</button>
       <select id="refreshInterval" onchange="setRefreshInterval(this.value)" aria-label="Chart refresh interval">
         <option value="auto" selected>Auto</option>
@@ -499,6 +500,7 @@
       <button class="tab" id="tabIv" onclick="showTab('iv')">มูลค่าIV</button>
       <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">หุ้นเล็กเด้งไกล</button>
       <button class="tab" id="tabRadar" onclick="showTab('radar')">เรดาร์เทรนด์โลก</button>
+      <button class="tab" id="tabAnalyst" onclick="showTab('analyst')">🧠 ผู้ช่วย AI</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
     </div>
 
@@ -786,6 +788,54 @@
       </div>
       <div class="note" style="margin-top:6px;">ดักสัญญาณ <b>ต้นน้ำ</b> ของเทรนด์โลก (งานวิจัย arXiv · นักพัฒนา Hacker News · ชุมชน Reddit · ข่าว Google News) แล้วให้ AI จัดกลุ่มเป็นเทรนด์ที่กำลังโผล่ · บอก <b>ระยะของเทรนด์</b> (ต้น/กลาง/ปลาย) · อุตสาหกรรมที่จะถูก<b>ดิสรัป</b> (แบบ Kodak) · และ<b>ผู้ได้-เสียประโยชน์</b> เพื่อจับต้นเทรนด์ก่อนเข้ากระแสหลัก · 🧠 เป็นการวิเคราะห์ของ AI ไม่ใช่คำทำนายแน่นอน</div>
       <div id="radarResult" style="margin-top:12px;"><div class="note">กด "สแกนเทรนด์" เพื่อกวาดทั้งโลก หรือพิมพ์ธีมที่อยากเจาะลึกก่อน</div></div>
+    </div>
+
+    <div id="analystPanel" class="panel-body hidden">
+      <style>
+        .an-modes{display:flex; gap:8px; flex-wrap:wrap; margin:4px 0 10px;}
+        .an-mode{font-size:13px; font-weight:600; padding:6px 13px; border-radius:18px; cursor:pointer; border:1px solid rgba(60,75,92,.8); background:rgba(255,255,255,.03); color:#aebdcb;}
+        .an-mode.active{background:rgba(80,140,220,.18); border-color:#5a8fd8; color:#cfe0f5;}
+        .an-card{margin-top:12px; background:rgba(255,255,255,.025); border:1px solid rgba(36,49,64,.7); border-radius:10px; padding:13px 15px;}
+        .an-card h3{font-size:15px; font-weight:700; color:#fff; margin:0 0 8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+        .an-p{font-size:13px; line-height:1.65; color:#dfe6ee; margin:5px 0; white-space:pre-line;}
+        .an-sub{font-size:12px; font-weight:700; color:#9fb0c0; margin:10px 0 4px; text-transform:uppercase; letter-spacing:.5px;}
+        .an-good{border-left:3px solid #5fd39a; padding:5px 10px; margin:4px 0; background:rgba(42,160,102,.06); border-radius:0 6px 6px 0; font-size:13px; color:#d2e8da;}
+        .an-bad{border-left:3px solid #ff8c8c; padding:5px 10px; margin:4px 0; background:rgba(220,80,80,.06); border-radius:0 6px 6px 0; font-size:13px; color:#e8d0d0;}
+        .an-q{border-left:3px solid #7fa8d0; padding:5px 10px; margin:4px 0; background:rgba(80,140,220,.06); border-radius:0 6px 6px 0; font-size:13px; color:#d2deec;}
+        .an-tag{display:inline-block; font-size:11px; font-weight:700; padding:1px 8px; border-radius:10px;}
+        .an-pos{background:rgba(42,160,102,.20); color:#5fd39a;} .an-neg{background:rgba(220,80,80,.18); color:#ff8c8c;} .an-neu{background:rgba(226,185,59,.18); color:#e2b93b;}
+        .an-lvl-สูง{background:rgba(220,80,80,.18); color:#ff8c8c;} .an-lvl-กลาง{background:rgba(226,185,59,.18); color:#e2b93b;} .an-lvl-ต่ำ{background:rgba(42,160,102,.18); color:#5fd39a;}
+        .an-thesis{background:rgba(80,140,220,.08); border:1px solid rgba(90,143,216,.3); border-radius:8px; padding:10px 13px; font-size:13px; color:#dfe6ee; margin:6px 0;}
+        .an-decision{display:flex; gap:10px; flex-wrap:wrap; margin:8px 0;}
+        .an-scn{flex:1; min-width:180px; border-radius:8px; padding:9px 12px; font-size:13px;}
+        .an-buy{background:rgba(42,160,102,.10); border:1px solid rgba(42,160,102,.4); color:#d2e8da;}
+        .an-hold{background:rgba(226,185,59,.10); border:1px solid rgba(226,185,59,.4); color:#ece0c2;}
+        .an-sell{background:rgba(220,80,80,.10); border:1px solid rgba(220,80,80,.4); color:#e8d0d0;}
+        .an-tbl{width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px;}
+        .an-tbl th,.an-tbl td{border:1px solid rgba(46,60,78,.7); padding:6px 9px; text-align:left; vertical-align:top; color:#dfe6ee;}
+        .an-tbl th{background:rgba(255,255,255,.04); color:#aebdcb; font-weight:700;}
+        .an-decfields{display:none; gap:8px; flex-wrap:wrap; margin-top:8px;}
+        .an-decfields.show{display:flex;}
+      </style>
+      <div class="an-modes" id="anModes">
+        <span class="an-mode active" data-mode="financial" onclick="setAnMode('financial')">💰 สแกนการเงิน</span>
+        <span class="an-mode" data-mode="news" onclick="setAnMode('news')">📰 แกะข่าว</span>
+        <span class="an-mode" data-mode="compare" onclick="setAnMode('compare')">⚖️ เทียบหุ้น</span>
+        <span class="an-mode" data-mode="bull_bear" onclick="setAnMode('bull_bear')">🐂🐻 Bull vs Bear</span>
+        <span class="an-mode" data-mode="decision" onclick="setAnMode('decision')">🎯 กรอบตัดสินใจ</span>
+      </div>
+      <div class="grid3">
+        <div class="field" id="anSymbolField"><label>หุ้น (US / ไทย .BK)</label><input id="anSymbol" placeholder="เช่น AAPL, NVDA, KBANK.BK" /></div>
+        <div class="field" style="align-self:end;"><button class="primary" onclick="runAnalyst()">🧠 วิเคราะห์</button></div>
+        <div class="field" style="align-self:end;"><button onclick="runAnalyst(true)" title="วิเคราะห์ใหม่ทับ cache">🔄 ใหม่</button></div>
+      </div>
+      <div class="an-decfields" id="anDecFields">
+        <div class="field"><label>เหตุผลที่สนใจ (optional)</label><input id="anReason" placeholder="เช่น เห็นว่าราคาลงเยอะ อยากซื้อเก็บยาว" /></div>
+        <div class="field"><label>ระยะเวลาลงทุน (optional)</label><input id="anHorizon" placeholder="สั้น / กลาง / ยาว" /></div>
+        <div class="field"><label>รับความเสี่ยงได้ (optional)</label><input id="anRisk" placeholder="เช่น รับขาดทุนได้ 20%" /></div>
+      </div>
+      <div class="note" style="margin-top:6px;" id="anHint">ดึงข้อมูลจริงออนไลน์เอง (งบ SEC/56-1 · พื้นฐาน · ข่าว · มูลค่า IV) แล้วให้ AI วิเคราะห์ — คุณไม่ต้องหา/วางข้อมูลเอง · 🧠 เป็นเครื่องมือช่วยคิด ไม่ใช่คำแนะนำการลงทุน</div>
+      <div id="analystResult" style="margin-top:12px;"><div class="note">เลือกโหมด ใส่สัญลักษณ์หุ้น แล้วกด "วิเคราะห์"</div></div>
     </div>
 
     <div id="ivPanel" class="panel-body hidden">
@@ -1338,7 +1388,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "radarPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "radarPanel", "analystPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -2314,7 +2364,7 @@ function clearAllSeries() {
 // เปลี่ยนช่องสัญลักษณ์ตามหุ้นใหม่ทันที + ล้างผลลัพธ์ของหุ้นเดิม กันอาการ "ค้างหุ้นตัวเก่า"
 function resetAnalysisConsoles(sym) {
   const s = (sym || "").toUpperCase();
-  ["viSymbol", "bizSymbol", "ivSymbol"].forEach(id => {
+  ["viSymbol", "bizSymbol", "ivSymbol", "anSymbol"].forEach(id => {
     const el = $(id);
     if (el) el.value = s;
   });
@@ -2768,7 +2818,7 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","macro","radar","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","radar","analyst","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -3039,6 +3089,123 @@ async function runRadar(refresh) {
     if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: res.statusText }))).detail || res.statusText);
     renderRadar(await res.json());
   } catch (e) { notifyError(errorMessage(e), "สแกนเทรนด์ไม่สำเร็จ"); $("radarResult").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`; }
+}
+
+// ===== ผู้ช่วยวิเคราะห์ AI =====
+let anMode = "financial";
+const AN_HINTS = {
+  financial: "สแกนสุขภาพการเงิน 3-5 ปี + สรุปงบล่าสุด ว่าควรดีใจหรือกังวล (ดึงงบ SEC/พื้นฐานจริง)",
+  news: "ดึงข่าว 30 วันล่าสุดเอง แล้วแกะว่ากระทบหุ้นยังไง แยกข้อเท็จจริงจากการคาดเดา",
+  compare: "ใส่หลายตัวคั่นคอมมา (เช่น AAPL,MSFT,GOOGL) — เทียบจุดแข็ง/อ่อน/เติบโต/ความถูกแพง",
+  bull_bear: "ฟังสองฝั่งไม่เข้าข้างใคร: Bull เชียร์ซื้อ vs Bear เตือนระวัง + ปัจจัยชี้ขาด",
+  decision: "จัดระบบความคิด ซื้อ/ขาย/ถือ + เช็กลิสต์ความเสี่ยงทุกด้าน (ใส่บริบทตัวเองได้ optional)",
+};
+function setAnMode(m) {
+  anMode = m;
+  document.querySelectorAll("#anModes .an-mode").forEach(el => el.classList.toggle("active", el.dataset.mode === m));
+  $("anDecFields").classList.toggle("show", m === "decision");
+  const lbl = $("anSymbolField").querySelector("label");
+  const inp = $("anSymbol");
+  if (m === "compare") { lbl.textContent = "หุ้นหลายตัว (คั่นคอมมา, 2-5 ตัว)"; inp.placeholder = "เช่น AAPL,MSFT,GOOGL"; }
+  else { lbl.textContent = "หุ้น (US / ไทย .BK)"; inp.placeholder = "เช่น AAPL, NVDA, KBANK.BK"; }
+  $("anHint").textContent = AN_HINTS[m];
+}
+
+// เปิดแท็บผู้ช่วย AI จากปุ่มลัดในคอนโซล พร้อมเติมหุ้นที่กำลังเลือกอยู่
+function openAnalyst() {
+  showTab("analyst");
+  const s = (typeof currentSymbol === "string" && currentSymbol) ? currentSymbol : ($("searchInput") ? $("searchInput").value : "");
+  if (s && anMode !== "compare") $("anSymbol").value = s.toUpperCase();
+  const inp = $("anSymbol");
+  if (inp) { inp.focus(); inp.scrollIntoView({ behavior: "smooth", block: "center" }); }
+}
+
+async function runAnalyst(refresh) {
+  showTab("analyst");
+  const val = ($("anSymbol").value || "").trim();
+  if (!val) { $("analystResult").innerHTML = `<div class="down">กรุณาใส่สัญลักษณ์หุ้น</div>`; return; }
+  const params = new URLSearchParams({ mode: anMode });
+  if (anMode === "compare") params.set("symbols", val);
+  else params.set("symbol", val);
+  if (anMode === "decision") {
+    if ($("anReason").value.trim()) params.set("reason", $("anReason").value.trim());
+    if ($("anHorizon").value.trim()) params.set("horizon", $("anHorizon").value.trim());
+    if ($("anRisk").value.trim()) params.set("risk", $("anRisk").value.trim());
+  }
+  if (refresh) params.set("refresh", "true");
+  $("analystResult").innerHTML = `<div class="note">🧠 กำลังดึงข้อมูลจริงออนไลน์ (งบ/พื้นฐาน/ข่าว/มูลค่า) แล้วให้ AI วิเคราะห์... (ครั้งแรกอาจใช้เวลา 10-30 วินาที)</div>`;
+  try {
+    const res = await fetch(`${API}/api/ai-analyst?${params.toString()}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: res.statusText }))).detail || res.statusText);
+    renderAnalyst(await res.json());
+  } catch (e) { notifyError(errorMessage(e), "วิเคราะห์ไม่สำเร็จ"); $("analystResult").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`; }
+}
+
+function renderAnalyst(d) {
+  const E = escapeHtml;
+  const li = (arr, cls) => (arr || []).filter(x => x).map(x => `<div class="${cls}">${E(typeof x === "string" ? x : JSON.stringify(x))}</div>`).join("");
+  const head = (d.name || d.symbol) ? `<div class="an-card"><h3>${E(d.name || "")} ${d.symbol ? `<span class="tiny" style="color:#7d8b99">${E(d.symbol)}</span>` : ""}${d.price ? ` <span class="tiny" style="color:#9fb0c0">@ ${E(d.price)}</span>` : ""}</h3>` : `<div class="an-card">`;
+  let html = "";
+
+  if (d.mode === "financial") {
+    const tag = { "แข็งแรง": "an-pos", "ปานกลาง": "an-neu", "อ่อนแอ": "an-neg" }[d.overall_health] || "an-neu";
+    html = head +
+      `<div class="an-p"><span class="an-tag ${tag}">${E(d.overall_health || "-")}</span> ${E(d.health_reason || "")}</div>` +
+      (d.revenue_trend ? `<div class="an-sub">📈 แนวโน้มรายได้</div><div class="an-p">${E(d.revenue_trend)}</div>` : "") +
+      (d.profit_trend ? `<div class="an-sub">💵 แนวโน้มกำไร</div><div class="an-p">${E(d.profit_trend)}</div>` : "") +
+      (d.debt_cashflow ? `<div class="an-sub">🏦 หนี้ & กระแสเงินสด</div><div class="an-p">${E(d.debt_cashflow)}</div>` : "") +
+      (d.latest_period ? `<div class="an-sub">🆕 งบล่าสุด</div><div class="an-p">${E(d.latest_period)}</div>` : "") +
+      (d.strengths ? `<div class="an-sub">✅ จุดเด่น</div>${li(d.strengths, "an-good")}` : "") +
+      (d.red_flags ? `<div class="an-sub">🚩 สัญญาณอันตราย</div>${li(d.red_flags, "an-bad")}` : "") +
+      (d.questions_to_research ? `<div class="an-sub">❓ ควรหาคำตอบต่อ</div>${li(d.questions_to_research, "an-q")}` : "") +
+      (d.summary ? `<div class="an-thesis">${E(d.summary)}</div>` : "") + `</div>`;
+  } else if (d.mode === "news") {
+    const itag = i => ({ "บวก": "an-pos", "ลบ": "an-neg", "กลาง": "an-neu" }[i] || "an-neu");
+    html = head +
+      (d.headlines_summary ? `<div class="an-p">${E(d.headlines_summary)}</div>` : "") +
+      (d.items || []).map(it => `<div class="an-card" style="margin:8px 0;"><div class="an-p"><span class="an-tag ${itag(it.impact)}">${E(it.impact || "")}</span> <b>${E(it.title || "")}</b></div>${it.short_term ? `<div class="an-p tiny">⚡ สั้น: ${E(it.short_term)}</div>` : ""}${it.long_term ? `<div class="an-p tiny">🌳 ยาว: ${E(it.long_term)}</div>` : ""}</div>`).join("") +
+      (d.winners_losers ? `<div class="an-sub">⚖️ ใครได้-เสีย</div><div class="an-p">${E(d.winners_losers)}</div>` : "") +
+      (d.fundamental_change ? `<div class="an-sub">🔬 เปลี่ยนพื้นฐานไหม</div><div class="an-thesis"><b>${E(d.fundamental_change)}</b><br>${E(d.fundamental_reason || "")}</div>` : "") +
+      (d.net_effect ? `<div class="an-p">📌 ${E(d.net_effect)}</div>` : "") +
+      ((d.news_sources || []).length ? `<div class="an-sub">🔗 ข่าวต้นทาง</div>` + d.news_sources.map(n => `<div class="rad-ev"><a href="${E(n.url)}" target="_blank" rel="noopener" style="color:#7fa8d0;">${E(n.title)} 🔗</a></div>`).join("") : "") + `</div>`;
+  } else if (d.mode === "compare") {
+    const cell = a => (a || []).map(x => `• ${E(x)}`).join("<br>");
+    html = `<div class="an-card"><h3>⚖️ เปรียบเทียบ ${(d.symbols || []).map(s => E(s.symbol)).join(" · ")}</h3>` +
+      `<table class="an-tbl"><tr><th>หุ้น</th><th>จุดแข็ง</th><th>จุดอ่อน</th><th>เติบโต</th><th>มั่นคง</th><th>ราคา</th><th>เสี่ยงเด่น</th><th>เหมาะกับ</th></tr>` +
+      (d.table || []).map(r => `<tr><td><b>${E(r.symbol)}</b></td><td>${cell(r.strengths)}</td><td>${cell(r.weaknesses)}</td><td>${E(r.growth || "")}</td><td>${E(r.stability || "")}</td><td>${E(r.valuation || "")}</td><td>${E(r.key_risk || "")}</td><td>${E(r.fits || "")}</td></tr>`).join("") +
+      `</table>` +
+      `<div class="an-decision" style="margin-top:12px;">` +
+      (d.best_growth ? `<div class="an-scn an-buy"><b>🚀 เติบโตสุด</b><br>${E(d.best_growth)}</div>` : "") +
+      (d.best_stability ? `<div class="an-scn an-hold"><b>🛡️ มั่นคงสุด</b><br>${E(d.best_stability)}</div>` : "") +
+      (d.best_value ? `<div class="an-scn an-sell" style="background:rgba(80,140,220,.10);border-color:rgba(80,140,220,.4);color:#d2deec;"><b>💎 ถูกสุด</b><br>${E(d.best_value)}</div>` : "") +
+      `</div>` +
+      (d.long_term_pick ? `<div class="an-thesis"><b>🎯 เน้นยาว:</b> ${E(d.long_term_pick)}<br>${E(d.pick_reason || "")}</div>` : "") + `</div>`;
+  } else if (d.mode === "bull_bear") {
+    html = head +
+      `<div class="an-sub" style="color:#5fd39a;">🐂 BULL — ${E((d.bull || {}).thesis || "")}</div>${li((d.bull || {}).points, "an-good")}` +
+      `<div class="an-sub" style="color:#ff8c8c;">🐻 BEAR — ${E((d.bear || {}).thesis || "")}</div>${li((d.bear || {}).points, "an-bad")}` +
+      (d.swing_factors ? `<div class="an-sub">🎯 ปัจจัยชี้ขาด</div>${li(d.swing_factors, "an-q")}` : "") +
+      (d.turns_bullish_if ? `<div class="an-p">📈 <b>เอียงซื้อถ้า:</b> ${E(d.turns_bullish_if)}</div>` : "") +
+      (d.turns_bearish_if ? `<div class="an-p">📉 <b>ควรถอยถ้า:</b> ${E(d.turns_bearish_if)}</div>` : "") +
+      (d.neutral_summary ? `<div class="an-thesis">${E(d.neutral_summary)}</div>` : "") + `</div>`;
+  } else if (d.mode === "decision") {
+    const sc = d.scenarios || {};
+    html = head +
+      (d.snapshot ? `<div class="an-p">${E(d.snapshot)}</div>` : "") +
+      (d.valuation_view ? `<div class="an-p">💰 <b>มูลค่า:</b> ${E(d.valuation_view)}</div>` : "") +
+      (d.bull_case ? `<div class="an-sub">✅ เหตุผลสนับสนุน</div>${li(d.bull_case, "an-good")}` : "") +
+      (d.bear_case ? `<div class="an-sub">⚠️ เหตุผลค้าน</div>${li(d.bear_case, "an-bad")}` : "") +
+      ((d.risks || []).length ? `<div class="an-sub">🧨 เช็กลิสต์ความเสี่ยง</div>` + d.risks.map(r => `<div class="an-p"><span class="an-tag an-lvl-${E(r.level || "กลาง")}">${E(r.category || "")} · ${E(r.level || "")}</span> ${E(r.detail || "")}</div>`).join("") : "") +
+      `<div class="an-decision">` +
+      (sc.buy_if ? `<div class="an-scn an-buy"><b>🟢 ซื้อถ้า</b><br>${E(sc.buy_if)}</div>` : "") +
+      (sc.hold_if ? `<div class="an-scn an-hold"><b>🟡 ถือถ้า</b><br>${E(sc.hold_if)}</div>` : "") +
+      (sc.sell_if ? `<div class="an-scn an-sell"><b>🔴 ขายถ้า</b><br>${E(sc.sell_if)}</div>` : "") +
+      `</div>` +
+      (d.what_breaks_thesis ? `<div class="an-bad" style="border-left-width:4px;">💥 <b>สิ่งที่จะทำให้พัง:</b> ${E(d.what_breaks_thesis)}</div>` : "") +
+      (d.framework_questions ? `<div class="an-sub">❓ ถามตัวเองก่อนตัดสินใจ</div>${li(d.framework_questions, "an-q")}` : "") +
+      (d.reminder ? `<div class="note" style="margin-top:10px;">⚖️ ${E(d.reminder)}</div>` : "") + `</div>`;
+  }
+  $("analystResult").innerHTML = html || `<div class="note">ไม่มีผลลัพธ์</div>`;
 }
 
 function renderRadar(d) {
