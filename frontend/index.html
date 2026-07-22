@@ -861,7 +861,9 @@
         <div id="rmChart" style="height:420px;"></div>
         <canvas id="rmOverlay" style="position:absolute; left:0; top:0; pointer-events:none; z-index:1000;"></canvas>
       </div>
+      <div id="rmGapNote" class="note" style="margin-top:8px;"></div>
       <div class="subcharts">
+        <div class="subchart"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="height:160px;"></div></div>
         <div class="subchart"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="height:140px;"></div></div>
       </div>
     </div>
@@ -3239,6 +3241,7 @@ function renderAnalyst(d) {
 
 // ---------- Revenue Growth Model (สไตล์ TrendSpider: กล่อง YoY + P/E ย้อนหลัง) ----------
 let rmChart = null, rmCandleSeries = null, rmPeChart = null, rmPeSeries = null, rmPeLine = null;
+let rmCompareChart = null, rmPriceIdxSeries = null, rmRevIdxSeries = null;
 let rmData = null, rmResizeObserver = null;
 
 const rmTickFmt = new Intl.DateTimeFormat("en-GB", { timeZone:CHART_TIME_ZONE, day:"2-digit", month:"short", year:"2-digit" });
@@ -3263,16 +3266,22 @@ function ensureRmCharts() {
   rmPeChart = LightweightCharts.createChart($("rmPeChart"), { ...base, timeScale:tsOptions, width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
   rmPeSeries = rmPeChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"P/E" });
 
+  rmCompareChart = LightweightCharts.createChart($("rmCompareChart"), { ...base, timeScale:tsOptions, width:$("rmCompareChart").clientWidth, height:$("rmCompareChart").clientHeight });
+  rmPriceIdxSeries = rmCompareChart.addLineSeries({ color:"#4a9eff", lineWidth:2, title:"ราคา (=100)" });
+  rmRevIdxSeries = rmCompareChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"รายได้ (=100)" });
+
   rmChart.timeScale().subscribeVisibleTimeRangeChange(drawRmOverlay);
   rmChart.timeScale().subscribeVisibleLogicalRangeChange(drawRmOverlay);
   rmResizeObserver = new ResizeObserver(() => { resizeRmCharts(); drawRmOverlay(); });
   rmResizeObserver.observe($("rmChart"));
   rmResizeObserver.observe($("rmPeChart"));
+  rmResizeObserver.observe($("rmCompareChart"));
 }
 
 function resizeRmCharts() {
   if (rmChart) rmChart.resize($("rmChart").clientWidth, $("rmChart").clientHeight);
   if (rmPeChart) rmPeChart.resize($("rmPeChart").clientWidth, $("rmPeChart").clientHeight);
+  if (rmCompareChart) rmCompareChart.resize($("rmCompareChart").clientWidth, $("rmCompareChart").clientHeight);
   const cv = $("rmOverlay");
   if (cv) { cv.width = $("rmChart").clientWidth; cv.height = $("rmChart").clientHeight; }
 }
@@ -3316,6 +3325,37 @@ function renderRevenueModel(d) {
   }
   fitAllBars(rmChart, candles.length);
   fitAllBars(rmPeChart, pe.length);
+
+  // เทียบ "ราคา" กับ "รายได้" โดยปรับฐานทั้งคู่ = 100 ที่จุดเริ่มต้นเดียวกัน (จุดแรกที่มีทั้งราคาและรายได้)
+  // เพื่อดูว่าช่วงไหนราคาวิ่งนำ (เสี่ยงแพงกว่าปัจจัยพื้นฐาน) หรือตามหลังรายได้ (โอกาส deep value)
+  const quarters = d.quarters || [];
+  if (candles.length && quarters.length) {
+    const startTime = Math.max(candles[0].time, Date.parse(quarters[0].period + "T00:00:00Z") / 1000);
+    const priceBase = candles.find(c => c.time >= startTime) || candles[0];
+    const revBase = quarters.find(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= startTime) || quarters[0];
+    const priceIdx = candles.filter(c => c.time >= priceBase.time)
+      .map(c => ({ time:c.time, value:(c.close / priceBase.close) * 100 }));
+    const revIdx = quarters.filter(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= priceBase.time)
+      .map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:(q.revenue / revBase.revenue) * 100 }));
+    rmPriceIdxSeries.setData(priceIdx);
+    rmRevIdxSeries.setData(revIdx);
+    fitAllBars(rmCompareChart, priceIdx.length);
+    if (priceIdx.length && revIdx.length) {
+      const gap = priceIdx[priceIdx.length - 1].value - revIdx[revIdx.length - 1].value;
+      const cls = gap > 0 ? "down" : "up";
+      const verdict = gap > 15 ? "ราคาวิ่งนำหน้าการเติบโตของรายได้ชัดเจน — เสี่ยงตีราคาแพงกว่าปัจจัยพื้นฐาน"
+        : gap < -15 ? "ราคาตามหลังการเติบโตของรายได้ชัดเจน — เข้าข่าย deep value เมื่อเทียบพื้นฐาน"
+        : "ราคากับการเติบโตของรายได้ไปด้วยกันค่อนข้างใกล้เคียง";
+      $("rmGapNote").innerHTML = `<span class="${cls}">${gap >= 0 ? "+" : ""}${gap.toFixed(0)} จุด</span> — ${verdict} (นับจาก ${escapeHtml(quarters[0].label)} ถึงปัจจุบัน)`;
+    } else {
+      $("rmGapNote").innerHTML = "";
+    }
+  } else {
+    rmPriceIdxSeries.setData([]);
+    rmRevIdxSeries.setData([]);
+    $("rmGapNote").innerHTML = "";
+  }
+
   setTimeout(drawRmOverlay, 60);
 }
 
