@@ -862,6 +862,7 @@
         <canvas id="rmOverlay" style="position:absolute; left:0; top:0; pointer-events:none; z-index:1000;"></canvas>
       </div>
       <div id="rmGapNote" class="note" style="margin-top:8px;"></div>
+      <div id="rmFairNote" class="note" style="margin-top:4px;"></div>
       <div class="subcharts" style="grid-template-columns:1fr 1fr;">
         <div class="subchart" style="height:260px;"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
         <div class="subchart" style="height:260px;"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
@@ -3240,7 +3241,7 @@ function renderAnalyst(d) {
 }
 
 // ---------- Revenue Growth Model (สไตล์ TrendSpider: กล่อง YoY + P/E ย้อนหลัง) ----------
-let rmChart = null, rmCandleSeries = null, rmPeChart = null, rmPeSeries = null, rmPeLine = null;
+let rmChart = null, rmCandleSeries = null, rmFairSeries = null, rmPeChart = null, rmPeSeries = null, rmPeLine = null;
 let rmCompareChart = null, rmPriceIdxSeries = null, rmRevIdxSeries = null;
 let rmData = null, rmResizeObserver = null;
 
@@ -3262,6 +3263,9 @@ function ensureRmCharts() {
     upColor:chartStyle.upColor, downColor:chartStyle.downColor,
     borderUpColor:chartStyle.upColor, borderDownColor:chartStyle.downColor,
     wickUpColor:chartStyle.wickUpColor, wickDownColor:chartStyle.wickDownColor,
+  });
+  rmFairSeries = rmChart.addLineSeries({
+    color:"#c77dff", lineWidth:2, lineStyle:2, title:"ราคาตามรายได้ (ถ้าราคาวิ่งตามรายได้ล้วน ๆ)",
   });
   rmPeChart = LightweightCharts.createChart($("rmPeChart"), { ...base, timeScale:tsOptions, width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
   rmPeSeries = rmPeChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"P/E" });
@@ -3335,10 +3339,15 @@ function renderRevenueModel(d) {
     const revBase = quarters.find(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= startTime) || quarters[0];
     const priceIdx = candles.filter(c => c.time >= priceBase.time)
       .map(c => ({ time:c.time, value:(c.close / priceBase.close) * 100 }));
-    const revIdx = quarters.filter(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= priceBase.time)
-      .map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:(q.revenue / revBase.revenue) * 100 }));
+    const revQuarters = quarters.filter(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= priceBase.time);
+    const revIdx = revQuarters.map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:(q.revenue / revBase.revenue) * 100 }));
+    // เส้น "ราคาตามรายได้" (ดอลลาร์จริง ไม่ใช่ดัชนี =100): แปลงรายได้แต่ละไตรมาสกลับเป็นราคา
+    // โดยยึดสัดส่วนเดียวกับฐาน (ราคาฐาน x รายได้ไตรมาสนั้น/รายได้ฐาน) เพื่อตอบคำถาม "รายได้จุดนี้เทียบเท่าราคาเท่าไหร่"
+    // โดยตรงในหน่วยเดียวกับกราฟราคา แทนที่ต้องแปลงจากดัชนี 100 เอง
+    const fairSeries = revQuarters.map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:priceBase.close * (q.revenue / revBase.revenue) }));
     rmPriceIdxSeries.setData(priceIdx);
     rmRevIdxSeries.setData(revIdx);
+    rmFairSeries.setData(fairSeries);
     fitAllBars(rmCompareChart, priceIdx.length);
     if (priceIdx.length && revIdx.length) {
       const gap = priceIdx[priceIdx.length - 1].value - revIdx[revIdx.length - 1].value;
@@ -3350,10 +3359,24 @@ function renderRevenueModel(d) {
     } else {
       $("rmGapNote").innerHTML = "";
     }
+    if (fairSeries.length && candles.length) {
+      const fairNow = fairSeries[fairSeries.length - 1].value;
+      const priceNow = candles[candles.length - 1].close;
+      const diffPct = ((priceNow - fairNow) / fairNow) * 100;
+      const cls2 = diffPct > 0 ? "down" : "up";
+      $("rmFairNote").innerHTML = `เส้นม่วงประ = "ราคาตามรายได้" — ถ้าราคาโตตามรายได้ล้วน ๆ นับจากฐาน ${escapeHtml(revBase.label)} `
+        + `(ราคา $${priceBase.close.toFixed(2)}) ราคาตอนนี้ควรอยู่ที่ <b>$${fairNow.toFixed(2)}</b> `
+        + `แต่ราคาจริงคือ <b>$${priceNow.toFixed(2)}</b> → <span class="${cls2}">${diffPct >= 0 ? "แพงกว่า" : "ถูกกว่า"}แนวโน้มรายได้ ${Math.abs(diffPct).toFixed(0)}%</span>`
+        + ` <span class="tiny" style="color:#7d8b99;">(ประมาณจากรายได้รวม ไม่ได้ปรับจำนวนหุ้น/มาร์จิ้นที่เปลี่ยนไป — บริษัทที่ซื้อหุ้นคืนเยอะจะดูแพงเกินจริงจากตัวเลขนี้)</span>`;
+    } else {
+      $("rmFairNote").innerHTML = "";
+    }
   } else {
     rmPriceIdxSeries.setData([]);
     rmRevIdxSeries.setData([]);
+    rmFairSeries.setData([]);
     $("rmGapNote").innerHTML = "";
+    $("rmFairNote").innerHTML = "";
   }
 
   setTimeout(drawRmOverlay, 60);
