@@ -501,6 +501,7 @@
       <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">หุ้นเล็กเด้งไกล</button>
       <button class="tab" id="tabRadar" onclick="showTab('radar')">เรดาร์เทรนด์โลก</button>
       <button class="tab" id="tabAnalyst" onclick="showTab('analyst')">🧠 ผู้ช่วย AI</button>
+      <button class="tab" id="tabRevenue" onclick="showTab('revenue')">📈 โมเดลรายได้</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
     </div>
 
@@ -836,6 +837,23 @@
       </div>
       <div class="note" style="margin-top:6px;" id="anHint">ดึงข้อมูลจริงออนไลน์เอง (งบ SEC/56-1 · พื้นฐาน · ข่าว · มูลค่า IV) แล้วให้ AI วิเคราะห์ — คุณไม่ต้องหา/วางข้อมูลเอง · 🧠 เป็นเครื่องมือช่วยคิด ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="analystResult" style="margin-top:12px;"><div class="note">เลือกโหมด ใส่สัญลักษณ์หุ้น แล้วกด "วิเคราะห์"</div></div>
+    </div>
+
+    <div id="revenuePanel" class="panel-body hidden">
+      <div class="grid3">
+        <div class="field"><label>หุ้น (US เท่านั้น — ต้องยื่น SEC)</label><input id="rmSymbol" placeholder="เช่น MSFT, AAPL, NVDA" /></div>
+        <div class="field" style="align-self:end;"><button class="primary" onclick="runRevenueModel()">📈 สร้างกราฟ</button></div>
+        <div class="field" style="align-self:end;"><button onclick="runRevenueModel(true)" title="ดึงงบสดจาก SEC ใหม่ทับ cache">🔄 ใหม่</button></div>
+      </div>
+      <div class="note" style="margin-top:6px;">กล่องเขียว/แดง = อัตราเติบโตรายได้เทียบปีก่อน (YoY) รายไตรมาส จาก SEC EDGAR · เส้นทแยง = แนวโน้มรายได้ · กราฟล่าง = P/E ย้อนหลังรายสัปดาห์ (ราคา ÷ EPS สะสม 4 ไตรมาส) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
+      <div id="rmStatus" class="note" style="margin-top:6px;"></div>
+      <div class="chart-wrap" style="margin-top:10px; position:relative;">
+        <div id="rmChart" style="height:420px;"></div>
+        <canvas id="rmOverlay" style="position:absolute; left:0; top:0; pointer-events:none;"></canvas>
+      </div>
+      <div class="subcharts">
+        <div class="subchart"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="height:140px;"></div></div>
+      </div>
     </div>
 
     <div id="ivPanel" class="panel-body hidden">
@@ -1388,7 +1406,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "radarPanel", "analystPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "radarPanel", "analystPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "revenuePanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -2818,7 +2836,7 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","macro","radar","analyst","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","radar","analyst","revenue","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -3207,6 +3225,133 @@ function renderAnalyst(d) {
       (d.reminder ? `<div class="note" style="margin-top:10px;">⚖️ ${E(d.reminder)}</div>` : "") + `</div>`;
   }
   $("analystResult").innerHTML = html || `<div class="note">ไม่มีผลลัพธ์</div>`;
+}
+
+// ---------- Revenue Growth Model (สไตล์ TrendSpider: กล่อง YoY + P/E ย้อนหลัง) ----------
+let rmChart = null, rmCandleSeries = null, rmPeChart = null, rmPeSeries = null, rmPeLine = null;
+let rmData = null, rmResizeObserver = null;
+
+function ensureRmCharts() {
+  if (rmChart) return;
+  const base = chartBaseOptions();
+  rmChart = LightweightCharts.createChart($("rmChart"), { ...base, width:$("rmChart").clientWidth, height:$("rmChart").clientHeight });
+  rmCandleSeries = rmChart.addCandlestickSeries({
+    upColor:chartStyle.upColor, downColor:chartStyle.downColor,
+    borderUpColor:chartStyle.upColor, borderDownColor:chartStyle.downColor,
+    wickUpColor:chartStyle.wickUpColor, wickDownColor:chartStyle.wickDownColor,
+  });
+  rmPeChart = LightweightCharts.createChart($("rmPeChart"), { ...base, width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
+  rmPeSeries = rmPeChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"P/E" });
+
+  rmChart.timeScale().subscribeVisibleTimeRangeChange(drawRmOverlay);
+  rmChart.timeScale().subscribeVisibleLogicalRangeChange(drawRmOverlay);
+  rmResizeObserver = new ResizeObserver(() => { resizeRmCharts(); drawRmOverlay(); });
+  rmResizeObserver.observe($("rmChart"));
+  rmResizeObserver.observe($("rmPeChart"));
+}
+
+function resizeRmCharts() {
+  if (rmChart) rmChart.applyOptions({ width:$("rmChart").clientWidth, height:$("rmChart").clientHeight });
+  if (rmPeChart) rmPeChart.applyOptions({ width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
+  const cv = $("rmOverlay");
+  if (cv) { cv.width = $("rmChart").clientWidth; cv.height = $("rmChart").clientHeight; }
+}
+
+async function runRevenueModel(refresh) {
+  showTab("revenue");
+  const symEl = $("rmSymbol");
+  const typed = (symEl.value || "").trim();
+  const sym = (typed || (typeof currentSymbol === "string" ? currentSymbol : "")).toUpperCase();
+  if (!sym) { $("rmStatus").innerHTML = `<span class="down">กรุณาใส่สัญลักษณ์หุ้น</span>`; return; }
+  symEl.value = sym;
+  $("rmStatus").innerHTML = `<div class="note">📈 กำลังดึงงบ SEC + ราคาย้อนหลัง... (ครั้งแรกอาจใช้เวลาสักครู่)</div>`;
+  try {
+    const params = new URLSearchParams({ symbol:sym });
+    if (refresh) params.set("refresh", "true");
+    const res = await fetch(`${API}/api/revenue-model?${params.toString()}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    rmData = await res.json();
+    renderRevenueModel(rmData);
+    $("rmStatus").innerHTML = "";
+  } catch (e) {
+    notifyError(errorMessage(e), "สร้างโมเดลรายได้ไม่สำเร็จ");
+    $("rmStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function renderRevenueModel(d) {
+  ensureRmCharts();
+  resizeRmCharts();
+  rmCandleSeries.setData((d.price_candles || []).map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close })));
+  rmPeSeries.setData((d.pe_series || []).map(p => ({ time:p.time, value:p.pe })));
+  if (rmPeLine) { rmPeSeries.removePriceLine(rmPeLine); rmPeLine = null; }
+  if (d.pe_reference) {
+    rmPeLine = rmPeSeries.createPriceLine({
+      price:d.pe_reference.median, color:"#7fa8d0", lineWidth:1, lineStyle:2,
+      axisLabelVisible:true, title:d.pe_reference.label,
+    });
+  }
+  rmChart.timeScale().fitContent();
+  rmPeChart.timeScale().fitContent();
+  setTimeout(drawRmOverlay, 60);
+}
+
+function drawRmOverlay() {
+  const cv = $("rmOverlay");
+  if (!cv || !rmChart || !rmData) return;
+  const ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const quarters = rmData.quarters || [];
+  const candles = rmData.price_candles || [];
+  if (!quarters.length || !candles.length) return;
+
+  const ts = rmChart.timeScale();
+  const h = cv.height;
+  const bandTop = h * 0.60, bandBottom = h * 0.94;
+  const maxAbs = Math.max(...quarters.map(q => Math.abs(q.yoy_pct || 0)), 0.05);
+
+  const xForPeriod = (period) => {
+    const target = Date.parse(period + "T00:00:00Z") / 1000;
+    let best = null;
+    for (const c of candles) { if (c.time <= target) best = c; else break; }
+    const c = best || candles[0];
+    return ts.timeToCoordinate(c.time);
+  };
+
+  const pts = quarters.map(q => ({ q, x:xForPeriod(q.period) })).filter(p => p.x != null);
+  if (pts.length < 2) return;
+
+  ctx.font = "600 10px sans-serif";
+  ctx.textAlign = "center";
+  const boxYOf = (growth) => bandBottom - (8 + (bandBottom - bandTop - 8) * Math.min(Math.abs(growth) / maxAbs, 1));
+  pts.forEach((p, i) => {
+    const prevX = i === 0 ? p.x - (pts[1].x - p.x) : pts[i - 1].x;
+    const nextX = i === pts.length - 1 ? p.x + (p.x - pts[i - 1].x) : pts[i + 1].x;
+    const xStart = (prevX + p.x) / 2, xEnd = (p.x + nextX) / 2;
+    const growth = p.q.yoy_pct || 0;
+    const y = boxYOf(growth);
+    ctx.fillStyle = growth >= 0 ? "rgba(60,170,110,0.55)" : "rgba(220,90,90,0.55)";
+    ctx.fillRect(xStart + 1, y, Math.max(xEnd - xStart - 2, 2), bandBottom - y);
+    ctx.fillStyle = "#dfe6ee";
+    ctx.fillText(p.q.label, (xStart + xEnd) / 2, y - 14);
+    ctx.fillText(`${growth >= 0 ? "+" : ""}${(growth * 100).toFixed(1)}%`, (xStart + xEnd) / 2, y - 3);
+  });
+
+  const first = pts[0], last = pts[pts.length - 1];
+  const y1 = boxYOf(first.q.yoy_pct || 0) - 10, y2 = boxYOf(last.q.yoy_pct || 0) - 10;
+  ctx.strokeStyle = "#dfe6ee";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(first.x, y1);
+  ctx.lineTo(last.x, y2);
+  ctx.stroke();
+  const angle = Math.atan2(y2 - y1, last.x - first.x);
+  ctx.beginPath();
+  ctx.moveTo(last.x, y2);
+  ctx.lineTo(last.x - 8 * Math.cos(angle - 0.4), y2 - 8 * Math.sin(angle - 0.4));
+  ctx.moveTo(last.x, y2);
+  ctx.lineTo(last.x - 8 * Math.cos(angle + 0.4), y2 - 8 * Math.sin(angle + 0.4));
+  ctx.stroke();
 }
 
 function renderRadar(d) {

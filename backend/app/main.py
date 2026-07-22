@@ -28,6 +28,7 @@ from app import ai_analyst
 from app import business as business_explainer
 from app import macro_business
 from app import trend_radar
+from app import revenue_model
 from app.engine import build_report
 from app.financials import build_financials
 from app.fundamentals import (get_fundamentals, get_offline, is_equity_symbol,
@@ -638,6 +639,19 @@ async def financials_route(symbol: str = Query(..., description="สัญลั
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"ดึงข้อมูล SEC EDGAR ไม่สำเร็จ: {exc}")
     return build_financials(facts, freq)
+
+
+@app.get("/api/revenue-model")
+async def revenue_model_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น MSFT (หุ้นสหรัฐเท่านั้น)"),
+                              refresh: bool = Query(False, description="True = ดึงงบสดจาก SEC ทับ cache")):
+    """โมเดลกราฟ 'Revenue Growth' สไตล์ TrendSpider: กล่อง YoY revenue growth รายไตรมาส
+    + กราฟราคารายสัปดาห์ + P/E ย้อนหลังรายสัปดาห์ (ราคา ÷ EPS สะสม 4 ไตรมาส)."""
+    try:
+        return await revenue_model.get_revenue_model(symbol, refresh=refresh)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สร้างโมเดลรายได้ไม่สำเร็จ: {exc}")
 
 
 @app.post("/api/analyze-fundamentals", response_model=ValueReport)
