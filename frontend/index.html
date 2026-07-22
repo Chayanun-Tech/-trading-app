@@ -865,7 +865,7 @@
       <div id="rmGapNote" class="note" style="margin-top:8px;"></div>
       <div id="rmFairNote" class="note" style="margin-top:4px;"></div>
       <div class="subcharts" style="grid-template-columns:1fr 1fr;">
-        <div class="subchart" style="height:260px;"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
+        <div class="subchart" style="height:260px;"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ TTM (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
         <div class="subchart" style="height:260px;"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
       </div>
     </div>
@@ -3288,14 +3288,14 @@ function ensureRmCharts() {
     wickUpColor:chartStyle.wickUpColor, wickDownColor:chartStyle.wickDownColor,
   });
   rmFairSeries = rmChart.addLineSeries({
-    color:"#c77dff", lineWidth:2, lineStyle:2, title:"ราคาตามรายได้ (ถ้าราคาวิ่งตามรายได้ล้วน ๆ)",
+    color:"#c77dff", lineWidth:2, lineStyle:2, title:"ราคาตามรายได้ TTM (ถ้าราคาวิ่งตามรายได้ล้วน ๆ)",
   });
   rmPeChart = LightweightCharts.createChart($("rmPeChart"), { ...base, timeScale:tsOptions, width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
   rmPeSeries = rmPeChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"P/E" });
 
   rmCompareChart = LightweightCharts.createChart($("rmCompareChart"), { ...base, timeScale:tsOptions, width:$("rmCompareChart").clientWidth, height:$("rmCompareChart").clientHeight });
   rmPriceIdxSeries = rmCompareChart.addLineSeries({ color:"#4a9eff", lineWidth:2, title:"ราคา (=100)" });
-  rmRevIdxSeries = rmCompareChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"รายได้ (=100)" });
+  rmRevIdxSeries = rmCompareChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"รายได้ TTM (=100)" });
 
   rmChart.timeScale().subscribeVisibleTimeRangeChange(drawRmOverlay);
   rmChart.timeScale().subscribeVisibleLogicalRangeChange(drawRmOverlay);
@@ -3356,18 +3356,25 @@ function renderRevenueModel(d) {
   // เทียบ "ราคา" กับ "รายได้" โดยปรับฐานทั้งคู่ = 100 ที่จุดเริ่มต้นเดียวกัน (จุดแรกที่มีทั้งราคาและรายได้)
   // เพื่อดูว่าช่วงไหนราคาวิ่งนำ (เสี่ยงแพงกว่าปัจจัยพื้นฐาน) หรือตามหลังรายได้ (โอกาส deep value)
   const quarters = d.quarters || [];
-  if (candles.length && quarters.length) {
-    const startTime = Math.max(candles[0].time, Date.parse(quarters[0].period + "T00:00:00Z") / 1000);
+  // ใช้รายได้ TTM (ผลรวม 4 ไตรมาสล่าสุด) แทนรายได้รายไตรมาสดิบ — หลายธุรกิจมีไตรมาสที่ขึ้นๆ ลงๆ
+  // ตามฤดูกาล/ออเดอร์ก้อนใหญ่ (เช่น ไตรมาสปลายปีที่ลูกค้าองค์กรเร่งซื้อ) ถ้าใช้รายได้ดิบตรงๆ
+  // เส้นราคาตามรายได้จะสวิงขึ้นลงตามฤดูกาลไปด้วย (ฟันปลา) ทั้งที่แนวโน้มที่แท้จริงเรียบกว่านั้นมาก
+  // TTM ปัดเกลี่ยฤดูกาลออก เหลือแค่แนวโน้มการเติบโตจริง (หลักการเดียวกับ TTM EPS ที่ใช้คำนวณ P/E ด้านล่าง)
+  const ttmQuarters = quarters.map((q, i) => i >= 3
+    ? { period:q.period, label:q.label, ttmRevenue:quarters.slice(i - 3, i + 1).reduce((s, x) => s + x.revenue, 0) }
+    : null).filter(Boolean);
+  if (candles.length && ttmQuarters.length) {
+    const startTime = Math.max(candles[0].time, Date.parse(ttmQuarters[0].period + "T00:00:00Z") / 1000);
     const priceBase = candles.find(c => c.time >= startTime) || candles[0];
-    const revBase = quarters.find(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= startTime) || quarters[0];
+    const revBase = ttmQuarters.find(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= startTime) || ttmQuarters[0];
     const priceIdx = candles.filter(c => c.time >= priceBase.time)
       .map(c => ({ time:c.time, value:(c.close / priceBase.close) * 100 }));
-    const revQuarters = quarters.filter(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= priceBase.time);
-    const revIdx = revQuarters.map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:(q.revenue / revBase.revenue) * 100 }));
-    // เส้น "ราคาตามรายได้" (ดอลลาร์จริง ไม่ใช่ดัชนี =100): แปลงรายได้แต่ละไตรมาสกลับเป็นราคา
-    // โดยยึดสัดส่วนเดียวกับฐาน (ราคาฐาน x รายได้ไตรมาสนั้น/รายได้ฐาน) เพื่อตอบคำถาม "รายได้จุดนี้เทียบเท่าราคาเท่าไหร่"
-    // โดยตรงในหน่วยเดียวกับกราฟราคา แทนที่ต้องแปลงจากดัชนี 100 เอง
-    const fairSeries = revQuarters.map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:priceBase.close * (q.revenue / revBase.revenue) }));
+    const revQuarters = ttmQuarters.filter(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= priceBase.time);
+    const revIdx = revQuarters.map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:(q.ttmRevenue / revBase.ttmRevenue) * 100 }));
+    // เส้น "ราคาตามรายได้" (ดอลลาร์จริง ไม่ใช่ดัชนี =100): แปลงรายได้ TTM แต่ละไตรมาสกลับเป็นราคา
+    // โดยยึดสัดส่วนเดียวกับฐาน (ราคาฐาน x รายได้ TTM ไตรมาสนั้น/รายได้ TTM ฐาน) เพื่อตอบคำถาม
+    // "รายได้จุดนี้เทียบเท่าราคาเท่าไหร่" โดยตรงในหน่วยเดียวกับกราฟราคา แทนที่ต้องแปลงจากดัชนี 100 เอง
+    const fairSeries = revQuarters.map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:priceBase.close * (q.ttmRevenue / revBase.ttmRevenue) }));
     rmPriceIdxSeries.setData(priceIdx);
     rmRevIdxSeries.setData(revIdx);
     rmFairSeries.setData(fairSeries);
@@ -3390,7 +3397,7 @@ function renderRevenueModel(d) {
       $("rmFairNote").innerHTML = `เส้นม่วงประ = "ราคาตามรายได้" — ถ้าราคาโตตามรายได้ล้วน ๆ นับจากฐาน ${escapeHtml(revBase.label)} `
         + `(ราคา $${priceBase.close.toFixed(2)}) ราคาตอนนี้ควรอยู่ที่ <b>$${fairNow.toFixed(2)}</b> `
         + `แต่ราคาจริงคือ <b>$${priceNow.toFixed(2)}</b> → <span class="${cls2}">${diffPct >= 0 ? "แพงกว่า" : "ถูกกว่า"}แนวโน้มรายได้ ${Math.abs(diffPct).toFixed(0)}%</span>`
-        + ` <span class="tiny" style="color:#7d8b99;">(ประมาณจากรายได้รวม ไม่ได้ปรับจำนวนหุ้น/มาร์จิ้นที่เปลี่ยนไป — บริษัทที่ซื้อหุ้นคืนเยอะจะดูแพงเกินจริงจากตัวเลขนี้)</span>`;
+        + ` <span class="tiny" style="color:#7d8b99;">(ประมาณจากรายได้รวม TTM ไม่ได้ปรับจำนวนหุ้น/มาร์จิ้นที่เปลี่ยนไป — บริษัทที่ซื้อหุ้นคืนเยอะจะดูแพงเกินจริงจากตัวเลขนี้)</span>`;
     } else {
       $("rmFairNote").innerHTML = "";
     }
