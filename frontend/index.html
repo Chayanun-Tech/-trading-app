@@ -502,6 +502,7 @@
       <button class="tab" id="tabRadar" onclick="showTab('radar')">เรดาร์เทรนด์โลก</button>
       <button class="tab" id="tabAnalyst" onclick="showTab('analyst')">🧠 ผู้ช่วย AI</button>
       <button class="tab" id="tabRevenue" onclick="showTab('revenue')">📈 โมเดลรายได้</button>
+      <button class="tab" id="tabRevenuescan" onclick="showTab('revenuescan')">🔍 สแกน S&P 500</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
     </div>
 
@@ -866,6 +867,28 @@
       <div class="subcharts" style="grid-template-columns:1fr 1fr;">
         <div class="subchart" style="height:260px;"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
         <div class="subchart" style="height:260px;"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
+      </div>
+    </div>
+
+    <div id="revenuescanPanel" class="panel-body hidden">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div>
+          <b style="font-size:16px;">🔍 สแกน S&P 500: หุ้นราคาต่ำกว่า "ราคาตามรายได้"</b>
+          <div class="note">ใช้ตรรกะเดียวกับเส้นม่วงประในแท็บ 📈 โมเดลรายได้ — สแกนทั้ง S&P 500 หา 500 บริษัทที่ราคาจริงต่ำกว่าที่รายได้บ่งชี้มากที่สุด</div>
+        </div>
+      </div>
+      <div class="grid3" style="margin-top:10px;">
+        <div class="field"><label>ราคาต่ำกว่ารายได้อย่างน้อยกี่ % (ยิ่งลบมาก ยิ่งถูก)</label><input id="rsMaxGap" type="number" value="-15" step="5" /></div>
+        <div class="field"><label>จำนวนผลลัพธ์</label><select id="rsLimit"><option>20</option><option selected>40</option><option>60</option></select></div>
+        <div class="field" style="align-self:end; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="primary" onclick="runRevenueScan()">โหลดผลสแกน</button>
+          <button onclick="runRevenueScan(true)" title="สแกนสดใหม่ทั้ง 500 บริษัท (ไม่ push) — ใช้เวลาหลายนาที เหมาะกับรันในเครื่องเท่านั้น">🔄 สแกนสดใหม่</button>
+          <button onclick="publishRevenueScan()" title="สแกนสดใหม่ + commit/push ขึ้น GitHub+HF อัตโนมัติ — ใช้ได้เฉพาะตอนรันในเครื่อง">📤 สแกน + ดันขึ้นเว็ป</button>
+        </div>
+      </div>
+      <div id="rsStatus" class="note" style="margin-top:6px;"></div>
+      <div id="rsResult" style="margin-top:12px;">
+        <div class="note">กด "โหลดผลสแกน" เพื่อดูผลล่าสุด (ผลสแกนแคชไว้ล่วงหน้า โหลดเร็ว) — "สแกนสดใหม่" ใช้เวลาหลายนาทีเพราะอ่านงบ SEC + ราคาของ 500 บริษัท</div>
       </div>
     </div>
 
@@ -1419,7 +1442,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "radarPanel", "analystPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "revenuePanel", "autoPanel"];
+  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "radarPanel", "analystPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "revenuePanel", "revenuescanPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -2849,7 +2872,7 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","macro","radar","analyst","revenue","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","radar","analyst","revenue","revenuescan","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -3438,6 +3461,81 @@ function drawRmOverlay() {
   ctx.moveTo(last.x, y2);
   ctx.lineTo(last.x - 8 * Math.cos(angle + 0.4), y2 - 8 * Math.sin(angle + 0.4));
   ctx.stroke();
+}
+
+// ---------- S&P 500 revenue-vs-price scanner ----------
+async function runRevenueScan(refresh) {
+  const box = $("rsResult");
+  const maxGap = parseFloat($("rsMaxGap").value) || -15;
+  const limit = parseInt($("rsLimit").value, 10) || 40;
+  $("rsStatus").innerHTML = refresh
+    ? `<div class="note">🔄 กำลังสแกนสดใหม่ทั้ง S&P 500 (500 บริษัท) — อาจใช้เวลาหลายนาที กรุณารอ...</div>`
+    : `<div class="note">กำลังโหลดผลสแกน...</div>`;
+  try {
+    const params = new URLSearchParams({ max_gap_pct:maxGap, limit });
+    if (refresh) params.set("refresh", "true");
+    const res = await fetch(`${API}/api/revenue-scan/sp500?${params.toString()}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    renderRevenueScan(await res.json());
+    $("rsStatus").innerHTML = "";
+  } catch (e) {
+    notifyError(errorMessage(e), "สแกน S&P 500 ไม่สำเร็จ");
+    $("rsStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+async function publishRevenueScan() {
+  $("rsStatus").innerHTML = `<div class="note">📤 กำลังสแกนสดใหม่ทั้ง S&P 500 แล้ว push ขึ้นเว็ป — อาจใช้เวลาหลายนาที กรุณารอ...</div>`;
+  try {
+    const res = await fetch(`${API}/api/revenue-scan/sp500/publish`, { method:"POST" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    const d = await res.json();
+    renderRevenueScan(d);
+    $("rsStatus").innerHTML = d.pushed
+      ? `<div class="up">✅ สแกนใหม่แล้ว push ขึ้น GitHub+HF สำเร็จ</div>`
+      : `<div class="down">สแกนสำเร็จแต่ push ไม่สำเร็จ: ${escapeHtml(d.error || "ไม่ทราบสาเหตุ")}</div>`;
+  } catch (e) {
+    notifyError(errorMessage(e), "สแกน+push ไม่สำเร็จ");
+    $("rsStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function openSymbolInRevenueModel(symbol) {
+  $("rmSymbol").value = symbol;
+  runRevenueModel();
+  showTab("revenue");
+  $("tabRevenue")?.classList.add("active");
+  $("tabRevenuescan")?.classList.remove("active");
+}
+
+function renderRevenueScan(d) {
+  const E = escapeHtml;
+  const cands = d.candidates || [];
+  const staleNote = d.stale ? `<span class="down">⚠️ ผลสแกนนี้เก่ากว่า 24 ชม. — กด "สแกนสดใหม่" เพื่ออัปเดต (รันในเครื่องเท่านั้น)</span>` : "";
+  let html = `<div class="note">สแกนล่าสุด: <b>${E(d.as_of_label || "-")}</b> · สำเร็จ ${d.success_count}/${d.universe_count} บริษัท · เข้าเกณฑ์ ${d.candidate_count} บริษัท ${staleNote}</div>`;
+  if (!cands.length) {
+    html += `<div class="note" style="margin-top:8px;">ไม่มีหุ้นเข้าเกณฑ์ตอนนี้ — ลองปรับ % ให้เข้มงวดน้อยลง (เช่น -10 แทน -15)</div>`;
+  } else {
+    const rows = cands.map(c => `<tr style="cursor:pointer;" onclick="openSymbolInRevenueModel('${E(c.symbol)}')">`
+      + `<td style="padding:5px 8px;"><b>${E(c.symbol)}</b><div class="tiny" style="color:#7d8b99;">${E(c.name)}</div></td>`
+      + `<td style="padding:5px 8px; color:#7d8b99; font-size:12px;">${E(c.sector || "")}</td>`
+      + `<td style="padding:5px 8px; text-align:right;">$${c.price_now}</td>`
+      + `<td style="padding:5px 8px; text-align:right;">$${c.fair_price}</td>`
+      + `<td style="padding:5px 8px; text-align:right;" class="up">${c.gap_pct}%</td>`
+      + `<td style="padding:5px 8px; text-align:right; font-size:12px; color:#7d8b99;">${c.latest_yoy_pct != null ? (c.latest_yoy_pct >= 0 ? "+" : "") + c.latest_yoy_pct + "%" : "—"}</td>`
+      + `</tr>`).join("");
+    html += `<table class="biz-rev" style="width:100%; margin-top:8px;">`
+      + `<thead><tr style="color:#9fb0c0; font-size:12px;">`
+      + `<th style="text-align:left; padding:4px 8px;">หุ้น</th><th style="text-align:left; padding:4px 8px;">Sector</th>`
+      + `<th style="text-align:right; padding:4px 8px;">ราคาจริง</th><th style="text-align:right; padding:4px 8px;">ราคาตามรายได้</th>`
+      + `<th style="text-align:right; padding:4px 8px;">Gap %</th><th style="text-align:right; padding:4px 8px;">YoY ล่าสุด</th>`
+      + `</tr></thead><tbody>${rows}</tbody></table>`
+      + `<div class="tiny" style="margin-top:6px; color:#7d8b99;">คลิกแถวเพื่อเปิดกราฟรายละเอียดในแท็บ 📈 โมเดลรายได้</div>`;
+  }
+  html += `<div class="note" style="margin-top:10px;">${E(d.methodology || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.coverage_note || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
+  $("rsResult").innerHTML = html;
 }
 
 function renderRadar(d) {

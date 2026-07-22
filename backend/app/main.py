@@ -29,6 +29,7 @@ from app import business as business_explainer
 from app import macro_business
 from app import trend_radar
 from app import revenue_model
+from app import revenue_scanner
 from app.engine import build_report
 from app.financials import build_financials
 from app.fundamentals import (get_fundamentals, get_offline, is_equity_symbol,
@@ -655,6 +656,35 @@ async def revenue_model_route(symbol: str = Query(..., description="สัญล
         raise HTTPException(502, f"สร้างโมเดลรายได้ไม่สำเร็จ: {exc}")
 
 
+@app.get("/api/revenue-scan/sp500")
+async def revenue_scan_sp500_route(
+    max_gap_pct: float = Query(-15.0, description="แสดงเฉพาะหุ้นที่ราคาต่ำกว่าราคาตามรายได้อย่างน้อยกี่ % (ค่าติดลบ)"),
+    limit: int = Query(40, ge=1, le=200),
+    refresh: bool = Query(False, description="True = สแกนสดใหม่ทั้ง S&P 500 (ใช้เวลาหลายนาที เหมาะกับรันในเครื่องเท่านั้น)"),
+):
+    """สแกน S&P 500 หาหุ้นที่ราคาต่ำกว่า 'ราคาตามรายได้' (ตรรกะเดียวกับเส้นม่วงประในแท็บโมเดลรายได้).
+    ผลสแกนแคชไว้ในไฟล์ (data_sp500_revenue_scan.json) — เว็ปอ่านแคชทันที ไม่ต้องสแกนสดบนคลาวด์."""
+    try:
+        return await revenue_scanner.scan_sp500_revenue_gap(max_gap_pct=max_gap_pct, limit=limit, refresh=refresh)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สแกน S&P 500 ไม่สำเร็จ: {exc}")
+
+
+@app.post("/api/revenue-scan/sp500/publish")
+async def revenue_scan_sp500_publish_route():
+    """สแกนสดใหม่ทั้ง S&P 500 แล้ว commit+push ผลขึ้น GitHub/HF อัตโนมัติ (เหมือน update-offline ของ VI ไทย)
+    ใช้ได้เฉพาะตอนรันในเครื่อง (ต้องมี .git + remote hf); บน HF container จะคืน pushed=false"""
+    try:
+        result = await revenue_scanner.scan_sp500_revenue_gap(refresh=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สแกน S&P 500 ไม่สำเร็จ: {exc}")
+    publish = _git_publish_file(
+        "backend/app/data_sp500_revenue_scan.json",
+        f"Update S&P 500 revenue scan ({result['success_count']}/{result['universe_count']} companies)",
+    )
+    return {**result, **publish}
+
+
 @app.post("/api/analyze-fundamentals", response_model=ValueReport)
 async def analyze_fundamentals_route(req: AnalyzeFundamentalsRequest):
     """สาย VI: ดึงปัจจัยพื้นฐาน → ประเมินด้านเชิงตัวเลข (Python) + เชิงคุณภาพ (Claude) → เกรด A–F."""
@@ -703,19 +733,18 @@ async def intrinsic_value_route(symbol: str = Query(...)):
     return build_iv_report(snapshot, financials)
 
 
-def _git_publish_offline(symbol: str) -> dict:
-    """commit + push ไฟล์ snapshot ออฟไลน์ขึ้น GitHub + HF (เว็ป). ใช้ได้เฉพาะที่มี git/remote
-    (เครื่องผู้ใช้). บน HF container ไม่มี .git → คืน pushed=false อย่างนุ่มนวล."""
+def _git_publish_file(rel: str, message: str) -> dict:
+    """commit + push ไฟล์ (เช่น snapshot ออฟไลน์/ผลสแกน) ขึ้น GitHub + HF (เว็ป). ใช้ได้เฉพาะที่มี
+    git/remote (เครื่องผู้ใช้). บน HF container ไม่มี .git → คืน pushed=false อย่างนุ่มนวล."""
     import subprocess
     repo = str(FRONTEND_DIR.parent)
-    rel = "backend/app/offline_fundamentals.json"
 
     def run(args, timeout):
         return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=timeout)
 
     try:
         run(["add", rel], 30)
-        c = run(["commit", "-m", f"Update offline fundamentals: {symbol.upper()}", "--", rel], 30)
+        c = run(["commit", "-m", message, "--", rel], 30)
         if c.returncode != 0 and "nothing to commit" in (c.stdout + c.stderr).lower():
             return {"pushed": False, "error": "ไม่มีการเปลี่ยนแปลง (ข้อมูลเดิมอยู่แล้ว)"}
         p1 = run(["push", "origin", "HEAD"], 150)
@@ -725,6 +754,13 @@ def _git_publish_offline(symbol: str) -> dict:
         return {"pushed": False, "error": (p2.stderr or p1.stderr or "push ล้มเหลว")[:200]}
     except Exception as exc:  # noqa: BLE001
         return {"pushed": False, "error": str(exc)[:200]}
+
+
+def _git_publish_offline(symbol: str) -> dict:
+    return _git_publish_file(
+        "backend/app/offline_fundamentals.json",
+        f"Update offline fundamentals: {symbol.upper()}",
+    )
 
 
 @app.post("/api/fundamentals/update-offline")
