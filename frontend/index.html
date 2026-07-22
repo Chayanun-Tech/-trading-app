@@ -862,9 +862,9 @@
         <canvas id="rmOverlay" style="position:absolute; left:0; top:0; pointer-events:none; z-index:1000;"></canvas>
       </div>
       <div id="rmGapNote" class="note" style="margin-top:8px;"></div>
-      <div class="subcharts">
-        <div class="subchart"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="height:160px;"></div></div>
-        <div class="subchart"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="height:140px;"></div></div>
+      <div class="subcharts" style="grid-template-columns:1fr 1fr;">
+        <div class="subchart" style="height:260px;"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
+        <div class="subchart" style="height:260px;"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
       </div>
     </div>
 
