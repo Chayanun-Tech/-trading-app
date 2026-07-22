@@ -643,11 +643,12 @@ async def financials_route(symbol: str = Query(..., description="สัญลั
 
 @app.get("/api/revenue-model")
 async def revenue_model_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น MSFT (หุ้นสหรัฐเท่านั้น)"),
-                              refresh: bool = Query(False, description="True = ดึงงบสดจาก SEC ทับ cache")):
+                              refresh: bool = Query(False, description="True = ดึงงบสดจาก SEC ทับ cache"),
+                              granularity: str = Query("weekly", description="daily | weekly | monthly")):
     """โมเดลกราฟ 'Revenue Growth' สไตล์ TrendSpider: กล่อง YoY revenue growth รายไตรมาส
-    + กราฟราคารายสัปดาห์ + P/E ย้อนหลังรายสัปดาห์ (ราคา ÷ EPS สะสม 4 ไตรมาส)."""
+    + กราฟราคา + P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) ที่ความละเอียดที่เลือก."""
     try:
-        return await revenue_model.get_revenue_model(symbol, refresh=refresh)
+        return await revenue_model.get_revenue_model(symbol, refresh=refresh, granularity=granularity)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
     except Exception as exc:  # noqa: BLE001

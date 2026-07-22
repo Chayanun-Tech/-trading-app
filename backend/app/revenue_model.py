@@ -20,8 +20,8 @@ from app.fundamentals import is_equity_symbol
 _REVENUE_CONCEPTS = next(c[2] for c in _INCOME if c[0] == "revenue")
 _ALL_FP = {"Q1", "Q2", "Q3", "Q4"}
 
-# ~13 สัปดาห์/ไตรมาส — ใช้ตัดช่วงราคา/P/E ให้พอดีกับจำนวนไตรมาสที่แสดง
-_WEEKS_PER_QUARTER = 13
+# จำนวนแท่งราคาโดยประมาณต่อ 1 ไตรมาส แยกตามความละเอียด — ใช้ตัดช่วงราคา/P/E ให้พอดีกับไตรมาสที่แสดง
+_BARS_PER_QUARTER = {"daily": 63, "weekly": 13, "monthly": 3}
 
 
 def _quarterly_with_fp(facts: dict, concepts: list[str], unit: str, prefer_latest_value: bool = False) -> dict[str, dict]:
@@ -119,15 +119,13 @@ def _quarter_label(end: str, meta: dict | None) -> str:
         return end
 
 
-def _resample_weekly(candles: list) -> list[dict]:
-    """รวมแท่งรายวัน → รายสัปดาห์ (กลุ่มตามสัปดาห์ปฏิทินแบบ ISO)."""
-    weeks: dict[tuple[int, int], list] = {}
+def _group_candles(candles: list, key_fn) -> list[dict]:
+    groups: dict = {}
     for c in candles:
-        iso = datetime.fromtimestamp(c.time, tz=timezone.utc).isocalendar()
-        weeks.setdefault((iso[0], iso[1]), []).append(c)
+        groups.setdefault(key_fn(c), []).append(c)
     out = []
-    for key in sorted(weeks.keys()):
-        grp = weeks[key]
+    for key in sorted(groups.keys()):
+        grp = groups[key]
         out.append({
             "time": grp[0].time,
             "open": grp[0].open,
@@ -138,12 +136,25 @@ def _resample_weekly(candles: list) -> list[dict]:
     return out
 
 
-async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: int = 24) -> dict:
+def _resample(candles: list, granularity: str) -> list[dict]:
+    """รวมแท่งรายวันเป็นความละเอียดที่ต้องการ: daily (แยกแท่งเดิม) / weekly (สัปดาห์ปฏิทิน ISO) / monthly (เดือนปฏิทิน)."""
+    if granularity == "daily":
+        return [{"time": c.time, "open": c.open, "high": c.high, "low": c.low, "close": c.close} for c in candles]
+    if granularity == "monthly":
+        return _group_candles(candles, lambda c: (datetime.fromtimestamp(c.time, tz=timezone.utc).year,
+                                                    datetime.fromtimestamp(c.time, tz=timezone.utc).month))
+    return _group_candles(candles, lambda c: datetime.fromtimestamp(c.time, tz=timezone.utc).isocalendar()[:2])
+
+
+async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: int = 24,
+                            granularity: str = "weekly") -> dict:
     symbol = (symbol or "").strip().upper()
     if not symbol:
         raise ValueError("กรุณาระบุสัญลักษณ์หุ้น")
     if not is_equity_symbol(symbol):
         raise ValueError("ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
+    if granularity not in _BARS_PER_QUARTER:
+        raise ValueError("granularity ต้องเป็น daily, weekly หรือ monthly")
 
     try:
         facts = await edgar.get_company_facts(symbol, force_refresh=refresh)
@@ -201,10 +212,10 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
             else await provider.get_candles(symbol, "1d", 1000)
     except Exception:  # noqa: BLE001 — ราคาย้อนหลังดึงไม่ได้ก็ยังโชว์กล่อง YoY ได้ (ไม่มีกราฟราคา/P/E)
         candles = []
-    weekly = _resample_weekly(candles) if candles else []
+    bars = _resample(candles, granularity) if candles else []
 
     pe_series = []
-    for w in weekly:
+    for w in bars:
         w_date = datetime.fromtimestamp(w["time"], tz=timezone.utc).date().isoformat()
         ttm = next((val for qd, val in reversed(ttm_eps_by_date) if qd <= w_date), None)
         if ttm and ttm > 0:
@@ -213,19 +224,21 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
     # อ้างอิงจากช่วง ~2 ปีล่าสุดเท่านั้น (ไม่ใช่ทั้ง 6 ปี) — EPS ย้อนหลังของหุ้นที่เคย split นาน ๆ มาแล้ว
     # (เช่น GOOGL 2022, NVDA 2021/2024) อาจไม่ถูกปรับปรุงย้อนหลังครบทุกไตรมาสตามข้อมูลที่ SEC ให้มา
     # ช่วงใกล้ปัจจุบันเชื่อถือได้กว่ามาก จึงใช้คำนวณเส้นอ้างอิงแทนค่ามัธยฐานทั้งช่วง
+    bars_per_q = _BARS_PER_QUARTER[granularity]
     pe_reference = None
-    recent_pe = pe_series[-104:]
+    recent_pe = pe_series[-(bars_per_q * 8):]  # ~2 ปีล่าสุด
     if recent_pe:
         pe_sorted = sorted(p["pe"] for p in recent_pe)
         median = pe_sorted[len(pe_sorted) // 2]
         pe_reference = {"median": round(median, 1), "label": f"{round(median)}x P/E (median, ~2 ปีล่าสุด)"}
 
-    window = max(len(quarters) * _WEEKS_PER_QUARTER, 60)
+    window = max(len(quarters) * bars_per_q, 60)
     return {
         "symbol": symbol,
         "entity_name": facts.get("entityName"),
+        "granularity": granularity,
         "quarters": quarters,
-        "price_candles": weekly[-window:],
+        "price_candles": bars[-window:],
         "pe_series": pe_series[-window:],
         "pe_reference": pe_reference,
         "disclaimer": "ข้อมูลจาก SEC EDGAR (งบที่ยื่นจริง) + ราคาย้อนหลังจาก provider ปัจจุบัน — "

@@ -842,10 +842,20 @@
     <div id="revenuePanel" class="panel-body hidden">
       <div class="grid3">
         <div class="field"><label>หุ้น (US เท่านั้น — ต้องยื่น SEC)</label><input id="rmSymbol" placeholder="เช่น MSFT, AAPL, NVDA" /></div>
+        <div class="field"><label>ความละเอียดกราฟราคา</label>
+          <select id="rmGranularity" onchange="runRevenueModel()">
+            <option value="daily">รายวัน</option>
+            <option value="weekly" selected>รายสัปดาห์</option>
+            <option value="monthly">รายเดือน</option>
+          </select>
+        </div>
         <div class="field" style="align-self:end;"><button class="primary" onclick="runRevenueModel()">📈 สร้างกราฟ</button></div>
+      </div>
+      <div class="grid3">
+        <div></div><div></div>
         <div class="field" style="align-self:end;"><button onclick="runRevenueModel(true)" title="ดึงงบสดจาก SEC ใหม่ทับ cache">🔄 ใหม่</button></div>
       </div>
-      <div class="note" style="margin-top:6px;">กล่องเขียว/แดง = อัตราเติบโตรายได้เทียบปีก่อน (YoY) รายไตรมาส จาก SEC EDGAR · เส้นทแยง = แนวโน้มรายได้ · กราฟล่าง = P/E ย้อนหลังรายสัปดาห์ (ราคา ÷ EPS สะสม 4 ไตรมาส) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
+      <div class="note" style="margin-top:6px;">กล่องเขียว/แดง = อัตราเติบโตรายได้เทียบปีก่อน (YoY) รายไตรมาส จาก SEC EDGAR · เส้นทแยง = แนวโน้มรายได้ · กราฟล่าง = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
       <div class="chart-wrap" style="margin-top:10px; position:relative;">
         <div id="rmChart" style="height:420px;"></div>
@@ -3231,16 +3241,26 @@ function renderAnalyst(d) {
 let rmChart = null, rmCandleSeries = null, rmPeChart = null, rmPeSeries = null, rmPeLine = null;
 let rmData = null, rmResizeObserver = null;
 
+const rmTickFmt = new Intl.DateTimeFormat("en-GB", { timeZone:CHART_TIME_ZONE, day:"2-digit", month:"short", year:"2-digit" });
+function formatRmTick(time) { return rmTickFmt.format(chartTimeToDate(time)); }
+
+// บังคับช่วงที่มองเห็นให้ครอบคลุมแท่งทั้งหมด — fitContent() ของ Lightweight Charts ไม่บีบระยะห่างแท่ง
+// ให้ต่ำกว่าค่าเริ่มต้นเสมอ ถ้าแท่งเยอะกว่าที่ค่าเริ่มต้นจะแสดงได้พอดี มันจะเลื่อนไปโชว์แค่แท่งล่าสุดแทน
+function fitAllBars(chart, n) {
+  if (n > 0) chart.timeScale().setVisibleLogicalRange({ from:-0.5, to:n - 0.5 });
+}
+
 function ensureRmCharts() {
   if (rmChart) return;
   const base = chartBaseOptions();
-  rmChart = LightweightCharts.createChart($("rmChart"), { ...base, width:$("rmChart").clientWidth, height:$("rmChart").clientHeight });
+  const tsOptions = { ...base.timeScale, tickMarkFormatter:formatRmTick };
+  rmChart = LightweightCharts.createChart($("rmChart"), { ...base, timeScale:tsOptions, width:$("rmChart").clientWidth, height:$("rmChart").clientHeight });
   rmCandleSeries = rmChart.addCandlestickSeries({
     upColor:chartStyle.upColor, downColor:chartStyle.downColor,
     borderUpColor:chartStyle.upColor, borderDownColor:chartStyle.downColor,
     wickUpColor:chartStyle.wickUpColor, wickDownColor:chartStyle.wickDownColor,
   });
-  rmPeChart = LightweightCharts.createChart($("rmPeChart"), { ...base, width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
+  rmPeChart = LightweightCharts.createChart($("rmPeChart"), { ...base, timeScale:tsOptions, width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
   rmPeSeries = rmPeChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"P/E" });
 
   rmChart.timeScale().subscribeVisibleTimeRangeChange(drawRmOverlay);
@@ -3251,8 +3271,8 @@ function ensureRmCharts() {
 }
 
 function resizeRmCharts() {
-  if (rmChart) rmChart.applyOptions({ width:$("rmChart").clientWidth, height:$("rmChart").clientHeight });
-  if (rmPeChart) rmPeChart.applyOptions({ width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
+  if (rmChart) rmChart.resize($("rmChart").clientWidth, $("rmChart").clientHeight);
+  if (rmPeChart) rmPeChart.resize($("rmPeChart").clientWidth, $("rmPeChart").clientHeight);
   const cv = $("rmOverlay");
   if (cv) { cv.width = $("rmChart").clientWidth; cv.height = $("rmChart").clientHeight; }
 }
@@ -3264,9 +3284,10 @@ async function runRevenueModel(refresh) {
   const sym = (typed || (typeof currentSymbol === "string" ? currentSymbol : "")).toUpperCase();
   if (!sym) { $("rmStatus").innerHTML = `<span class="down">กรุณาใส่สัญลักษณ์หุ้น</span>`; return; }
   symEl.value = sym;
+  const granularity = $("rmGranularity") ? $("rmGranularity").value : "weekly";
   $("rmStatus").innerHTML = `<div class="note">📈 กำลังดึงงบ SEC + ราคาย้อนหลัง... (ครั้งแรกอาจใช้เวลาสักครู่)</div>`;
   try {
-    const params = new URLSearchParams({ symbol:sym });
+    const params = new URLSearchParams({ symbol:sym, granularity });
     if (refresh) params.set("refresh", "true");
     const res = await fetch(`${API}/api/revenue-model?${params.toString()}`);
     if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
@@ -3282,8 +3303,10 @@ async function runRevenueModel(refresh) {
 function renderRevenueModel(d) {
   ensureRmCharts();
   resizeRmCharts();
-  rmCandleSeries.setData((d.price_candles || []).map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close })));
-  rmPeSeries.setData((d.pe_series || []).map(p => ({ time:p.time, value:p.pe })));
+  const candles = d.price_candles || [];
+  const pe = d.pe_series || [];
+  rmCandleSeries.setData(candles.map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close })));
+  rmPeSeries.setData(pe.map(p => ({ time:p.time, value:p.pe })));
   if (rmPeLine) { rmPeSeries.removePriceLine(rmPeLine); rmPeLine = null; }
   if (d.pe_reference) {
     rmPeLine = rmPeSeries.createPriceLine({
@@ -3291,8 +3314,8 @@ function renderRevenueModel(d) {
       axisLabelVisible:true, title:d.pe_reference.label,
     });
   }
-  rmChart.timeScale().fitContent();
-  rmPeChart.timeScale().fitContent();
+  fitAllBars(rmChart, candles.length);
+  fitAllBars(rmPeChart, pe.length);
   setTimeout(drawRmOverlay, 60);
 }
 
