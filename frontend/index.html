@@ -3312,10 +3312,20 @@ function ensureRmCharts() {
 
   rmChart.timeScale().subscribeVisibleTimeRangeChange(drawRmOverlay);
   rmChart.timeScale().subscribeVisibleLogicalRangeChange(drawRmOverlay);
-  rmResizeObserver = new ResizeObserver(() => { resizeRmCharts(); drawRmOverlay(); });
+  // chart.resize() รีเซ็ตช่วงที่มองเห็นกลับไปสเกลเริ่มต้น (ไม่ใช่ช่วงที่ fitAllBars ตั้งไว้) ทุกครั้งที่ขนาด
+  // container เปลี่ยน (เช่น ตอนสลับโหมด Wide/Dock หรือ resize หน้าต่าง) — ต้อง fit ใหม่ทุกครั้งหลัง resize
+  // ไม่งั้นกราฟจะโชว์แค่บางส่วนแบบอัดแน่นผิดสัดส่วนหลังสลับโหมด
+  rmResizeObserver = new ResizeObserver(() => { resizeRmCharts(); refitRmCharts(); drawRmOverlay(); });
   rmResizeObserver.observe($("rmChart"));
   rmResizeObserver.observe($("rmPeChart"));
   rmResizeObserver.observe($("rmCompareChart"));
+}
+
+function refitRmCharts() {
+  if (!rmData) return;
+  fitAllBars(rmChart, (rmData.price_candles || []).length);
+  fitAllBars(rmPeChart, (rmData.pe_series || []).length);
+  fitAllBars(rmCompareChart, (rmData.price_candles || []).length);
 }
 
 function resizeRmCharts() {
@@ -3328,6 +3338,11 @@ function resizeRmCharts() {
 
 async function runRevenueModel(refresh) {
   showTab("revenue");
+  // แท็บนี้มีข้อมูลแน่นมาก (40 ไตรมาส + กราฟ 3 ชั้น) โหมด dock ปกติ (แคบ) จะอ่านยากมาก
+  // สลับเป็นโหมด "Wide" ให้อัตโนมัติ (จำไว้ใน localStorage แล้ว ครั้งหน้าไม่ต้องสลับเอง)
+  if (typeof controlDockMode !== "undefined" && controlDockMode !== "wide" && typeof setControlDockMode === "function") {
+    setControlDockMode("wide");
+  }
   const symEl = $("rmSymbol");
   const typed = (symEl.value || "").trim();
   const sym = (typed || (typeof currentSymbol === "string" ? currentSymbol : "")).toUpperCase();
@@ -3363,9 +3378,6 @@ function renderRevenueModel(d) {
       axisLabelVisible:true, title:d.pe_reference.label,
     });
   }
-  fitAllBars(rmChart, candles.length);
-  fitAllBars(rmPeChart, pe.length);
-
   // เทียบ "ราคา" กับ "รายได้" โดยปรับฐานทั้งคู่ = 100 ที่จุดเริ่มต้นเดียวกัน (จุดแรกที่มีทั้งราคาและรายได้)
   // เพื่อดูว่าช่วงไหนราคาวิ่งนำ (เสี่ยงแพงกว่าปัจจัยพื้นฐาน) หรือตามหลังรายได้ (โอกาส deep value)
   const quarters = d.quarters || [];
@@ -3391,7 +3403,6 @@ function renderRevenueModel(d) {
     rmPriceIdxSeries.setData(priceIdx);
     rmRevIdxSeries.setData(revIdx);
     rmFairSeries.setData(fairSeries);
-    fitAllBars(rmCompareChart, priceIdx.length);
     if (priceIdx.length && revIdx.length) {
       const gap = priceIdx[priceIdx.length - 1].value - revIdx[revIdx.length - 1].value;
       const cls = gap > 0 ? "down" : "up";
@@ -3422,7 +3433,10 @@ function renderRevenueModel(d) {
     $("rmFairNote").innerHTML = "";
   }
 
-  setTimeout(drawRmOverlay, 60);
+  // เลื่อน fit ออกไปหนึ่ง tick: เรียก fitAllBars() ทันทีหลัง setData() บางครั้งโดน layout ภายในของ
+  // Lightweight Charts (ที่ทำงานหลัง setData แบบ async) รีเซ็ตทับ ทำให้กราฟกลับไปโชว์แค่บางส่วนแบบ
+  // อัดแน่นผิดสัดส่วน — รอ tick เดียวให้ layout ภายในเสร็จก่อน แล้วค่อย fit ทับอีกที
+  setTimeout(() => { refitRmCharts(); drawRmOverlay(); }, 60);
 }
 
 function onRmBandSizeChange() {
