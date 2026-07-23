@@ -18,6 +18,7 @@ from app.financials import _entries, _days, _INCOME, _EPS
 from app.fundamentals import is_equity_symbol
 
 _REVENUE_CONCEPTS = next(c[2] for c in _INCOME if c[0] == "revenue")
+_NET_INCOME_CONCEPTS = next(c[2] for c in _INCOME if c[0] == "net_income")
 _ALL_FP = {"Q1", "Q2", "Q3", "Q4"}
 
 # จำนวนแท่งราคาโดยประมาณต่อ 1 ไตรมาส แยกตามความละเอียด — ใช้ตัดช่วงราคา/P/E ให้พอดีกับไตรมาสที่แสดง
@@ -103,6 +104,16 @@ def _fp_key(meta: dict, end: str) -> tuple[str, int] | None:
         return None
 
 
+def _yoy_lookup(meta: dict[str, dict]) -> dict[tuple[str, int], float]:
+    """สร้างตาราง (fp, fy) -> ค่า สำหรับจับคู่ YoY ของเมตริกใดก็ได้ (รายได้/กำไร)."""
+    lookup: dict[tuple[str, int], float] = {}
+    for d, m in meta.items():
+        k = _fp_key(m, d)
+        if k:
+            lookup[k] = m["val"]
+    return lookup
+
+
 def _quarter_label(end: str, meta: dict | None) -> str:
     """ใช้ fp/fy จาก SEC ('Q3', 2025) -> \"Q3'25\" ถ้ามี ไม่งั้น fallback เป็นไตรมาสปฏิทิน."""
     fp, fy = (meta or {}).get("fp"), (meta or {}).get("fy")
@@ -146,7 +157,7 @@ def _resample(candles: list, granularity: str) -> list[dict]:
     return _group_candles(candles, lambda c: datetime.fromtimestamp(c.time, tz=timezone.utc).isocalendar()[:2])
 
 
-async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: int = 24,
+async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: int = 40,
                             granularity: str = "weekly") -> dict:
     symbol = (symbol or "").strip().upper()
     if not symbol:
@@ -171,16 +182,17 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True),
     )
     raw_eps = {d: m["val"] for d, m in raw_eps_meta.items()}
+    raw_ni_meta = _synthesize_missing_quarter(
+        _quarterly_with_fp(facts, _NET_INCOME_CONCEPTS, "USD"),
+        _annual_with_end(facts, _NET_INCOME_CONCEPTS, "USD"),
+    )
     dates = sorted(raw_revenue_meta.keys())
     if len(dates) < 5:
         raise ValueError("ข้อมูลรายได้รายไตรมาสจาก SEC ไม่พอสำหรับคำนวณ YoY (ต้องการอย่างน้อย 5 ไตรมาส)")
 
     # จับคู่ YoY ด้วยไตรมาสบัญชีจริง (fp, fy-1) ไม่ใช่นับถอยหลัง 4 ตำแหน่งในลิสต์
-    by_key: dict[tuple[str, int], float] = {}
-    for d in dates:
-        k = _fp_key(raw_revenue_meta[d], d)
-        if k:
-            by_key[k] = raw_revenue_meta[d]["val"]
+    rev_by_key = _yoy_lookup(raw_revenue_meta)
+    ni_by_key = _yoy_lookup(raw_ni_meta)
 
     quarters_full = []
     for d in dates:
@@ -188,11 +200,18 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         rev = meta["val"]
         k = _fp_key(meta, d)
         yoy = None
+        profit_yoy = None
+        net_income = None
         if k:
-            prev = by_key.get((k[0], k[1] - 1))
+            prev = rev_by_key.get((k[0], k[1] - 1))
             if prev:
                 yoy = (rev - prev) / abs(prev)
-        quarters_full.append({"period": d, "label": _quarter_label(d, meta), "revenue": rev, "yoy_pct": yoy})
+            net_income = ni_by_key.get(k)
+            ni_prev = ni_by_key.get((k[0], k[1] - 1))
+            if net_income is not None and ni_prev:
+                profit_yoy = (net_income - ni_prev) / abs(ni_prev)
+        quarters_full.append({"period": d, "label": _quarter_label(d, meta), "revenue": rev, "yoy_pct": yoy,
+                              "net_income": net_income, "profit_yoy_pct": profit_yoy})
 
     quarters = [q for q in quarters_full if q["yoy_pct"] is not None][-max_quarters:]
     if not quarters:

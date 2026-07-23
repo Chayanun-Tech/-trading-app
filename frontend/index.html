@@ -199,6 +199,8 @@
   .subchart { height:104px; border:1px solid rgba(148,163,184,.18); border-radius:8px; overflow:hidden; position:relative; }
   .subchart:last-child { border-right:0; }
   .sub-title { position:absolute; top:8px; left:10px; z-index:2; color:var(--muted); font-size:13px; }
+  .rm-subchart { height:260px; }
+  .rm-main-chart { height:420px; }
   #rsiChart, #macdChart { width:100%; height:100%; }
   .section { padding:12px; border-bottom:1px solid var(--border); }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
@@ -314,6 +316,7 @@
     .right.wide .detail-dock .tabs { grid-template-columns:repeat(3,minmax(0,1fr)); }
     .right.wide .panel-body { max-height:calc(100vh - 230px); }
     .subcharts { grid-template-columns:1fr; }
+    .rm-subchart { height:220px; }
     .summary { grid-template-columns:repeat(4,minmax(0,1fr)); }
     .panel-body { max-height:none; }
   }
@@ -368,6 +371,8 @@
     .chart-live-status { top:8px; left:8px; width:min(300px, calc(100% - 16px)); font-size:13px; padding:8px; }
     .position-box { right:40px; width:min(190px, 45vw); min-width:132px; font-size:13px; }
     .subchart { height:156px; }
+    .rm-main-chart { height:280px; }
+    .rm-subchart { height:200px; }
     .summary, .section, .panel-body { padding:8px; }
     .summary { grid-template-columns:1fr 1fr; }
     .grid2, .grid3 { grid-template-columns:1fr; }
@@ -385,6 +390,8 @@
     .toolbar { grid-template-columns:1fr 74px; }
     .searchbox { grid-template-columns:minmax(0,1fr) 70px; }
     .chart-wrap { height:52vh; min-height:300px; }
+    .rm-main-chart { height:240px; }
+    .rm-subchart { height:170px; }
     .workspace-strip { grid-template-columns:1fr; }
     .chart-live-status .status-grid { grid-template-columns:1fr; gap:3px; }
     .position-box { right:28px; width:min(160px, 54vw); }
@@ -399,6 +406,8 @@
   @media (orientation:landscape) and (max-height:520px) {
     .chart-wrap { height:320px; min-height:300px; }
     .subchart { height:132px; }
+    .rm-main-chart { height:220px; }
+    .rm-subchart { height:130px; }
   }
 </style>
 </head>
@@ -856,17 +865,17 @@
         <div></div><div></div>
         <div class="field" style="align-self:end;"><button onclick="runRevenueModel(true)" title="ดึงงบสดจาก SEC ใหม่ทับ cache">🔄 ใหม่</button></div>
       </div>
-      <div class="note" style="margin-top:6px;">กล่องเขียว/แดง = อัตราเติบโตรายได้เทียบปีก่อน (YoY) รายไตรมาส จาก SEC EDGAR · เส้นทแยง = แนวโน้มรายได้ · กราฟล่าง = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
+      <div class="note" style="margin-top:6px;">กล่องเขียว/แดง = อัตราเติบโตรายได้เทียบปีก่อน (YoY) รายไตรมาส · กล่องม่วงโปร่งแสงซ้อนอยู่ในคอลัมน์เดียวกัน = อัตราเติบโตกำไรสุทธิ (Net Income) เทียบปีก่อน — สเกลเดียวกัน เทียบสูง/ต่ำกันได้ตรง ๆ ว่าไตรมาสไหนกำไรโตเร็ว/ช้ากว่ารายได้ จาก SEC EDGAR · เส้นทแยง = แนวโน้มรายได้ · กราฟล่าง = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
-      <div class="chart-wrap" style="margin-top:10px; position:relative;">
-        <div id="rmChart" style="height:420px;"></div>
+      <div class="chart-wrap rm-chart-wrap" style="margin-top:10px; position:relative;">
+        <div id="rmChart" class="rm-main-chart"></div>
         <canvas id="rmOverlay" style="position:absolute; left:0; top:0; pointer-events:none; z-index:1000;"></canvas>
       </div>
       <div id="rmGapNote" class="note" style="margin-top:8px;"></div>
       <div id="rmFairNote" class="note" style="margin-top:4px;"></div>
-      <div class="subcharts" style="grid-template-columns:1fr 1fr;">
-        <div class="subchart" style="height:260px;"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ TTM (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
-        <div class="subchart" style="height:260px;"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
+      <div class="subcharts">
+        <div class="subchart rm-subchart"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ TTM (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
+        <div class="subchart rm-subchart"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
       </div>
     </div>
 
@@ -3424,7 +3433,11 @@ function drawRmOverlay() {
   const ts = rmChart.timeScale();
   const h = cv.height;
   const bandTop = h * 0.60, bandBottom = h * 0.94;
-  const maxAbs = Math.max(...quarters.map(q => Math.abs(q.yoy_pct || 0)), 0.05);
+  const maxAbs = Math.max(
+    ...quarters.map(q => Math.abs(q.yoy_pct || 0)),
+    ...quarters.map(q => Math.abs(q.profit_yoy_pct || 0)),
+    0.05,
+  );
 
   const xForPeriod = (period) => {
     const target = Date.parse(period + "T00:00:00Z") / 1000;
@@ -3448,6 +3461,17 @@ function drawRmOverlay() {
     const y = boxYOf(growth);
     ctx.fillStyle = growth >= 0 ? "rgba(60,170,110,0.55)" : "rgba(220,90,90,0.55)";
     ctx.fillRect(xStart + 1, y, Math.max(xEnd - xStart - 2, 2), bandBottom - y);
+
+    // กล่องกำไร (สีม่วงโปร่งแสง) ซ้อนอยู่ในคอลัมน์เดียวกัน แคบกว่าเล็กน้อยให้เห็นทั้งคู่ — ใช้สเกลเดียวกับรายได้
+    // เพื่อเทียบได้ตรงๆ ว่าไตรมาสไหนกำไรโตเร็ว/ช้ากว่ารายได้
+    if (p.q.profit_yoy_pct != null) {
+      const pGrowth = p.q.profit_yoy_pct;
+      const py = boxYOf(pGrowth);
+      const inset = Math.max((xEnd - xStart) * 0.22, 1);
+      ctx.fillStyle = "rgba(168,110,230,0.55)";
+      ctx.fillRect(xStart + inset, py, Math.max(xEnd - xStart - inset * 2, 2), bandBottom - py);
+    }
+
     ctx.fillStyle = "#dfe6ee";
     ctx.fillText(p.q.label, (xStart + xEnd) / 2, y - 14);
     ctx.fillText(`${growth >= 0 ? "+" : ""}${(growth * 100).toFixed(1)}%`, (xStart + xEnd) / 2, y - 3);
