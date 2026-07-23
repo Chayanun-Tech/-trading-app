@@ -199,9 +199,13 @@
   .subchart { height:104px; border:1px solid rgba(148,163,184,.18); border-radius:8px; overflow:hidden; position:relative; }
   .subchart:last-child { border-right:0; }
   .sub-title { position:absolute; top:8px; left:10px; z-index:2; color:var(--muted); font-size:13px; }
-  .rm-subchart { height:260px; }
-  .rm-main-chart { height:420px; }
-  .rm-growth-chart { height:220px; }
+  .rm-resizable { resize:vertical; overflow:hidden; min-height:140px; max-height:90vh; }
+  .rm-resizable::-webkit-resizer {
+    background:linear-gradient(135deg, transparent 0 45%, rgba(148,163,184,.6) 45% 55%, transparent 55%);
+  }
+  .rm-subchart { height:320px; }
+  .rm-chart-wrap { height:520px; }
+  .rm-growth-chart { height:280px; }
   .rm-tooltip {
     position:absolute; top:8px; right:10px; z-index:5; pointer-events:none;
     background:rgba(11,17,24,.92); border:1px solid rgba(148,163,184,.35); border-radius:8px;
@@ -379,7 +383,7 @@
     .chart-live-status { top:8px; left:8px; width:min(300px, calc(100% - 16px)); font-size:13px; padding:8px; }
     .position-box { right:40px; width:min(190px, 45vw); min-width:132px; font-size:13px; }
     .subchart { height:156px; }
-    .rm-main-chart { height:280px; }
+    .rm-chart-wrap { height:280px; }
     .rm-subchart { height:200px; }
     .rm-growth-chart { height:170px; }
     .summary, .section, .panel-body { padding:8px; }
@@ -399,7 +403,7 @@
     .toolbar { grid-template-columns:1fr 74px; }
     .searchbox { grid-template-columns:minmax(0,1fr) 70px; }
     .chart-wrap { height:52vh; min-height:300px; }
-    .rm-main-chart { height:240px; }
+    .rm-chart-wrap { height:240px; }
     .rm-subchart { height:170px; }
     .rm-growth-chart { height:150px; }
     .workspace-strip { grid-template-columns:1fr; }
@@ -416,7 +420,7 @@
   @media (orientation:landscape) and (max-height:520px) {
     .chart-wrap { height:320px; min-height:300px; }
     .subchart { height:132px; }
-    .rm-main-chart { height:220px; }
+    .rm-chart-wrap { height:220px; }
     .rm-subchart { height:130px; }
     .rm-growth-chart { height:120px; }
   }
@@ -878,10 +882,11 @@
       </div>
       <div class="note" style="margin-top:6px;">กราฟราคาปกติ ซูม/เลื่อนดูย้อนหลังได้ด้วยเมาส์ · กราฟด้านล่าง = อัตราเติบโตรายได้ (เขียว/แดง, แกนขวา) เทียบกำไรสุทธิ (ม่วง, แกนซ้าย) แบบปีต่อปี (YoY) คนละแกนกัน ไม่บีบกัน — เลื่อนเมาส์บนแท่งเพื่อดูตัวเลขไตรมาสนั้น · กราฟถัดไป = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
-      <div class="chart-wrap rm-chart-wrap" style="margin-top:10px; position:relative;">
-        <div id="rmChart" class="rm-main-chart"></div>
+      <div class="note tiny" style="margin-top:2px; color:#7d8b99;">ลากมุมขวาล่างของแต่ละกรอบกราฟเพื่อปรับความสูงเองได้</div>
+      <div class="chart-wrap rm-chart-wrap rm-resizable" style="margin-top:6px; position:relative;">
+        <div id="rmChart" style="width:100%; height:100%;"></div>
       </div>
-      <div class="subchart rm-growth-chart" style="margin-top:10px; position:relative;">
+      <div class="subchart rm-growth-chart rm-resizable" style="margin-top:10px; position:relative;">
         <div class="sub-title">รายได้ YoY (เขียว/แดง, แกนขวา) vs กำไรสุทธิ YoY (ม่วง, แกนซ้าย) รายไตรมาส</div>
         <div id="rmGrowthChart" style="width:100%; height:100%;"></div>
         <div id="rmGrowthTooltip" class="rm-tooltip hidden"></div>
@@ -889,8 +894,8 @@
       <div id="rmGapNote" class="note" style="margin-top:8px;"></div>
       <div id="rmFairNote" class="note" style="margin-top:4px;"></div>
       <div class="subcharts">
-        <div class="subchart rm-subchart"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ TTM (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
-        <div class="subchart rm-subchart"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
+        <div class="subchart rm-subchart rm-resizable"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ TTM (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
+        <div class="subchart rm-subchart rm-resizable"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
       </div>
     </div>
 
