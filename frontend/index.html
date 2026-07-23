@@ -915,6 +915,18 @@
           <button onclick="publishRevenueScan()" title="สแกนสดใหม่ + commit/push ขึ้น GitHub+HF อัตโนมัติ — ใช้ได้เฉพาะตอนรันในเครื่อง">📤 สแกน + ดันขึ้นเว็ป</button>
         </div>
       </div>
+      <div class="grid3" style="margin-top:8px;">
+        <div class="field"><label>Market cap ขั้นต่ำ ($B)</label><input id="rsMinCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runRevenueScan()" /></div>
+        <div class="field"><label>Market cap สูงสุด ($B)</label><input id="rsMaxCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runRevenueScan()" /></div>
+        <div class="field" style="align-self:end;">
+          <div class="quick" style="padding:0; border:0; gap:6px;">
+            <button onclick="setRsCapPreset(200,null)" title="เฉพาะหุ้นตัวใหญ่มาก">Mega ≥200B</button>
+            <button onclick="setRsCapPreset(10,200)" title="10B–200B">Large 10–200B</button>
+            <button onclick="setRsCapPreset(2,10)" title="2B–10B">Mid 2–10B</button>
+            <button onclick="setRsCapPreset(null,null)" title="ไม่กรอง market cap">ทั้งหมด</button>
+          </div>
+        </div>
+      </div>
       <div id="rsStatus" class="note" style="margin-top:6px;"></div>
       <div id="rsResult" style="margin-top:12px;">
         <div class="note">กด "โหลดผลสแกน" เพื่อดูผลล่าสุด (ผลสแกนแคชไว้ล่วงหน้า โหลดเร็ว) — "สแกนสดใหม่" ใช้เวลาหลายนาทีเพราะอ่านงบ SEC + ราคาของ 500 บริษัท</div>
@@ -1137,23 +1149,28 @@
       </div>
     </div>
 
-    <div class="section">
-      <h3>Alerts</h3>
-      <div class="grid2">
-        <select id="alertKind">
-          <option value="price_above">Price >=</option>
-          <option value="price_below">Price <=</option>
-          <option value="rsi_above">RSI >=</option>
-          <option value="rsi_below">RSI <=</option>
-        </select>
-        <input id="alertValue" type="number" placeholder="Value" />
+    <div class="section watch-section collapsed" id="alertsSection">
+      <div class="watch-title">
+        <h3>Alerts</h3>
+        <button class="watch-toggle" id="alertsToggleBtn" onclick="toggleAlertsPanel()" aria-expanded="false">ดู</button>
       </div>
-      <input id="alertEmail" type="email" placeholder="📧 อีเมลรับแจ้งเตือน (optional)"
-             style="width:100%; margin-top:6px; font-size:13px;" />
-      <button style="width:100%; margin-top:8px;" onclick="addAlert()">Add alert</button>
-      <div id="alertList" style="margin-top:8px;"></div>
-      <h3 style="margin-top:14px;">Triggered</h3>
-      <div id="triggeredList" class="note">None</div>
+      <div class="watch-body" id="alertsBody">
+        <div class="grid2">
+          <select id="alertKind">
+            <option value="price_above">Price >=</option>
+            <option value="price_below">Price <=</option>
+            <option value="rsi_above">RSI >=</option>
+            <option value="rsi_below">RSI <=</option>
+          </select>
+          <input id="alertValue" type="number" placeholder="Value" />
+        </div>
+        <input id="alertEmail" type="email" placeholder="📧 อีเมลรับแจ้งเตือน (optional)"
+               style="width:100%; margin-top:6px; font-size:13px;" />
+        <button style="width:100%; margin-top:8px;" onclick="addAlert()">Add alert</button>
+        <div id="alertList" style="margin-top:8px;"></div>
+        <h3 style="margin-top:14px;">Triggered</h3>
+        <div id="triggeredList" class="note">None</div>
+      </div>
     </div>
 
   </aside>
@@ -1372,6 +1389,7 @@ let trendLines = [];
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618];
 let watchlist = JSON.parse(localStorage.getItem("watchlist") || '["AAPL","NVDA","PTT.BK","BTC-USD","GC=F"]');
 let watchlistCollapsed = localStorage.getItem("watchlistCollapsed") !== "false";
+let alertsCollapsed = localStorage.getItem("alertsCollapsed") !== "false";
 let searchTimer = null;
 let searchRows = [];
 let searchIndex = -1;
@@ -2228,6 +2246,7 @@ async function init() {
   preventImplicitButtonSubmit();
   dockDetailPanels();
   applyWatchlistPanelState();
+  applyAlertsPanelState();
   const h = await fetch(API + "/api/health").then(r => r.json());
   $("providerBadge").textContent = "provider: " + h.data_provider;
   $("aiBadge").textContent = "AI: " + (h.ai_enabled ? `${h.ai_provider} (${h.model})` : "rule-based");
@@ -3519,16 +3538,26 @@ function renderRevenueModel(d) {
 }
 
 // ---------- S&P 500 revenue-vs-price scanner ----------
+function setRsCapPreset(minB, maxB) {
+  $("rsMinCap").value = minB == null ? "" : minB;
+  $("rsMaxCap").value = maxB == null ? "" : maxB;
+  runRevenueScan();
+}
+
 async function runRevenueScan(refresh) {
   const box = $("rsResult");
   const maxGap = parseFloat($("rsMaxGap").value) || -15;
   const limit = parseInt($("rsLimit").value, 10) || 40;
+  const minCapB = parseFloat($("rsMinCap").value);
+  const maxCapB = parseFloat($("rsMaxCap").value);
   $("rsStatus").innerHTML = refresh
     ? `<div class="note">🔄 กำลังสแกนสดใหม่ทั้ง S&P 500 (500 บริษัท) — อาจใช้เวลาหลายนาที กรุณารอ...</div>`
     : `<div class="note">กำลังโหลดผลสแกน...</div>`;
   try {
     const params = new URLSearchParams({ max_gap_pct:maxGap, limit });
     if (refresh) params.set("refresh", "true");
+    if (!isNaN(minCapB)) params.set("min_market_cap", String(minCapB * 1e9));
+    if (!isNaN(maxCapB)) params.set("max_market_cap", String(maxCapB * 1e9));
     const res = await fetch(`${API}/api/revenue-scan/sp500?${params.toString()}`);
     if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
     renderRevenueScan(await res.json());
@@ -3563,17 +3592,30 @@ function openSymbolInRevenueModel(symbol) {
   $("tabRevenuescan")?.classList.remove("active");
 }
 
+function fmtMarketCap(v) {
+  if (v == null) return "—";
+  if (v >= 1e12) return "$" + (v / 1e12).toFixed(2) + "T";
+  if (v >= 1e9) return "$" + (v / 1e9).toFixed(1) + "B";
+  if (v >= 1e6) return "$" + (v / 1e6).toFixed(0) + "M";
+  return "$" + v.toFixed(0);
+}
+
 function renderRevenueScan(d) {
   const E = escapeHtml;
   const cands = d.candidates || [];
   const staleNote = d.stale ? `<span class="down">⚠️ ผลสแกนนี้เก่ากว่า 24 ชม. — กด "สแกนสดใหม่" เพื่ออัปเดต (รันในเครื่องเท่านั้น)</span>` : "";
-  let html = `<div class="note">สแกนล่าสุด: <b>${E(d.as_of_label || "-")}</b> · สำเร็จ ${d.success_count}/${d.universe_count} บริษัท · เข้าเกณฑ์ ${d.candidate_count} บริษัท ${staleNote}</div>`;
+  const capCriteria = d.criteria || {};
+  const capNote = (capCriteria.min_market_cap != null || capCriteria.max_market_cap != null)
+    ? ` · กรอง market cap: ${capCriteria.min_market_cap != null ? fmtMarketCap(capCriteria.min_market_cap) : "ไม่จำกัด"} – ${capCriteria.max_market_cap != null ? fmtMarketCap(capCriteria.max_market_cap) : "ไม่จำกัด"}`
+    : "";
+  let html = `<div class="note">สแกนล่าสุด: <b>${E(d.as_of_label || "-")}</b> · สำเร็จ ${d.success_count}/${d.universe_count} บริษัท · เข้าเกณฑ์ ${d.candidate_count} บริษัท${E(capNote)} ${staleNote}</div>`;
   if (!cands.length) {
-    html += `<div class="note" style="margin-top:8px;">ไม่มีหุ้นเข้าเกณฑ์ตอนนี้ — ลองปรับ % ให้เข้มงวดน้อยลง (เช่น -10 แทน -15)</div>`;
+    html += `<div class="note" style="margin-top:8px;">ไม่มีหุ้นเข้าเกณฑ์ตอนนี้ — ลองปรับ % ให้เข้มงวดน้อยลง (เช่น -10 แทน -15) หรือขยายกรอบ market cap</div>`;
   } else {
     const rows = cands.map(c => `<tr style="cursor:pointer;" onclick="openSymbolInRevenueModel('${E(c.symbol)}')">`
       + `<td style="padding:5px 8px;"><b>${E(c.symbol)}</b><div class="tiny" style="color:#7d8b99;">${E(c.name)}</div></td>`
       + `<td style="padding:5px 8px; color:#7d8b99; font-size:12px;">${E(c.sector || "")}</td>`
+      + `<td style="padding:5px 8px; text-align:right;">${fmtMarketCap(c.market_cap)}</td>`
       + `<td style="padding:5px 8px; text-align:right;">$${c.price_now}</td>`
       + `<td style="padding:5px 8px; text-align:right;">$${c.fair_price}</td>`
       + `<td style="padding:5px 8px; text-align:right;" class="up">${c.gap_pct}%</td>`
@@ -3582,6 +3624,7 @@ function renderRevenueScan(d) {
     html += `<table class="biz-rev" style="width:100%; margin-top:8px;">`
       + `<thead><tr style="color:#9fb0c0; font-size:12px;">`
       + `<th style="text-align:left; padding:4px 8px;">หุ้น</th><th style="text-align:left; padding:4px 8px;">Sector</th>`
+      + `<th style="text-align:right; padding:4px 8px;">Market cap</th>`
       + `<th style="text-align:right; padding:4px 8px;">ราคาจริง</th><th style="text-align:right; padding:4px 8px;">ราคาตามรายได้</th>`
       + `<th style="text-align:right; padding:4px 8px;">Gap %</th><th style="text-align:right; padding:4px 8px;">YoY ล่าสุด</th>`
       + `</tr></thead><tbody>${rows}</tbody></table>`
@@ -4381,6 +4424,21 @@ function toggleWatchlistPanel() {
   watchlistCollapsed = !watchlistCollapsed;
   localStorage.setItem("watchlistCollapsed", String(watchlistCollapsed));
   applyWatchlistPanelState();
+}
+
+function applyAlertsPanelState() {
+  const section = $("alertsSection");
+  const btn = $("alertsToggleBtn");
+  if (!section || !btn) return;
+  section.classList.toggle("collapsed", alertsCollapsed);
+  btn.textContent = alertsCollapsed ? "ดู" : "ซ่อน";
+  btn.setAttribute("aria-expanded", String(!alertsCollapsed));
+}
+
+function toggleAlertsPanel() {
+  alertsCollapsed = !alertsCollapsed;
+  localStorage.setItem("alertsCollapsed", String(alertsCollapsed));
+  applyAlertsPanelState();
 }
 
 function addWatchSymbol() {

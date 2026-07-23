@@ -661,11 +661,18 @@ async def revenue_scan_sp500_route(
     max_gap_pct: float = Query(-15.0, description="แสดงเฉพาะหุ้นที่ราคาต่ำกว่าราคาตามรายได้อย่างน้อยกี่ % (ค่าติดลบ)"),
     limit: int = Query(40, ge=1, le=200),
     refresh: bool = Query(False, description="True = สแกนสดใหม่ทั้ง S&P 500 (ใช้เวลาหลายนาที เหมาะกับรันในเครื่องเท่านั้น)"),
+    min_market_cap: float | None = Query(None, ge=0, description="กรอง market cap ขั้นต่ำ (USD)"),
+    max_market_cap: float | None = Query(None, ge=0, description="กรอง market cap สูงสุด (USD)"),
 ):
     """สแกน S&P 500 หาหุ้นที่ราคาต่ำกว่า 'ราคาตามรายได้' (ตรรกะเดียวกับเส้นม่วงประในแท็บโมเดลรายได้).
     ผลสแกนแคชไว้ในไฟล์ (data_sp500_revenue_scan.json) — เว็ปอ่านแคชทันที ไม่ต้องสแกนสดบนคลาวด์."""
+    if min_market_cap is not None and max_market_cap is not None and max_market_cap <= min_market_cap:
+        raise HTTPException(400, "max_market_cap ต้องมากกว่า min_market_cap")
     try:
-        return await revenue_scanner.scan_sp500_revenue_gap(max_gap_pct=max_gap_pct, limit=limit, refresh=refresh)
+        return await revenue_scanner.scan_sp500_revenue_gap(
+            max_gap_pct=max_gap_pct, limit=limit, refresh=refresh,
+            min_market_cap=min_market_cap, max_market_cap=max_market_cap,
+        )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"สแกน S&P 500 ไม่สำเร็จ: {exc}")
 

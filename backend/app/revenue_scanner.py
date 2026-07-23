@@ -171,9 +171,48 @@ def _save_cache(payload: dict) -> None:
     _SCAN_CACHE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
-def _format_result(cached: dict, max_gap_pct: float, limit: int) -> dict:
+async def _market_cap_lookup() -> dict[str, float]:
+    """symbol -> market cap (USD) จาก Nasdaq screener (ครอบคลุมหุ้น US ทุกตลาด ไม่ใช่แค่ Nasdaq)
+    ใช้แคช 30 นาทีเดียวกับ multibagger_scanner กันยิง API ซ้ำ."""
+    from app.multibagger_scanner import fetch_nasdaq_universe
+
+    try:
+        rows = await fetch_nasdaq_universe()
+    except Exception:  # noqa: BLE001
+        return {}
+    out: dict[str, float] = {}
+    for row in rows:
+        sym = str(row.get("symbol") or "").strip().upper()
+        cap_raw = row.get("marketCap")
+        if not sym or cap_raw in (None, ""):
+            continue
+        try:
+            cap = float(str(cap_raw).replace("$", "").replace(",", ""))
+        except (TypeError, ValueError):
+            continue
+        if cap > 0:
+            out[sym] = cap
+    return out
+
+
+async def _format_result(
+    cached: dict, max_gap_pct: float, limit: int,
+    min_market_cap: float | None = None, max_market_cap: float | None = None,
+) -> dict:
     candidates = [r for r in cached["results"] if r["gap_pct"] <= max_gap_pct]
     candidates.sort(key=lambda r: r["gap_pct"])
+
+    cap_map = await _market_cap_lookup()
+    enriched = []
+    for r in candidates:
+        cap = cap_map.get(r["symbol"])
+        if min_market_cap is not None and (cap is None or cap < min_market_cap):
+            continue  # ไม่มี market cap ให้เทียบ หรือเล็กกว่ากรอบที่ตั้ง กรองทิ้งเมื่อผู้ใช้ตั้งขั้นต่ำ
+        if max_market_cap is not None and (cap is None or cap > max_market_cap):
+            continue
+        enriched.append({**r, "market_cap": cap})
+    candidates = enriched
+
     as_of = cached["as_of"]
     return {
         "as_of": as_of,
@@ -181,7 +220,10 @@ def _format_result(cached: dict, max_gap_pct: float, limit: int) -> dict:
         "stale": (time.time() - as_of) > _SCAN_TTL,
         "universe_count": cached["universe_count"],
         "success_count": cached["success_count"],
-        "criteria": {"max_gap_pct": max_gap_pct, "limit": limit},
+        "criteria": {
+            "max_gap_pct": max_gap_pct, "limit": limit,
+            "min_market_cap": min_market_cap, "max_market_cap": max_market_cap,
+        },
         "candidates": candidates[:limit],
         "candidate_count": len(candidates),
         "methodology": (
@@ -204,9 +246,10 @@ def _format_result(cached: dict, max_gap_pct: float, limit: int) -> dict:
 async def scan_sp500_revenue_gap(
     *, max_gap_pct: float = -15.0, limit: int = 40, lookback_quarters: int = 8,
     concurrency: int = 8, refresh: bool = False,
+    min_market_cap: float | None = None, max_market_cap: float | None = None,
 ) -> dict:
     cached = None if refresh else _load_cache()
     if cached is None:
         cached = await _run_full_scan(lookback_quarters, concurrency)
         _save_cache(cached)
-    return _format_result(cached, max_gap_pct, limit)
+    return await _format_result(cached, max_gap_pct, limit, min_market_cap, max_market_cap)
