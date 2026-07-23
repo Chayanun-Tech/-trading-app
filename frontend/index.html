@@ -880,22 +880,24 @@
         <div></div><div></div>
         <div class="field" style="align-self:end;"><button onclick="runRevenueModel(true)" title="ดึงงบสดจาก SEC ใหม่ทับ cache">🔄 ใหม่</button></div>
       </div>
-      <div class="note" style="margin-top:6px;">กราฟราคาปกติ ซูม/เลื่อนดูย้อนหลังได้ด้วยเมาส์ · กราฟด้านล่าง = อัตราเติบโตรายได้ (เขียว/แดง, แกนขวา) เทียบกำไรสุทธิ (ม่วง, แกนซ้าย) แบบปีต่อปี (YoY) คนละแกนกัน ไม่บีบกัน — เลื่อนเมาส์บนแท่งเพื่อดูตัวเลขไตรมาสนั้น · กราฟถัดไป = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) · แท่ง<span style="color:#e2b93b;">สีเหลือง</span>+ป้าย <b>*</b> = ไตรมาสล่าสุดที่บริษัทเพิ่งประกาศแต่ SEC ยังไม่ยืนยัน (ดึงสดจาก Yahoo ทุกครั้ง ไม่ cache) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
+      <div class="note" style="margin-top:6px;">กราฟราคาปกติ ซูม/เลื่อนดูย้อนหลังได้ด้วยเมาส์ · กราฟด้านล่าง = อัตราเติบโตรายได้ (เขียว/แดง, แกนขวา) เทียบกำไรสุทธิ (ม่วง, แกนซ้าย) และกระแสเงินสดจากการดำเนินงาน (<span style="color:#4fd1c5;">ฟ้า เส้น</span>, แกนซ้าย) แบบปีต่อปี (YoY) คนละแกนกัน ไม่บีบกัน — เลื่อนเมาส์บนแท่งเพื่อดูตัวเลขไตรมาสนั้น · กราฟถัดไป = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) · แท่ง<span style="color:#e2b93b;">สีเหลือง</span>+ป้าย <b>*</b> = ไตรมาสล่าสุดที่บริษัทเพิ่งประกาศแต่ SEC ยังไม่ยืนยัน (ดึงสดจาก Yahoo ทุกครั้ง ไม่ cache) · <span class="tiny" style="color:#7d8b99;">เส้นกระแสเงินสดอาจมีจุดข้อมูลน้อยกว่ารายได้/กำไร เพราะหลายบริษัทยื่น SEC แบบสะสมทั้งปี (YTD) ไม่ใช่รายไตรมาสเดี่ยว ๆ ในไตรมาส 2-3</span> — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
       <div class="note tiny" style="margin-top:2px; color:#7d8b99;">ลากมุมขวาล่างของแต่ละกรอบกราฟเพื่อปรับความสูงเองได้</div>
       <div class="chart-wrap rm-chart-wrap rm-resizable" style="margin-top:6px; position:relative;">
         <div id="rmChart" style="width:100%; height:100%;"></div>
       </div>
       <div class="subchart rm-growth-chart rm-resizable" style="margin-top:10px; position:relative;">
-        <div class="sub-title">รายได้ YoY (เขียว/แดง, แกนขวา) vs กำไรสุทธิ YoY (ม่วง, แกนซ้าย) รายไตรมาส</div>
+        <div class="sub-title">รายได้ YoY (เขียว/แดง, แกนขวา) vs กำไรสุทธิ YoY (ม่วง, แกนซ้าย) vs กระแสเงินสดจากการดำเนินงาน YoY (ฟ้า เส้น, แกนซ้ายเดียวกับกำไร) รายไตรมาส</div>
         <div id="rmGrowthChart" style="width:100%; height:100%;"></div>
         <div id="rmGrowthTooltip" class="rm-tooltip hidden"></div>
       </div>
       <div id="rmGapNote" class="note" style="margin-top:8px;"></div>
       <div id="rmFairNote" class="note" style="margin-top:4px;"></div>
+      <div id="rmFcfFairNote" class="note" style="margin-top:4px;"></div>
       <div class="subcharts">
         <div class="subchart rm-subchart rm-resizable"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ TTM (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
         <div class="subchart rm-subchart rm-resizable"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
+        <div class="subchart rm-subchart rm-resizable"><div class="sub-title">P/FCF Ratio (ราคา ÷ Free Cash Flow ต่อหุ้น, อัปเดตปีละครั้งตาม 10-K) — สไตล์ที่บัฟเฟตต์ให้น้ำหนักมากกว่า P/E เพราะยึด "เงินสดที่ถอนออกมาได้จริง" ไม่ใช่กำไรทางบัญชี</div><div id="rmPfcfChart" style="width:100%; height:100%;"></div></div>
       </div>
     </div>
 
@@ -3317,10 +3319,11 @@ function renderAnalyst(d) {
 // resize/setData, ป้ายทับกันเวลาซูมเปลี่ยน) เปลี่ยนมาใช้ series แบบ native ของ Lightweight Charts
 // (histogram + line) ในพาเนลแยกต่างหากแทน — ไลบรารีจัดตำแหน่ง/สเกล/zoom/pan ให้เองอัตโนมัติ ไม่ต้อง
 // คำนวณพิกัดเอง ไม่มีปัญหา sync อีก ป้ายกำกับใช้ tooltip ตอน hover แทน (โชว์ทีละไตรมาสเดียว ไม่ทับกัน)
-let rmChart = null, rmCandleSeries = null, rmFairSeries = null, rmPeChart = null, rmPeSeries = null, rmPeLine = null;
+let rmChart = null, rmCandleSeries = null, rmFairSeries = null, rmFcfFairSeries = null, rmPeChart = null, rmPeSeries = null, rmPeLine = null;
+let rmPfcfChart = null, rmPfcfSeries = null, rmPfcfLine = null;
 let rmCompareChart = null, rmPriceIdxSeries = null, rmRevIdxSeries = null;
 let rmGrowthChart = null, rmRevGrowthSeries = null, rmProfitGrowthSeries = null;
-let rmRevTrendSeries = null, rmProfitTrendSeries = null;
+let rmRevTrendSeries = null, rmProfitTrendSeries = null, rmOcfTrendSeries = null;
 let rmData = null, rmResizeObserver = null;
 
 const rmTickFmt = new Intl.DateTimeFormat("en-GB", { timeZone:CHART_TIME_ZONE, day:"2-digit", month:"short", year:"2-digit" });
@@ -3345,8 +3348,14 @@ function ensureRmCharts() {
   rmFairSeries = rmChart.addLineSeries({
     color:"#c77dff", lineWidth:2, lineStyle:2, title:"ราคาตามรายได้ TTM (ถ้าราคาวิ่งตามรายได้ล้วน ๆ)",
   });
+  rmFcfFairSeries = rmChart.addLineSeries({
+    color:"#2dd4bf", lineWidth:2, lineStyle:2, title:"ราคาตาม Free Cash Flow รายปี (ถ้าราคาวิ่งตามเงินสดล้วน ๆ)",
+  });
   rmPeChart = LightweightCharts.createChart($("rmPeChart"), { ...base, timeScale:tsOptions, width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
   rmPeSeries = rmPeChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"P/E" });
+
+  rmPfcfChart = LightweightCharts.createChart($("rmPfcfChart"), { ...base, timeScale:tsOptions, width:$("rmPfcfChart").clientWidth, height:$("rmPfcfChart").clientHeight });
+  rmPfcfSeries = rmPfcfChart.addLineSeries({ color:"#2dd4bf", lineWidth:2, title:"P/FCF" });
 
   rmCompareChart = LightweightCharts.createChart($("rmCompareChart"), { ...base, timeScale:tsOptions, width:$("rmCompareChart").clientWidth, height:$("rmCompareChart").clientHeight });
   rmPriceIdxSeries = rmCompareChart.addLineSeries({ color:"#4a9eff", lineWidth:2, title:"ราคา (=100)" });
@@ -3372,11 +3381,16 @@ function ensureRmCharts() {
   rmProfitTrendSeries = rmGrowthChart.addLineSeries({
     priceScaleId:"left", color:"#c98cf0", lineWidth:1, lastValueVisible:false, priceLineVisible:false, crosshairMarkerVisible:false,
   });
+  // OCF YoY เป็นเส้นเท่านั้น (ไม่ใช่แท่ง) เพราะแชร์แกนซ้ายเดียวกับกำไร — ถ้าทำเป็นแท่งอีกชุดจะทับแท่งกำไรจนอ่านไม่ออก
+  rmOcfTrendSeries = rmGrowthChart.addLineSeries({
+    priceScaleId:"left", color:"#4fd1c5", lineWidth:2, lastValueVisible:false, priceLineVisible:false, title:"กระแสเงินสด YoY",
+  });
   rmGrowthChart.subscribeCrosshairMove(onRmGrowthCrosshairMove);
 
   rmResizeObserver = new ResizeObserver(() => { resizeRmCharts(); refitRmCharts(); });
   rmResizeObserver.observe($("rmChart"));
   rmResizeObserver.observe($("rmPeChart"));
+  rmResizeObserver.observe($("rmPfcfChart"));
   rmResizeObserver.observe($("rmCompareChart"));
   rmResizeObserver.observe($("rmGrowthChart"));
 }
@@ -3396,7 +3410,8 @@ function onRmGrowthCrosshairMove(param) {
   const fmt = (v) => v == null ? "-" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
   tip.innerHTML = `<b>${escapeHtml(best.label)}</b><br>`
     + `รายได้ YoY: <b style="color:${(best.yoy_pct || 0) >= 0 ? '#5fd39a' : '#ff8c8c'}">${fmt(best.yoy_pct)}</b><br>`
-    + `กำไร YoY: <b style="color:#c98cf0">${fmt(best.profit_yoy_pct)}</b>`
+    + `กำไร YoY: <b style="color:#c98cf0">${fmt(best.profit_yoy_pct)}</b><br>`
+    + `กระแสเงินสด YoY: <b style="color:#4fd1c5">${fmt(best.ocf_yoy_pct)}</b>`
     + (best.preliminary ? `<br><span class="tiny" style="color:#e2b93b;">⚡ เบื้องต้นจาก Yahoo ยังไม่ยืนยันจาก SEC</span>` : "");
   tip.classList.remove("hidden");
 }
@@ -3405,6 +3420,7 @@ function refitRmCharts() {
   if (!rmData) return;
   fitAllBars(rmChart, (rmData.price_candles || []).length);
   fitAllBars(rmPeChart, (rmData.pe_series || []).length);
+  fitAllBars(rmPfcfChart, (rmData.pfcf_series || []).length);
   fitAllBars(rmCompareChart, (rmData.price_candles || []).length);
   fitAllBars(rmGrowthChart, (rmData.quarters || []).length);
 }
@@ -3412,6 +3428,7 @@ function refitRmCharts() {
 function resizeRmCharts() {
   if (rmChart) rmChart.resize($("rmChart").clientWidth, $("rmChart").clientHeight);
   if (rmPeChart) rmPeChart.resize($("rmPeChart").clientWidth, $("rmPeChart").clientHeight);
+  if (rmPfcfChart) rmPfcfChart.resize($("rmPfcfChart").clientWidth, $("rmPfcfChart").clientHeight);
   if (rmCompareChart) rmCompareChart.resize($("rmCompareChart").clientWidth, $("rmCompareChart").clientHeight);
   if (rmGrowthChart) rmGrowthChart.resize($("rmGrowthChart").clientWidth, $("rmGrowthChart").clientHeight);
 }
@@ -3458,6 +3475,15 @@ function renderRevenueModel(d) {
       axisLabelVisible:true, title:d.pe_reference.label,
     });
   }
+  const pfcf = d.pfcf_series || [];
+  rmPfcfSeries.setData(pfcf.map(p => ({ time:p.time, value:p.pfcf })));
+  if (rmPfcfLine) { rmPfcfSeries.removePriceLine(rmPfcfLine); rmPfcfLine = null; }
+  if (d.pfcf_reference) {
+    rmPfcfLine = rmPfcfSeries.createPriceLine({
+      price:d.pfcf_reference.median, color:"#7fa8d0", lineWidth:1, lineStyle:2,
+      axisLabelVisible:true, title:d.pfcf_reference.label,
+    });
+  }
   // เทียบ "ราคา" กับ "รายได้" โดยปรับฐานทั้งคู่ = 100 ที่จุดเริ่มต้นเดียวกัน (จุดแรกที่มีทั้งราคาและรายได้)
   // เพื่อดูว่าช่วงไหนราคาวิ่งนำ (เสี่ยงแพงกว่าปัจจัยพื้นฐาน) หรือตามหลังรายได้ (โอกาส deep value)
   const quarters = d.quarters || [];
@@ -3472,10 +3498,14 @@ function renderRevenueModel(d) {
     time:Date.parse(q.period + "T00:00:00Z") / 1000, value:q.profit_yoy_pct * 100,
     color:q.preliminary ? "rgba(226,185,59,0.55)" : "rgba(168,110,230,0.55)",
   }));
+  const ocfGrowthData = quarters.filter(q => q.ocf_yoy_pct != null).map(q => ({
+    time:Date.parse(q.period + "T00:00:00Z") / 1000, value:q.ocf_yoy_pct * 100,
+  }));
   rmRevGrowthSeries.setData(revGrowthData);
   rmProfitGrowthSeries.setData(profitGrowthData);
   rmRevTrendSeries.setData(revGrowthData.map(p => ({ time:p.time, value:p.value })));
   rmProfitTrendSeries.setData(profitGrowthData.map(p => ({ time:p.time, value:p.value })));
+  rmOcfTrendSeries.setData(ocfGrowthData);
 
   // ใช้รายได้ TTM (ผลรวม 4 ไตรมาสล่าสุด) แทนรายได้รายไตรมาสดิบ — หลายธุรกิจมีไตรมาสที่ขึ้นๆ ลงๆ
   // ตามฤดูกาล/ออเดอร์ก้อนใหญ่ (เช่น ไตรมาสปลายปีที่ลูกค้าองค์กรเร่งซื้อ) ถ้าใช้รายได้ดิบตรงๆ
@@ -3521,10 +3551,41 @@ function renderRevenueModel(d) {
     } else {
       $("rmFairNote").innerHTML = "";
     }
+    // เส้น "ราคาตาม Free Cash Flow" (OCF - CapEx) — เหมือนเส้นรายได้ด้านบนทุกประการ (ปรับสัดส่วนจากฐาน)
+    // แต่ใช้ FCF รายปี (10-K) แทนรายได้รายไตรมาส เพราะข้อมูลกระแสเงินสดรายไตรมาสไม่ครบ (อธิบายไว้ใต้กราฟเติบโต)
+    // จึงอัปเดตเป็นขั้นบันไดปีละครั้งแทนที่จะไล่ราบทุกไตรมาสแบบเส้นรายได้ — เป็นภาพที่ใกล้ "owner earnings"
+    // ของบัฟเฟตต์มากกว่า P/S เพราะยึดเงินสดที่ถอนออกมาได้จริง ไม่ใช่ยอดขายหรือกำไรทางบัญชี
+    const fcfAnnual = d.fcf_annual || [];
+    if (candles.length && fcfAnnual.length) {
+      const fcfStartTime = Math.max(candles[0].time, Date.parse(fcfAnnual[0].period + "T00:00:00Z") / 1000);
+      const fcfPriceBase = candles.find(c => c.time >= fcfStartTime) || candles[0];
+      const fcfBase = fcfAnnual.find(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= fcfStartTime) || fcfAnnual[0];
+      const fcfQuarters = fcfAnnual.filter(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= fcfPriceBase.time);
+      if (fcfBase.fcf > 0 && fcfQuarters.length) {
+        const fcfFairSeries = fcfQuarters.map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:fcfPriceBase.close * (q.fcf / fcfBase.fcf) }));
+        rmFcfFairSeries.setData(fcfFairSeries);
+        const fcfFairNow = fcfFairSeries[fcfFairSeries.length - 1].value;
+        const priceNow = candles[candles.length - 1].close;
+        const diffPct2 = ((priceNow - fcfFairNow) / fcfFairNow) * 100;
+        const cls3 = diffPct2 > 0 ? "down" : "up";
+        $("rmFcfFairNote").innerHTML = `เส้นเขียวอมฟ้าประ = "ราคาตาม Free Cash Flow" (OCF − CapEx รายปี, อัปเดตปีละครั้งตาม 10-K) — ถ้าราคาโตตาม FCF ล้วน ๆ นับจากปีงบ ${escapeHtml(String(fcfBase.fy))} `
+          + `(ราคา $${fcfPriceBase.close.toFixed(2)}) ราคาตอนนี้ควรอยู่ที่ <b>$${fcfFairNow.toFixed(2)}</b> `
+          + `แต่ราคาจริงคือ <b>$${priceNow.toFixed(2)}</b> → <span class="${cls3}">${diffPct2 >= 0 ? "แพงกว่า" : "ถูกกว่า"}แนวโน้ม FCF ${Math.abs(diffPct2).toFixed(0)}%</span>`
+          + ` <span class="tiny" style="color:#7d8b99;">(ยึด "เงินสดที่ถอนออกมาได้จริง" ใกล้แนว owner earnings ของบัฟเฟตต์มากกว่า P/S แต่โตแบบขั้นบันไดปีต่อปี ไม่เรียบเท่าเส้นรายได้ เพราะข้อมูลกระแสเงินสดมีแค่ปีละครั้ง)</span>`;
+      } else {
+        rmFcfFairSeries.setData([]);
+        $("rmFcfFairNote").innerHTML = `<span class="tiny" style="color:#7d8b99;">คำนวณเส้น "ราคาตาม FCF" ไม่ได้ — ปีฐานมี Free Cash Flow ติดลบหรือไม่พอ ทำให้ปรับสัดส่วนราคาไม่ได้</span>`;
+      }
+    } else {
+      rmFcfFairSeries.setData([]);
+      $("rmFcfFairNote").innerHTML = "";
+    }
   } else {
     rmPriceIdxSeries.setData([]);
     rmRevIdxSeries.setData([]);
     rmFairSeries.setData([]);
+    rmFcfFairSeries.setData([]);
+    $("rmFcfFairNote").innerHTML = "";
     $("rmGapNote").innerHTML = "";
     $("rmFairNote").innerHTML = "";
   }

@@ -15,11 +15,13 @@ import asyncio
 from datetime import datetime, timezone
 
 from app import edgar
-from app.financials import _entries, _days, _INCOME, _EPS
+from app.financials import _entries, _days, _INCOME, _CASHFLOW, _EPS, _SHARES
 from app.fundamentals import is_equity_symbol
 
 _REVENUE_CONCEPTS = next(c[2] for c in _INCOME if c[0] == "revenue")
 _NET_INCOME_CONCEPTS = next(c[2] for c in _INCOME if c[0] == "net_income")
+_OCF_CONCEPTS = next(c[2] for c in _CASHFLOW if c[0] == "operating_cash_flow")
+_CAPEX_CONCEPTS = next(c[2] for c in _CASHFLOW if c[0] == "capex")
 _ALL_FP = {"Q1", "Q2", "Q3", "Q4"}
 
 # จำนวนแท่งราคาโดยประมาณต่อ 1 ไตรมาส แยกตามความละเอียด — ใช้ตัดช่วงราคา/P/E ให้พอดีกับไตรมาสที่แสดง
@@ -289,6 +291,26 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         _quarterly_with_fp(facts, _NET_INCOME_CONCEPTS, "USD"),
         _annual_with_end(facts, _NET_INCOME_CONCEPTS, "USD"),
     )
+    raw_ocf_meta = _synthesize_missing_quarter(
+        _quarterly_with_fp(facts, _OCF_CONCEPTS, "USD"),
+        _annual_with_end(facts, _OCF_CONCEPTS, "USD"),
+    )
+
+    # กระแสเงินสดอิสระ (Free Cash Flow = OCF - CapEx) แบบรายปี (10-K) เท่านั้น — ไม่ใช้รายไตรมาสแบบ
+    # รายได้/กำไร เพราะหลายบริษัทยื่น XBRL ของกระแสเงินสดแบบ "สะสมตั้งแต่ต้นปีงบ" (YTD) ในไตรมาส 2-3
+    # ไม่ใช่ยอดเฉพาะไตรมาสนั้น ทำให้ดึงเป็นรายไตรมาสตรง ๆ ไม่ได้แม่นยำ ส่วนรายปีมีครบทุกบริษัทเสมอ (10-K)
+    ann_ocf = _annual_with_end(facts, _OCF_CONCEPTS, "USD")
+    ann_capex = _annual_with_end(facts, _CAPEX_CONCEPTS, "USD")
+    ann_shares = _annual_with_end(facts, _SHARES, "shares")
+    fcf_annual = []
+    for fy in sorted(set(ann_ocf) & set(ann_capex)):
+        fcf_val = ann_ocf[fy]["val"] - ann_capex[fy]["val"]
+        shares_val = ann_shares.get(fy, {}).get("val")
+        fcf_annual.append({
+            "period": ann_ocf[fy]["end"], "fy": fy, "fcf": fcf_val,
+            "fcf_per_share": (fcf_val / shares_val) if shares_val else None,
+        })
+
     dates = sorted(raw_revenue_meta.keys())
     if len(dates) < 5:
         raise ValueError("ข้อมูลรายได้รายไตรมาสจาก SEC ไม่พอสำหรับคำนวณ YoY (ต้องการอย่างน้อย 5 ไตรมาส)")
@@ -296,6 +318,7 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
     # จับคู่ YoY ด้วยไตรมาสบัญชีจริง (fp, fy-1) ไม่ใช่นับถอยหลัง 4 ตำแหน่งในลิสต์
     rev_by_key = _yoy_lookup(raw_revenue_meta)
     ni_by_key = _yoy_lookup(raw_ni_meta)
+    ocf_by_key = _yoy_lookup(raw_ocf_meta)
 
     quarters_full = []
     for d in dates:
@@ -305,6 +328,8 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         yoy = None
         profit_yoy = None
         net_income = None
+        ocf = None
+        ocf_yoy = None
         if k:
             prev = rev_by_key.get((k[0], k[1] - 1))
             if prev:
@@ -313,8 +338,13 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
             ni_prev = ni_by_key.get((k[0], k[1] - 1))
             if net_income is not None and ni_prev:
                 profit_yoy = (net_income - ni_prev) / abs(ni_prev)
+            ocf = ocf_by_key.get(k)
+            ocf_prev = ocf_by_key.get((k[0], k[1] - 1))
+            if ocf is not None and ocf_prev:
+                ocf_yoy = (ocf - ocf_prev) / abs(ocf_prev)
         quarters_full.append({"period": d, "label": _quarter_label(d, meta), "revenue": rev, "yoy_pct": yoy,
-                              "net_income": net_income, "profit_yoy_pct": profit_yoy})
+                              "net_income": net_income, "profit_yoy_pct": profit_yoy,
+                              "ocf": ocf, "ocf_yoy_pct": ocf_yoy})
 
     quarters = [q for q in quarters_full if q["yoy_pct"] is not None][-max_quarters:]
     if not quarters:
@@ -360,6 +390,22 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         median = pe_sorted[len(pe_sorted) // 2]
         pe_reference = {"median": round(median, 1), "label": f"{round(median)}x P/E (median, ~2 ปีล่าสุด)"}
 
+    # P/FCF (ราคา ÷ Free Cash Flow ต่อหุ้น) — ใช้ FCF ต่อหุ้นของปีงบล่าสุดที่ประกาศ "ค้างไว้" จนกว่าจะมี
+    # 10-K ปีถัดไป (อัปเดตปีละครั้งแทนรายไตรมาส เพราะข้อมูลกระแสเงินสดรายไตรมาสไม่ครบตามที่อธิบายด้านบน)
+    pfcf_series = []
+    for w in bars:
+        w_date = datetime.fromtimestamp(w["time"], tz=timezone.utc).date().isoformat()
+        entry = next((e for e in reversed(fcf_annual) if e["period"] <= w_date and e["fcf_per_share"]), None)
+        if entry and entry["fcf_per_share"] > 0:
+            pfcf_series.append({"time": w["time"], "pfcf": round(w["close"] / entry["fcf_per_share"], 2)})
+
+    pfcf_reference = None
+    recent_pfcf = pfcf_series[-(bars_per_q * 8):]  # ~2 ปีล่าสุด
+    if recent_pfcf:
+        pfcf_sorted = sorted(p["pfcf"] for p in recent_pfcf)
+        median_pfcf = pfcf_sorted[len(pfcf_sorted) // 2]
+        pfcf_reference = {"median": round(median_pfcf, 1), "label": f"{round(median_pfcf)}x P/FCF (median, ~2 ปีล่าสุด)"}
+
     window = max(len(quarters) * bars_per_q, 60)
     return {
         "symbol": symbol,
@@ -369,6 +415,9 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         "price_candles": bars[-window:],
         "pe_series": pe_series[-window:],
         "pe_reference": pe_reference,
+        "fcf_annual": fcf_annual,
+        "pfcf_series": pfcf_series[-window:],
+        "pfcf_reference": pfcf_reference,
         "has_preliminary": bool(prelim),
         "disclaimer": "ข้อมูลจาก SEC EDGAR (งบที่ยื่นจริง) + ราคาย้อนหลังจาก provider ปัจจุบัน — "
                       "P/E ช่วงเก่า (หลายปีก่อน) ของหุ้นที่เคย split อาจคลาดเคลื่อนถ้า SEC ไม่มีข้อมูลปรับปรุงย้อนหลังครบ — "
