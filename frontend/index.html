@@ -865,7 +865,11 @@
         <div></div><div></div>
         <div class="field" style="align-self:end;"><button onclick="runRevenueModel(true)" title="ดึงงบสดจาก SEC ใหม่ทับ cache">🔄 ใหม่</button></div>
       </div>
-      <div class="note" style="margin-top:6px;">กล่องเขียว/แดง = อัตราเติบโตรายได้เทียบปีก่อน (YoY) รายไตรมาส · กล่องม่วงโปร่งแสงซ้อนอยู่ในคอลัมน์เดียวกัน = อัตราเติบโตกำไรสุทธิ (Net Income) เทียบปีก่อน — สเกลเดียวกัน เทียบสูง/ต่ำกันได้ตรง ๆ ว่าไตรมาสไหนกำไรโตเร็ว/ช้ากว่ารายได้ จาก SEC EDGAR · เส้นทแยง = แนวโน้มรายได้ · กราฟล่าง = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
+      <div class="note" style="margin-top:6px;">แถบบน (เขียว/แดง) = อัตราเติบโตรายได้เทียบปีก่อน (YoY) รายไตรมาส · แถบล่าง (ม่วง) = อัตราเติบโตกำไรสุทธิ (Net Income) เทียบปีก่อน — คนละสเกลกัน แยกกันชัดเจน จาก SEC EDGAR · เส้นทแยงขาว/ม่วง = แนวโน้มรายได้/กำไร · กราฟล่าง = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
+      <div class="field" style="max-width:320px; margin-top:8px;">
+        <label>ขนาดแถบกล่องเติบโต (ลาก/ปรับเอง): <span id="rmBandSizeLabel">45%</span></label>
+        <input type="range" id="rmBandSize" min="20" max="70" value="45" oninput="onRmBandSizeChange()" style="width:100%;" />
+      </div>
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
       <div class="chart-wrap rm-chart-wrap" style="margin-top:10px; position:relative;">
         <div id="rmChart" class="rm-main-chart"></div>
@@ -3421,6 +3425,21 @@ function renderRevenueModel(d) {
   setTimeout(drawRmOverlay, 60);
 }
 
+function onRmBandSizeChange() {
+  $("rmBandSizeLabel").textContent = $("rmBandSize").value + "%";
+  drawRmOverlay();
+}
+
+// ค่าที่ใช้กำหนดสเกลความสูงของกล่อง = เปอร์เซ็นไทล์ที่ 90 ของ |ค่า| ทั้งหมด แทนที่จะใช้ค่าสูงสุดจริง
+// กันไม่ให้ไตรมาสที่โตพรวดพราดผิดปกติ (เช่น กำไรเด้งจากฐานต่ำมาก) ไปบีบกล่องไตรมาสอื่นให้เตี้ยจนอ่านไม่ออก
+// ไตรมาสที่เกินเปอร์เซ็นไทล์จะโดนตัดความสูงไว้ที่เต็มแถบ แต่ตัวเลข % ที่แสดงยังเป็นค่าจริงเสมอ
+function _p90(values) {
+  const abs = values.map(v => Math.abs(v || 0)).filter(v => v > 0).sort((a, b) => a - b);
+  if (!abs.length) return 0.05;
+  const idx = Math.min(abs.length - 1, Math.floor(0.9 * (abs.length - 1)));
+  return Math.max(abs[idx], 0.05);
+}
+
 function drawRmOverlay() {
   const cv = $("rmOverlay");
   if (!cv || !rmChart || !rmData) return;
@@ -3432,12 +3451,21 @@ function drawRmOverlay() {
 
   const ts = rmChart.timeScale();
   const h = cv.height;
-  const bandTop = h * 0.60, bandBottom = h * 0.94;
-  const maxAbs = Math.max(
-    ...quarters.map(q => Math.abs(q.yoy_pct || 0)),
-    ...quarters.map(q => Math.abs(q.profit_yoy_pct || 0)),
-    0.05,
-  );
+
+  // แถบรวม (label ไตรมาส + แถบรายได้ + แถบกำไร) ขนาดปรับได้ผ่าน slider #rmBandSize (ค่าเริ่มต้น 45%)
+  const bandPct = (parseInt(($("rmBandSize") || {}).value, 10) || 45) / 100;
+  const bandBottom = h * 0.96;
+  const totalBandH = h * bandPct;
+  const bandTop = bandBottom - totalBandH;
+  const labelRowH = 16, gapH = 6;
+  const subBandH = Math.max((totalBandH - labelRowH - gapH) / 2, 20);
+  const revBottom = bandTop + labelRowH + subBandH;
+  const profTop = revBottom + gapH;
+  const profBottom = profTop + subBandH;
+  const revAvail = subBandH - 13, profAvail = subBandH - 13;
+
+  const revMax = _p90(quarters.map(q => q.yoy_pct));
+  const profMax = _p90(quarters.map(q => q.profit_yoy_pct));
 
   const xForPeriod = (period) => {
     const target = Date.parse(period + "T00:00:00Z") / 1000;
@@ -3452,46 +3480,58 @@ function drawRmOverlay() {
 
   ctx.font = "600 10px sans-serif";
   ctx.textAlign = "center";
-  const boxYOf = (growth) => bandBottom - (8 + (bandBottom - bandTop - 8) * Math.min(Math.abs(growth) / maxAbs, 1));
   pts.forEach((p, i) => {
     const prevX = i === 0 ? p.x - (pts[1].x - p.x) : pts[i - 1].x;
     const nextX = i === pts.length - 1 ? p.x + (p.x - pts[i - 1].x) : pts[i + 1].x;
     const xStart = (prevX + p.x) / 2, xEnd = (p.x + nextX) / 2;
-    const growth = p.q.yoy_pct || 0;
-    const y = boxYOf(growth);
-    ctx.fillStyle = growth >= 0 ? "rgba(60,170,110,0.55)" : "rgba(220,90,90,0.55)";
-    ctx.fillRect(xStart + 1, y, Math.max(xEnd - xStart - 2, 2), bandBottom - y);
-
-    // กล่องกำไร (สีม่วงโปร่งแสง) ซ้อนอยู่ในคอลัมน์เดียวกัน แคบกว่าเล็กน้อยให้เห็นทั้งคู่ — ใช้สเกลเดียวกับรายได้
-    // เพื่อเทียบได้ตรงๆ ว่าไตรมาสไหนกำไรโตเร็ว/ช้ากว่ารายได้
-    if (p.q.profit_yoy_pct != null) {
-      const pGrowth = p.q.profit_yoy_pct;
-      const py = boxYOf(pGrowth);
-      const inset = Math.max((xEnd - xStart) * 0.22, 1);
-      ctx.fillStyle = "rgba(168,110,230,0.55)";
-      ctx.fillRect(xStart + inset, py, Math.max(xEnd - xStart - inset * 2, 2), bandBottom - py);
-    }
+    const xMid = (xStart + xEnd) / 2, boxW = Math.max(xEnd - xStart - 2, 2);
 
     ctx.fillStyle = "#dfe6ee";
-    ctx.fillText(p.q.label, (xStart + xEnd) / 2, y - 14);
-    ctx.fillText(`${growth >= 0 ? "+" : ""}${(growth * 100).toFixed(1)}%`, (xStart + xEnd) / 2, y - 3);
+    ctx.fillText(p.q.label, xMid, bandTop + labelRowH - 4);
+
+    // แถบบน: รายได้ (เขียว/แดง)
+    const growth = p.q.yoy_pct || 0;
+    const revH = Math.max(Math.min(Math.abs(growth) / revMax, 1) * revAvail, 2);
+    const revY = revBottom - revH;
+    ctx.fillStyle = growth >= 0 ? "rgba(60,170,110,0.6)" : "rgba(220,90,90,0.6)";
+    ctx.fillRect(xStart + 1, revY, boxW, revH);
+    ctx.fillStyle = "#dfe6ee";
+    ctx.fillText(`${growth >= 0 ? "+" : ""}${(growth * 100).toFixed(1)}%`, xMid, revY - 3);
+    p.revTopY = revY;
+
+    // แถบล่าง: กำไรสุทธิ (ม่วง) — คนละแถบ คนละสเกล ไม่แย่งพื้นที่กับรายได้
+    if (p.q.profit_yoy_pct != null) {
+      const pGrowth = p.q.profit_yoy_pct;
+      const profH = Math.max(Math.min(Math.abs(pGrowth) / profMax, 1) * profAvail, 2);
+      const profY = profBottom - profH;
+      ctx.fillStyle = "rgba(168,110,230,0.6)";
+      ctx.fillRect(xStart + 1, profY, boxW, profH);
+      ctx.fillStyle = "#d5b3f5";
+      ctx.fillText(`${pGrowth >= 0 ? "+" : ""}${(pGrowth * 100).toFixed(1)}%`, xMid, profY - 3);
+      p.profTopY = profY;
+    }
   });
 
-  const first = pts[0], last = pts[pts.length - 1];
-  const y1 = boxYOf(first.q.yoy_pct || 0) - 10, y2 = boxYOf(last.q.yoy_pct || 0) - 10;
-  ctx.strokeStyle = "#dfe6ee";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(first.x, y1);
-  ctx.lineTo(last.x, y2);
-  ctx.stroke();
-  const angle = Math.atan2(y2 - y1, last.x - first.x);
-  ctx.beginPath();
-  ctx.moveTo(last.x, y2);
-  ctx.lineTo(last.x - 8 * Math.cos(angle - 0.4), y2 - 8 * Math.sin(angle - 0.4));
-  ctx.moveTo(last.x, y2);
-  ctx.lineTo(last.x - 8 * Math.cos(angle + 0.4), y2 - 8 * Math.sin(angle + 0.4));
-  ctx.stroke();
+  const drawTrend = (key, color) => {
+    const withVal = pts.filter(p => p[key] != null);
+    if (withVal.length < 2) return;
+    const first = withVal[0], last = withVal[withVal.length - 1];
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(first.x, first[key] - 8);
+    ctx.lineTo(last.x, last[key] - 8);
+    ctx.stroke();
+    const angle = Math.atan2((last[key] - 8) - (first[key] - 8), last.x - first.x);
+    ctx.beginPath();
+    ctx.moveTo(last.x, last[key] - 8);
+    ctx.lineTo(last.x - 8 * Math.cos(angle - 0.4), (last[key] - 8) - 8 * Math.sin(angle - 0.4));
+    ctx.moveTo(last.x, last[key] - 8);
+    ctx.lineTo(last.x - 8 * Math.cos(angle + 0.4), (last[key] - 8) - 8 * Math.sin(angle + 0.4));
+    ctx.stroke();
+  };
+  drawTrend("revTopY", "#dfe6ee");
+  drawTrend("profTopY", "#c98cf0");
 }
 
 // ---------- S&P 500 revenue-vs-price scanner ----------
