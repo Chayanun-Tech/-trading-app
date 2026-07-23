@@ -880,7 +880,7 @@
         <div></div><div></div>
         <div class="field" style="align-self:end;"><button onclick="runRevenueModel(true)" title="ดึงงบสดจาก SEC ใหม่ทับ cache">🔄 ใหม่</button></div>
       </div>
-      <div class="note" style="margin-top:6px;">กราฟราคาปกติ ซูม/เลื่อนดูย้อนหลังได้ด้วยเมาส์ · กราฟด้านล่าง = อัตราเติบโตรายได้ (เขียว/แดง, แกนขวา) เทียบกำไรสุทธิ (ม่วง, แกนซ้าย) แบบปีต่อปี (YoY) คนละแกนกัน ไม่บีบกัน — เลื่อนเมาส์บนแท่งเพื่อดูตัวเลขไตรมาสนั้น · กราฟถัดไป = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
+      <div class="note" style="margin-top:6px;">กราฟราคาปกติ ซูม/เลื่อนดูย้อนหลังได้ด้วยเมาส์ · กราฟด้านล่าง = อัตราเติบโตรายได้ (เขียว/แดง, แกนขวา) เทียบกำไรสุทธิ (ม่วง, แกนซ้าย) แบบปีต่อปี (YoY) คนละแกนกัน ไม่บีบกัน — เลื่อนเมาส์บนแท่งเพื่อดูตัวเลขไตรมาสนั้น · กราฟถัดไป = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) · แท่ง<span style="color:#e2b93b;">สีเหลือง</span>+ป้าย <b>*</b> = ไตรมาสล่าสุดที่บริษัทเพิ่งประกาศแต่ SEC ยังไม่ยืนยัน (ดึงสดจาก Yahoo ทุกครั้ง ไม่ cache) — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
       <div class="note tiny" style="margin-top:2px; color:#7d8b99;">ลากมุมขวาล่างของแต่ละกรอบกราฟเพื่อปรับความสูงเองได้</div>
       <div class="chart-wrap rm-chart-wrap rm-resizable" style="margin-top:6px; position:relative;">
@@ -3377,7 +3377,8 @@ function onRmGrowthCrosshairMove(param) {
   const fmt = (v) => v == null ? "-" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
   tip.innerHTML = `<b>${escapeHtml(best.label)}</b><br>`
     + `รายได้ YoY: <b style="color:${(best.yoy_pct || 0) >= 0 ? '#5fd39a' : '#ff8c8c'}">${fmt(best.yoy_pct)}</b><br>`
-    + `กำไร YoY: <b style="color:#c98cf0">${fmt(best.profit_yoy_pct)}</b>`;
+    + `กำไร YoY: <b style="color:#c98cf0">${fmt(best.profit_yoy_pct)}</b>`
+    + (best.preliminary ? `<br><span class="tiny" style="color:#e2b93b;">⚡ เบื้องต้นจาก Yahoo ยังไม่ยืนยันจาก SEC</span>` : "");
   tip.classList.remove("hidden");
 }
 
@@ -3443,12 +3444,14 @@ function renderRevenueModel(d) {
   const quarters = d.quarters || [];
 
   // รายได้/กำไร YoY รายไตรมาส — native histogram series (คนละแกน) แทน canvas overlay เดิม
+  // ไตรมาส preliminary (จาก Yahoo ยังไม่ยืนยัน SEC) ใช้สีเหลือง/ส้มแยกให้เห็นชัดว่ายังไม่ทางการ
   const revGrowthData = quarters.filter(q => q.yoy_pct != null).map(q => ({
     time:Date.parse(q.period + "T00:00:00Z") / 1000, value:q.yoy_pct * 100,
-    color:q.yoy_pct >= 0 ? "rgba(60,170,110,0.75)" : "rgba(220,90,90,0.75)",
+    color:q.preliminary ? "rgba(226,185,59,0.75)" : (q.yoy_pct >= 0 ? "rgba(60,170,110,0.75)" : "rgba(220,90,90,0.75)"),
   }));
   const profitGrowthData = quarters.filter(q => q.profit_yoy_pct != null).map(q => ({
     time:Date.parse(q.period + "T00:00:00Z") / 1000, value:q.profit_yoy_pct * 100,
+    color:q.preliminary ? "rgba(226,185,59,0.55)" : "rgba(168,110,230,0.55)",
   }));
   rmRevGrowthSeries.setData(revGrowthData);
   rmProfitGrowthSeries.setData(profitGrowthData);

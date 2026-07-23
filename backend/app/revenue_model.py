@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from app import edgar
@@ -147,6 +148,108 @@ def _group_candles(candles: list, key_fn) -> list[dict]:
     return out
 
 
+def _fetch_yahoo_quarterly_sync(symbol: str) -> dict[str, dict]:
+    """ดึงงบไตรมาสล่าสุดจาก Yahoo (yfinance) แบบ sync — เร็วกว่า SEC มาก เพราะ Yahoo มักอัปเดตราย
+    ไตรมาสภายใน 1-2 วันหลังบริษัทประกาศผล (ต่างจาก SEC ที่ต้องรอยื่นเอกสาร 10-Q ทางการ ~1-3 สัปดาห์)
+    แต่เป็นตัวเลข 'เบื้องต้น' ที่บริษัทประกาศเอง ยังไม่ผ่านการยื่นอย่างเป็นทางการ — ใช้เสริมเฉพาะไตรมาส
+    ล่าสุดที่ SEC ยังไม่มี ไม่ใช้แทนข้อมูล SEC ที่เหลือทั้งหมด. ไม่ cache — ต้องเป็นข้อมูลสดที่สุดเสมอ."""
+    import yfinance as yf
+    t = yf.Ticker(symbol)
+    df = t.quarterly_income_stmt
+    if df is None or df.empty:
+        df = t.quarterly_financials
+    if df is None or df.empty:
+        return {}
+
+    def _row(names):
+        for n in names:
+            if n in df.index:
+                return df.loc[n]
+        return None
+
+    rev_row = _row(["Total Revenue", "TotalRevenue", "Operating Revenue"])
+    ni_row = _row(["Net Income", "Net Income Common Stockholders", "NetIncome"])
+    if rev_row is None:
+        return {}
+
+    out: dict[str, dict] = {}
+    for col in df.columns:
+        try:
+            end = col.date().isoformat() if hasattr(col, "date") else str(col)[:10]
+        except Exception:  # noqa: BLE001
+            continue
+        rev_val = rev_row.get(col)
+        if rev_val is None or rev_val != rev_val:  # NaN
+            continue
+        ni_val = ni_row.get(col) if ni_row is not None else None
+        out[end] = {
+            "revenue": float(rev_val),
+            "net_income": float(ni_val) if ni_val is not None and ni_val == ni_val else None,
+        }
+    return out
+
+
+async def _preliminary_quarter(symbol: str, quarters_full: list[dict]) -> dict | None:
+    """หาไตรมาสล่าสุดจาก Yahoo ที่ 'ใหม่กว่า' ไตรมาสล่าสุดที่มีใน SEC แล้ว — ถ้ามี คืนเป็นไตรมาส
+    'เบื้องต้น' (preliminary) เพิ่มเข้ากราฟ ต้องคำนวณ YoY ได้ด้วย (เทียบกับไตรมาสเดียวกันปีก่อนจาก SEC
+    ก่อน แม่นกว่า ถ้าไม่มีค่อย fallback ไปหาในข้อมูล Yahoo เอง) ไม่งั้นโชว์ไปก็เทียบไม่ได้ ไม่มีประโยชน์."""
+    try:
+        yahoo_q = await asyncio.to_thread(_fetch_yahoo_quarterly_sync, symbol)
+    except Exception:  # noqa: BLE001 — yfinance ล่ม/rate-limit ก็ไม่ทำให้ endpoint หลักพังไปด้วย
+        return None
+    if not yahoo_q:
+        return None
+
+    latest_sec = quarters_full[-1]["period"] if quarters_full else ""
+    newest_end = max(yahoo_q.keys())
+    if newest_end <= latest_sec:
+        return None  # SEC มีข้อมูลทันแล้ว ไม่ต้องเสริม
+
+    y = yahoo_q[newest_end]
+    target_dt = datetime.strptime(newest_end, "%Y-%m-%d")
+    try:
+        prior_year_target = target_dt.replace(year=target_dt.year - 1)
+    except ValueError:  # 29 ก.พ.
+        prior_year_target = target_dt.replace(year=target_dt.year - 1, day=28)
+
+    prev_rev = prev_ni = None
+    best_diff = None
+    for qf in quarters_full:
+        try:
+            qd = datetime.strptime(qf["period"], "%Y-%m-%d")
+        except ValueError:
+            continue
+        diff = abs((qd - prior_year_target).days)
+        if diff <= 20 and (best_diff is None or diff < best_diff):
+            best_diff, prev_rev, prev_ni = diff, qf["revenue"], qf.get("net_income")
+    if prev_rev is None:
+        for end, vals in yahoo_q.items():
+            if end == newest_end:
+                continue
+            try:
+                ed = datetime.strptime(end, "%Y-%m-%d")
+            except ValueError:
+                continue
+            if abs((ed - prior_year_target).days) <= 20:
+                prev_rev, prev_ni = vals["revenue"], vals.get("net_income")
+                break
+    if not prev_rev:
+        return None
+
+    yoy = (y["revenue"] - prev_rev) / abs(prev_rev)
+    profit_yoy = None
+    if y.get("net_income") is not None and prev_ni:
+        profit_yoy = (y["net_income"] - prev_ni) / abs(prev_ni)
+
+    return {
+        "period": newest_end,
+        "label": _quarter_label(newest_end, None) + "*",
+        "revenue": y["revenue"], "yoy_pct": yoy,
+        "net_income": y.get("net_income"), "profit_yoy_pct": profit_yoy,
+        "preliminary": True,
+    }
+
+
 def _resample(candles: list, granularity: str) -> list[dict]:
     """รวมแท่งรายวันเป็นความละเอียดที่ต้องการ: daily (แยกแท่งเดิม) / weekly (สัปดาห์ปฏิทิน ISO) / monthly (เดือนปฏิทิน)."""
     if granularity == "daily":
@@ -217,6 +320,12 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
     if not quarters:
         raise ValueError("ยังไม่มีไตรมาสที่คำนวณ YoY ได้ครบ (ต้องมีงบย้อนหลังอย่างน้อย 5 ไตรมาส)")
 
+    # เสริมไตรมาสล่าสุดจาก Yahoo ถ้า SEC ยังไม่มี (บริษัทประกาศผลแล้วแต่ยังไม่ยื่น 10-Q ทางการ) —
+    # ดึงสดทุกครั้ง ไม่ cache เพื่อให้ทันข่าวที่สุด ไม่พลาดโอกาสระหว่างรอ SEC
+    prelim = await _preliminary_quarter(symbol, quarters_full)
+    if prelim:
+        quarters = (quarters + [prelim])[-max_quarters:]
+
     # TTM EPS (ผลรวม EPS 4 ไตรมาสล่าสุด ตามลำดับเวลาจริง — สังเคราะห์ไตรมาสขาดแล้วจึงครบ 4/ปี)
     eps_dates = sorted(raw_eps.keys())
     ttm_eps_by_date = [
@@ -260,7 +369,11 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         "price_candles": bars[-window:],
         "pe_series": pe_series[-window:],
         "pe_reference": pe_reference,
+        "has_preliminary": bool(prelim),
         "disclaimer": "ข้อมูลจาก SEC EDGAR (งบที่ยื่นจริง) + ราคาย้อนหลังจาก provider ปัจจุบัน — "
                       "P/E ช่วงเก่า (หลายปีก่อน) ของหุ้นที่เคย split อาจคลาดเคลื่อนถ้า SEC ไม่มีข้อมูลปรับปรุงย้อนหลังครบ — "
-                      "เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน",
+                      + ("ไตรมาสล่าสุด (มี * ต่อท้าย) เป็นตัวเลขเบื้องต้นจาก Yahoo ที่บริษัทประกาศเอง "
+                         "ยังไม่ผ่านการยื่น 10-Q อย่างเป็นทางการกับ SEC อาจมีการปรับแก้ภายหลัง — "
+                         if prelim else "")
+                      + "เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน",
     }
