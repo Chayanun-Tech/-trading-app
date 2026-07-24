@@ -15,8 +15,28 @@ import asyncio
 from datetime import datetime, timezone
 
 from app import edgar
+from app import sector_profile
+from app import sector_metrics
 from app.financials import _entries, _days, _INCOME, _CASHFLOW, _EPS, _SHARES
 from app.fundamentals import is_equity_symbol
+
+# แท็ก us-gaap สำหรับ heuristic จำแนก sector (ชั้น 2) — ธนาคารดูรายได้ดอกเบี้ย, REIT ดูค่าเสื่อม
+_INTEREST_INCOME_CONCEPTS = ["InterestAndDividendIncomeOperating", "InterestAndFeeIncomeLoansAndLeases",
+                             "InterestIncomeOperating", "RevenuesNetOfInterestExpense"]
+_DEPRECIATION_CONCEPTS = ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet",
+                          "DepreciationAndAmortization", "Depreciation"]
+
+# แท็กสำหรับ metric เฉพาะ sector (ชั้น 3 ส่วนขยาย)
+_EQUITY_CONCEPTS = ["StockholdersEquity"]
+_PREFERRED_CONCEPTS = ["PreferredStockValue", "PreferredStockValueOutstanding"]
+_CASH_CONCEPTS = ["CashAndCashEquivalentsAtCarryingValue",
+                  "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"]
+_GAINS_ON_SALE_CONCEPTS = ["GainLossOnDispositionOfRealEstate",
+                           "GainLossOnSaleOfPropertiesNetOfApplicableIncomeTaxes",
+                           "GainLossOnDispositionOfProperty", "GainLossOnSaleOfPropertyPlantEquipment",
+                           "GainLossOnDispositionOfAssets1", "GainsLossesOnSalesOfInvestmentRealEstate"]
+_OPERATING_INCOME_CONCEPTS = next(c[2] for c in _INCOME if c[0] == "operating_income")
+_GROSS_PROFIT_CONCEPTS = next(c[2] for c in _INCOME if c[0] == "gross_profit")
 
 _REVENUE_CONCEPTS = next(c[2] for c in _INCOME if c[0] == "revenue")
 _NET_INCOME_CONCEPTS = next(c[2] for c in _INCOME if c[0] == "net_income")
@@ -26,6 +46,284 @@ _ALL_FP = {"Q1", "Q2", "Q3", "Q4"}
 
 # จำนวนแท่งราคาโดยประมาณต่อ 1 ไตรมาส แยกตามความละเอียด — ใช้ตัดช่วงราคา/P/E ให้พอดีกับไตรมาสที่แสดง
 _BARS_PER_QUARTER = {"daily": 63, "weekly": 13, "monthly": 3}
+
+
+def _latest_instant(facts: dict, concepts: list[str], unit: str) -> float | None:
+    """ค่างบดุลล่าสุด (instant fact — มีแต่ end ไม่มี start เช่น สินทรัพย์รวม/ส่วนของผู้ถือหุ้น)."""
+    best: tuple[str, float] | None = None
+    for e in _entries(facts, concepts, unit):
+        if "start" in e:  # duration (งบกำไร/กระแสเงินสด) ไม่ใช่ยอดคงเหลือ ณ วันสิ้นงวด
+            continue
+        end = e.get("end")
+        if not end:
+            continue
+        if best is None or end > best[0]:
+            best = (end, e["val"])
+    return best[1] if best else None
+
+
+def _financials_snapshot(facts: dict) -> dict:
+    """งบย่อสำหรับ heuristic จำแนก sector (ชั้น 2). ใช้ยอด 'ทั้งปี' (10-K) ล่าสุด ไม่ใช่ TTM
+    ที่สังเคราะห์รายไตรมาส — เพราะการจำแนก sector ต้องการความ 'เสถียร/ถูก' มากกว่าความ 'สด'
+    และยอดสังเคราะห์รายไตรมาส (Q4 = ทั้งปี − 3 ไตรมาส, capex แบบสะสม YTD) มี noise พอที่จะดัน
+    อัตราส่วน capex/รายได้ ให้เพี้ยนจนจำแนกผิดได้ (เช่นบริษัทซอฟต์แวร์ที่ลงทุน datacenter หนัก
+    ถูกจับเป็น 'ลงทุนหนัก' ทั้งที่ P/E, FCF ยังใช้ได้ปกติ). ทุก field คืน None ได้ (heuristic รองรับ)."""
+    def latest_annual(concepts: list[str]) -> float | None:
+        ann = _annual_with_end(facts, concepts, "USD")
+        return ann[max(ann)]["val"] if ann else None
+
+    return {
+        "revenue": latest_annual(_REVENUE_CONCEPTS),
+        "net_income": latest_annual(_NET_INCOME_CONCEPTS),
+        "ocf": latest_annual(_OCF_CONCEPTS),
+        "capex": latest_annual(_CAPEX_CONCEPTS),
+        "total_assets": _latest_instant(facts, ["Assets"], "USD"),
+        "total_equity": _latest_instant(facts, ["StockholdersEquity"], "USD"),
+        "interest_income": latest_annual(_INTEREST_INCOME_CONCEPTS),
+        "depreciation": latest_annual(_DEPRECIATION_CONCEPTS),
+    }
+
+
+# ── ชั้น 3 ส่วนขยาย: metric เฉพาะ sector + เส้นมูลค่ายุติธรรมตาม primary metric ──────────
+def _instants_by_end(facts: dict, concepts: list[str], unit: str) -> dict[str, float]:
+    """ยอดคงเหลืองบดุล (instant) ทุกวันสิ้นงวด {end: val} — ค่าที่ยื่นหลังสุดชนะ (ปรับปรุงแล้ว)."""
+    out: dict[str, float] = {}
+    for e in _entries(facts, concepts, unit):
+        if "start" in e:  # duration ไม่ใช่ยอดคงเหลือ
+            continue
+        end = e.get("end")
+        if end:
+            out[end] = e["val"]
+    return out
+
+
+def _fmt_money(v: float | None) -> str | None:
+    if not isinstance(v, (int, float)):
+        return None
+    a = abs(v)
+    if a >= 1e12:
+        return f"${v / 1e12:.2f}T"
+    if a >= 1e9:
+        return f"${v / 1e9:.2f}B"
+    if a >= 1e6:
+        return f"${v / 1e6:.1f}M"
+    return f"${v:,.0f}"
+
+
+def _bvps_points(facts: dict) -> list[dict]:
+    """มูลค่าตามบัญชีต่อหุ้นรายปี (ธนาคาร/ประกัน) — จับคู่ส่วนของผู้ถือหุ้น ณ วันสิ้นปีงบกับจำนวนหุ้น."""
+    ann_shares = _annual_with_end(facts, _SHARES, "shares")
+    eq = _instants_by_end(facts, _EQUITY_CONCEPTS, "USD")
+    pref = _instants_by_end(facts, _PREFERRED_CONCEPTS, "USD")
+    pts = []
+    for fy in sorted(ann_shares):
+        end, sh = ann_shares[fy]["end"], ann_shares[fy]["val"]
+        ps = sector_metrics.book_value_per_share(eq.get(end), pref.get(end), sh)
+        if ps and ps > 0:
+            pts.append({"period": end, "per_share": ps})
+    return pts
+
+
+def _ffo_points(facts: dict) -> list[dict]:
+    """FFO ต่อหุ้นรายปี (REIT) = (กำไรสุทธิ + ค่าเสื่อม − กำไรขายทรัพย์สิน) ÷ จำนวนหุ้น."""
+    ann_ni = _annual_with_end(facts, _NET_INCOME_CONCEPTS, "USD")
+    ann_dep = _annual_with_end(facts, _DEPRECIATION_CONCEPTS, "USD")
+    ann_gain = _annual_with_end(facts, _GAINS_ON_SALE_CONCEPTS, "USD")
+    ann_shares = _annual_with_end(facts, _SHARES, "shares")
+    pts = []
+    for fy in sorted(ann_ni):
+        sh = ann_shares.get(fy, {}).get("val")
+        if not sh:
+            continue
+        f = sector_metrics.ffo(ann_ni[fy]["val"], ann_dep.get(fy, {}).get("val"),
+                               ann_gain.get(fy, {}).get("val", 0.0))
+        if f is not None and f > 0:
+            pts.append({"period": ann_ni[fy]["end"], "per_share": f / sh})
+    return pts
+
+
+def _multiple_band(bars: list[dict], points: list[dict], bars_per_q: int) -> dict | None:
+    """median + IQR ของ (ราคา ÷ metric ต่อหุ้น) จากอดีต ~2 ปีล่าสุด — ใช้หา 'ตัวคูณ' ที่ตลาดให้."""
+    if not bars or len(points) < 2:
+        return None
+    ratios = []
+    for w in bars:
+        wd = datetime.fromtimestamp(w["time"], tz=timezone.utc).date().isoformat()
+        entry = next((p for p in reversed(points) if p["period"] <= wd and p["per_share"] > 0), None)
+        if entry:
+            ratios.append(w["close"] / entry["per_share"])
+    return sector_profile.median_band(ratios[-(bars_per_q * 8):])
+
+
+def _fair_from_band(latest_ps: float | None, band: dict | None, basis: str,
+                    current_price: float | None) -> dict | None:
+    """ราคายุติธรรม = metric ต่อหุ้นล่าสุด × ตัวคูณ median (+ ช่วง p25–p75 เป็น band)."""
+    if not band or not latest_ps or latest_ps <= 0:
+        return None
+    fair = latest_ps * band["median"]
+    fv = {
+        "basis": basis,
+        "per_share": round(latest_ps, 2),
+        "median_multiple": round(band["median"], 1),
+        "fair_price": round(fair, 2),
+        "low": round(latest_ps * band["p25"], 2),
+        "high": round(latest_ps * band["p75"], 2),
+    }
+    if current_price:
+        fv["current_price"] = round(current_price, 2)
+        fv["upside_pct"] = round((fair / current_price - 1) * 100, 1)
+    return fv
+
+
+def _metric(label: str, display: str | None, hint: str = "") -> dict:
+    return {"label": label, "display": display if display is not None else "—", "hint": hint}
+
+
+def _compute_sector_extras(profile_key: str, facts: dict, bars: list[dict], bars_per_q: int,
+                           fin: dict, fcf_annual: list[dict], pe_band: dict | None,
+                           pfcf_band: dict | None) -> tuple[list[dict], dict | None, list[str]]:
+    """คำนวณ extra metrics (ตัวเลขจริง) + ราคายุติธรรมตาม primary metric ของ sector.
+    คืน (extra_metrics, fair_value, extra_warnings)."""
+    price = bars[-1]["close"] if bars else None
+    metrics: list[dict] = []
+    fair: dict | None = None
+    warns: list[str] = []
+
+    def pct(v):
+        return f"{v * 100:.1f}%" if isinstance(v, (int, float)) else None
+
+    if profile_key in ("bank", "insurance"):
+        pts = _bvps_points(facts)
+        if pts:
+            gate = sector_profile.validate_anchor([{"value": p["per_share"], "date": p["period"]} for p in pts],
+                                                  "Book Value/share")
+            if gate["ok"]:
+                warns.extend(gate["issues"])
+                bvps = pts[-1]["per_share"]
+                metrics.append(_metric("Book Value / share", f"${bvps:,.2f}",
+                                       "มูลค่าตามบัญชีต่อหุ้น — ฐานประเมินธนาคาร/ประกัน"))
+                r = sector_metrics.roe(fin.get("net_income"), fin.get("total_equity"))
+                if r is not None:
+                    metrics.append(_metric("ROE", pct(r), "ผลตอบแทนต่อส่วนของผู้ถือหุ้น"))
+                if price:
+                    metrics.append(_metric("P/B ปัจจุบัน", f"{price / bvps:.2f}x", "ราคา ÷ มูลค่าตามบัญชีต่อหุ้น"))
+                fair = _fair_from_band(bvps, _multiple_band(bars, pts, bars_per_q), "P/B median", price)
+            else:
+                warns.append(gate["reason"])
+
+    elif profile_key == "reit":
+        pts = _ffo_points(facts)
+        if pts:
+            gate = sector_profile.validate_anchor([{"value": p["per_share"], "date": p["period"]} for p in pts], "FFO/share")
+            if gate["ok"]:
+                warns.extend(gate["issues"])
+                ffops = pts[-1]["per_share"]
+                metrics.append(_metric("FFO / share (ปีล่าสุด)", f"${ffops:,.2f}",
+                                       "Funds From Operations ต่อหุ้น — แทน EPS สำหรับ REIT"))
+                if price:
+                    metrics.append(_metric("P/FFO ปัจจุบัน", f"{price / ffops:.1f}x", "ราคา ÷ FFO ต่อหุ้น"))
+                fair = _fair_from_band(ffops, _multiple_band(bars, pts, bars_per_q), "P/FFO median", price)
+            else:
+                warns.append(gate["reason"])
+
+    elif profile_key == "capital_intensive":
+        fcf_ps = [e["fcf_per_share"] for e in fcf_annual if e.get("fcf_per_share")]
+        norm = sector_metrics.normalized(fcf_ps, 5)
+        if norm is not None:
+            metrics.append(_metric("Normalized FCF/share (5 ปี)", f"${norm:,.2f}",
+                                   "FCF ต่อหุ้นเฉลี่ย 5 ปี — เกลี่ยรอบ capex ก้อนใหญ่"))
+            if pfcf_band:
+                fair = _fair_from_band(norm, pfcf_band, "Normalized FCF x P/FCF median", price)
+        ebit = sector_metrics.ebitda(fin.get("operating_income"), fin.get("depreciation"))
+        if ebit is not None:
+            metrics.append(_metric("EBITDA (ปีล่าสุด)", _fmt_money(ebit), "กำไรก่อนดอกเบี้ย ภาษี ค่าเสื่อม"))
+
+    elif profile_key == "cyclical":
+        ann_eps = _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True)
+        eps_vals = [ann_eps[fy]["val"] for fy in sorted(ann_eps)]
+        norm = sector_metrics.normalized(eps_vals, 10)
+        if norm is not None and norm > 0:
+            metrics.append(_metric("Normalized EPS (~10 ปี)", f"${norm:,.2f}",
+                                   "EPS เฉลี่ยหลายปี (Shiller) — กลบวัฏจักร กันตีความ P/E ผิด"))
+            if pe_band:
+                fair = _fair_from_band(norm, pe_band, "Normalized EPS x P/E median", price)
+
+    elif profile_key == "early_stage":
+        cash = _latest_instant(facts, _CASH_CONCEPTS, "USD")
+        ocf, capex, rev = fin.get("ocf"), fin.get("capex"), fin.get("revenue")
+        fcf = (ocf - capex) if isinstance(ocf, (int, float)) and isinstance(capex, (int, float)) else None
+        burn = -fcf if isinstance(fcf, (int, float)) else (-ocf if isinstance(ocf, (int, float)) else None)
+        if cash is not None:
+            metrics.append(_metric("เงินสด", _fmt_money(cash), "เงินสด & รายการเทียบเท่า"))
+        runway = sector_metrics.cash_runway_months(cash, burn)
+        if runway is not None:
+            metrics.append(_metric("Cash runway", f"{runway:.0f} เดือน",
+                                   "เหลือเงินกี่เดือนก่อนต้องระดมทุนใหม่ (ถ้าเผาเงินเท่าเดิม)"))
+            if runway < 18:
+                warns.append(f"⚠️ Cash runway ~{runway:.0f} เดือน — อาจต้องระดมทุน (dilution) ในไม่ช้า")
+        elif isinstance(fcf, (int, float)) and fcf >= 0:
+            metrics.append(_metric("Cash runway", "ไม่ต้องกังวล", "กระแสเงินสดเป็นบวกแล้ว"))
+        if isinstance(burn, (int, float)) and burn > 0:
+            metrics.append(_metric("Burn rate", f"{_fmt_money(burn / 12)}/เดือน", "อัตราเผาเงินสดต่อเดือน"))
+        # Rule of 40 = โต% + FCF margin%
+        ann_rev = _annual_with_end(facts, _REVENUE_CONCEPTS, "USD")
+        fys = sorted(ann_rev)
+        growth = None
+        if len(fys) >= 2 and ann_rev[fys[-2]]["val"]:
+            growth = (ann_rev[fys[-1]]["val"] / ann_rev[fys[-2]]["val"] - 1) * 100
+        margin = (fcf / rev * 100) if isinstance(fcf, (int, float)) and rev else None
+        r40 = sector_metrics.rule_of_40(growth, margin)
+        if r40 is not None:
+            metrics.append(_metric("Rule of 40", f"{r40:.0f} ({growth:.0f}% โต {margin:+.0f}% FCF)",
+                                   "โต% + FCF margin% ≥ 40 = สมดุลดี"))
+
+    return metrics, fair, warns
+
+
+# ── ชั้น 6: Auto-Narrative (ให้ AI สรุปก่อนแสดง) ──────────────────────────────
+_VERDICT_SYSTEM = (
+    "คุณคือนักวิเคราะห์การเงินเชิงข้อเท็จจริง วิเคราะห์ตัวเลขที่ให้มาแล้วสรุปเป็นภาษาไทย. "
+    "ตอบเป็น JSON object เท่านั้น ห้ามมี markdown/backtick/ข้อความนอก JSON. "
+    "schema: {verdict: 'cheap'|'fair'|'expensive'|'cannot_assess', "
+    "confidence: 'high'|'medium'|'low', headline: str (หนึ่งประโยค), "
+    "reasoning: [str] (2-4 ข้อ อ้างตัวเลขจริง), redFlags: [str] (สิ่งที่ตัวเลขซ่อนไว้), "
+    "dataQuality: str, nextChecks: [str] (2-3 ข้อ)}. "
+    "กฎ: ถ้าข้อมูลมีปัญหาร้ายแรง (เส้น anchor ถูกปิด/ข้อมูลน้อยเกินไป) ต้องตอบ verdict='cannot_assess'. "
+    "ห้ามให้คำแนะนำซื้อ/ขาย — วิเคราะห์ข้อเท็จจริงเท่านั้น."
+)
+
+
+async def _generate_verdict(symbol: str, entity: str | None, profile: dict, profile_key: str,
+                            extra_metrics: list[dict], fair_value: dict | None,
+                            warnings: list[str]) -> dict | None:
+    """เรียก LLM สรุป verdict ตาม sector — ใช้โครงสร้าง llm/ai_analyst ที่มีอยู่ (มี fallback provider).
+    คืน None ถ้า AI ปิดอยู่หรือเรียกไม่สำเร็จ (ไม่ทำให้ endpoint หลักพัง)."""
+    from app.config import get_settings
+    if not get_settings().llm_enabled:
+        return None
+    from app import ai_analyst
+
+    metrics_txt = "; ".join(f"{m['label']}={m['display']}" for m in extra_metrics) or "—"
+    fair_txt = "—"
+    if fair_value:
+        fair_txt = (f"{fair_value['basis']}: ราคายุติธรรม ${fair_value['fair_price']} "
+                    f"(ช่วง ${fair_value['low']}–${fair_value['high']}, ตัวคูณ {fair_value['median_multiple']}x)")
+        if "current_price" in fair_value:
+            fair_txt += f" · ราคาปัจจุบัน ${fair_value['current_price']} (upside {fair_value.get('upside_pct')}%)"
+    user = (
+        f"หุ้น: {symbol} ({entity or '-'})\n"
+        f"ประเภทธุรกิจ: {profile['label']} (primary metric: {profile.get('primary') or '-'})\n"
+        f"Metric ที่ปิดเพราะไม่เหมาะกับกลุ่มนี้: {', '.join(profile.get('disabled', [])) or '—'}\n"
+        f"ตัวเลขที่คำนวณได้: {metrics_txt}\n"
+        f"ประเมินมูลค่า: {fair_txt}\n"
+        f"คำเตือน/ปัญหาข้อมูล: {' | '.join(warnings) or '—'}\n"
+        "สรุปตาม schema."
+    )
+    try:
+        v = await ai_analyst._run_llm(_VERDICT_SYSTEM, user)
+        return v if isinstance(v, dict) else None
+    except Exception:  # noqa: BLE001 — AI ล่ม/quota หมด ไม่กระทบส่วนที่เหลือ
+        return None
 
 
 def _quarterly_with_fp(facts: dict, concepts: list[str], unit: str, prefer_latest_value: bool = False) -> dict[str, dict]:
@@ -308,7 +606,7 @@ def _resample(candles: list, granularity: str) -> list[dict]:
 
 
 async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: int = 40,
-                            granularity: str = "weekly") -> dict:
+                            granularity: str = "weekly", include_ai: bool = False) -> dict:
     symbol = (symbol or "").strip().upper()
     if not symbol:
         raise ValueError("กรุณาระบุสัญลักษณ์หุ้น")
@@ -484,6 +782,53 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         median_pfcf = pfcf_sorted[len(pfcf_sorted) // 2]
         pfcf_reference = {"median": round(median_pfcf, 1), "label": f"{round(median_pfcf)}x P/FCF (median, ~2 ปีล่าสุด)"}
 
+    # ── ชั้น 2-5: Sector-aware valuation ────────────────────────────────────
+    # จำแนก sector จาก SIC ของ SEC (แม่นสุด) → เลือก profile → ตรวจ validation gate → เตือน
+    try:
+        subs = await edgar.get_submissions(symbol)
+        sic = subs.get("sic") or None
+    except Exception:  # noqa: BLE001 — ดึง SIC ไม่ได้ก็ยังจำแนกจากงบได้ (heuristic)
+        sic = None
+
+    fin_snapshot = _financials_snapshot(facts)
+    sector_info = sector_profile.classify_sector(sic, fin_snapshot)
+    profile_key = sector_info["profile"]
+    profile = sector_profile.get_profile(profile_key)
+    warnings = list(profile.get("warnings", []))
+
+    # ชั้น 4: validation gate สำหรับเส้น "ราคาตาม FCF ต่อหุ้น" — กันเส้นระเบิดเมื่อ FCF เคยติดลบ
+    if fcf_series_for_pfcf:
+        fcf_check = sector_profile.validate_anchor(
+            [{"value": e.get("fcf_per_share"), "date": e.get("period")} for e in fcf_series_for_pfcf],
+            "FCF ต่อหุ้น")
+        if not fcf_check["ok"]:
+            warnings.append(fcf_check["reason"])
+        else:
+            warnings.extend(fcf_check["issues"])
+
+    # ชั้น 5: median + IQR band แทนเส้น median เดี่ยว (บอกผู้ใช้ว่า fair value เป็นช่วง ไม่ใช่จุดเดียว)
+    pe_band = sector_profile.median_band([p["pe"] for p in recent_pe]) if recent_pe else None
+    if pe_reference and pe_band:
+        pe_reference["low"] = round(pe_band["p25"], 1)
+        pe_reference["high"] = round(pe_band["p75"], 1)
+
+    # ชั้น 3: เคารพ metric ที่ปิดตาม sector — P/FCF ไม่มีความหมายกับธนาคาร/REIT
+    pfcf_band = sector_profile.median_band([p["pfcf"] for p in recent_pfcf]) if recent_pfcf else None
+    if sector_profile.is_disabled(profile_key, "pfcf"):
+        pfcf_reference = None
+    elif pfcf_reference and pfcf_band:
+        pfcf_reference["low"] = round(pfcf_band["p25"], 1)
+        pfcf_reference["high"] = round(pfcf_band["p75"], 1)
+
+    # ชั้น 3 ส่วนขยาย: metric เฉพาะ sector (ตัวเลขจริง) + ราคายุติธรรมตาม primary metric
+    extra_metrics, fair_value, extra_warns = _compute_sector_extras(
+        profile_key, facts, bars, bars_per_q, fin_snapshot, fcf_annual, pe_band, pfcf_band)
+    warnings.extend(extra_warns)
+
+    # ชั้น 6: AI narrative — เรียกเฉพาะเมื่อผู้ใช้ร้องขอ (ai=true) และตั้งค่าคีย์ AI แล้ว
+    verdict = await _generate_verdict(symbol, facts.get("entityName"), profile, profile_key,
+                                      extra_metrics, fair_value, warnings) if include_ai else None
+
     window = max(len(quarters) * bars_per_q, 60)
     return {
         "symbol": symbol,
@@ -497,6 +842,21 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         "fcf_quarterly": fcf_quarterly,
         "pfcf_series": pfcf_series[-window:],
         "pfcf_reference": pfcf_reference,
+        "sic": sic,
+        "sector": sector_info["sector"],
+        "sector_label": profile["label"],
+        "sector_source": sector_info["source"],
+        "profile": {
+            "key": profile_key,
+            "label": profile["label"],
+            "primary": profile.get("primary"),
+            "disabled": profile.get("disabled", []),
+            "extra_metrics": profile.get("extra_metrics", []),
+        },
+        "warnings": warnings,
+        "extra_metrics": extra_metrics,
+        "fair_value": fair_value,
+        "verdict": verdict,
         "has_preliminary": bool(prelim),
         "disclaimer": "ข้อมูลจาก SEC EDGAR (งบที่ยื่นจริง) + ราคาย้อนหลังจาก provider ปัจจุบัน — "
                       "P/E ช่วงเก่า (หลายปีก่อน) ของหุ้นที่เคย split อาจคลาดเคลื่อนถ้า SEC ไม่มีข้อมูลปรับปรุงย้อนหลังครบ — "

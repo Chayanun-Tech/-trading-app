@@ -882,6 +882,7 @@
       </div>
       <div class="note" style="margin-top:6px;">กราฟราคาปกติ ซูม/เลื่อนดูย้อนหลังได้ด้วยเมาส์ · กราฟด้านล่าง = อัตราเติบโตรายได้ (เขียว/แดง, แกนขวา) เทียบกำไรสุทธิ (ม่วง, แกนซ้าย) และกระแสเงินสดจากการดำเนินงาน (<span style="color:#4fd1c5;">ฟ้า เส้น</span>, แกนซ้าย) แบบปีต่อปี (YoY) คนละแกนกัน ไม่บีบกัน — เลื่อนเมาส์บนแท่งเพื่อดูตัวเลขไตรมาสนั้น · กราฟถัดไป = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) · แท่ง<span style="color:#e2b93b;">สีเหลือง</span>+ป้าย <b>*</b> = ไตรมาสล่าสุดที่บริษัทเพิ่งประกาศแต่ SEC ยังไม่ยืนยัน (ดึงสดจาก Yahoo ทุกครั้ง ไม่ cache) · <span class="tiny" style="color:#7d8b99;">เส้นกระแสเงินสด/FCF แปลงยอดสะสมทั้งปี (YTD) ที่บางบริษัทยื่นในไตรมาส 2-3 กลับเป็นยอดเฉพาะไตรมาสให้อัตโนมัติ — บางไตรมาสอาจยังขาดถ้า SEC ให้ข้อมูลไม่ครบ</span> — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
+      <div id="rmSector" style="margin-top:6px;"></div>
       <div class="note tiny" style="margin-top:2px; color:#7d8b99;">ลากมุมขวาล่างของแต่ละกรอบกราฟเพื่อปรับความสูงเองได้</div>
       <div class="chart-wrap rm-chart-wrap rm-resizable" style="margin-top:6px; position:relative;">
         <div id="rmChart" style="width:100%; height:100%;"></div>
@@ -3321,6 +3322,7 @@ function renderAnalyst(d) {
 // คำนวณพิกัดเอง ไม่มีปัญหา sync อีก ป้ายกำกับใช้ tooltip ตอน hover แทน (โชว์ทีละไตรมาสเดียว ไม่ทับกัน)
 let rmChart = null, rmCandleSeries = null, rmFairSeries = null, rmFcfFairSeries = null, rmPeChart = null, rmPeSeries = null, rmPeLine = null;
 let rmPfcfChart = null, rmPfcfSeries = null, rmPfcfLine = null;
+let rmPeBandLines = [], rmPfcfBandLines = [];
 let rmCompareChart = null, rmPriceIdxSeries = null, rmRevIdxSeries = null;
 let rmGrowthChart = null, rmRevGrowthSeries = null, rmProfitGrowthSeries = null;
 let rmRevTrendSeries = null, rmProfitTrendSeries = null, rmOcfTrendSeries = null;
@@ -3433,7 +3435,7 @@ function resizeRmCharts() {
   if (rmGrowthChart) rmGrowthChart.resize($("rmGrowthChart").clientWidth, $("rmGrowthChart").clientHeight);
 }
 
-async function runRevenueModel(refresh) {
+async function runRevenueModel(refresh, withAi) {
   showTab("revenue");
   // แท็บนี้มีข้อมูลแน่นมาก (40 ไตรมาส + กราฟ 3 ชั้น) โหมด dock ปกติ (แคบ) จะอ่านยากมาก
   // สลับเป็นโหมด "Wide" ให้อัตโนมัติ (จำไว้ใน localStorage แล้ว ครั้งหน้าไม่ต้องสลับเอง)
@@ -3446,10 +3448,13 @@ async function runRevenueModel(refresh) {
   if (!sym) { $("rmStatus").innerHTML = `<span class="down">กรุณาใส่สัญลักษณ์หุ้น</span>`; return; }
   symEl.value = sym;
   const granularity = $("rmGranularity") ? $("rmGranularity").value : "weekly";
-  $("rmStatus").innerHTML = `<div class="note">📈 กำลังดึงงบ SEC + ราคาย้อนหลัง... (ครั้งแรกอาจใช้เวลาสักครู่)</div>`;
+  $("rmStatus").innerHTML = withAi
+    ? `<div class="note">🧠 กำลังดึงงบ + ให้ AI สรุปตามกลุ่มธุรกิจ... (อาจใช้เวลาสักครู่)</div>`
+    : `<div class="note">📈 กำลังดึงงบ SEC + ราคาย้อนหลัง... (ครั้งแรกอาจใช้เวลาสักครู่)</div>`;
   try {
     const params = new URLSearchParams({ symbol:sym, granularity });
     if (refresh) params.set("refresh", "true");
+    if (withAi) params.set("ai", "true");
     const res = await fetch(`${API}/api/revenue-model?${params.toString()}`);
     if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
     rmData = await res.json();
@@ -3461,29 +3466,110 @@ async function runRevenueModel(refresh) {
   }
 }
 
+// แบนเนอร์ sector: ประเภทธุรกิจที่จำแนกได้ + ที่มา + คำเตือนเฉพาะกลุ่ม + metric ที่ปิด
+function renderRmSector(d) {
+  const el = $("rmSector");
+  if (!el) return;
+  if (!d.profile && !d.sector_label) { el.innerHTML = ""; return; }
+  const srcLabel = { sic:"จาก SIC ที่บริษัทยื่นกับ SEC", financials:"อนุมานจากโครงสร้างงบ", default:"เกณฑ์ทั่วไป" };
+  const src = srcLabel[d.sector_source] || d.sector_source || "";
+  const disabled = (d.profile && d.profile.disabled) || [];
+  const metricNames = { fcf:"FCF", pfcf:"P/FCF", pe:"P/E", ps:"P/S", ev_ebitda:"EV/EBITDA" };
+  const disabledHtml = disabled.length
+    ? `<div class="tiny" style="margin-top:4px; color:#e08a6a;">⛔ metric ที่ไม่เหมาะกับกลุ่มนี้ (ตีความผิดได้): ${
+        disabled.map(m => metricNames[m] || m).join(", ")}</div>`
+    : "";
+  const warns = d.warnings || [];
+  const warnHtml = warns.length
+    ? `<ul style="margin:6px 0 0; padding-left:18px;">${
+        warns.map(w => `<li class="tiny" style="color:#c9b26a; margin:2px 0;">${escapeHtml(w)}</li>`).join("")}</ul>`
+    : "";
+  // ตัวเลข metric เฉพาะกลุ่ม (Book Value/FFO/EBITDA/runway ฯลฯ) เป็นชิป
+  const metrics = d.extra_metrics || [];
+  const metricsHtml = metrics.length
+    ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">${
+        metrics.map(m => `<div title="${escapeHtml(m.hint||"")}" style="border:1px solid #33404d; border-radius:6px; padding:4px 8px; background:rgba(255,255,255,0.03);">
+             <div class="tiny" style="color:#7d8b99;">${escapeHtml(m.label)}</div>
+             <div style="font-weight:600;">${escapeHtml(m.display)}</div></div>`).join("")}</div>`
+    : "";
+  // ราคายุติธรรมตาม primary metric ของกลุ่ม + ช่วง band + upside
+  const fairHtml = d.fair_value ? renderRmFair(d.fair_value) : "";
+  // ปุ่ม/การ์ด AI verdict
+  const verdictHtml = d.verdict
+    ? renderRmVerdict(d.verdict)
+    : `<div style="margin-top:8px;"><button onclick="runRevenueModel(false, true)" title="ให้ AI สรุปตามกลุ่มธุรกิจ (ต้องตั้งคีย์ AI)">🧠 ให้ AI สรุป (ตาม sector)</button></div>`;
+  el.innerHTML =
+    `<div style="border:1px solid #33404d; border-radius:8px; padding:8px 10px; background:rgba(127,168,208,0.06);">
+       <div><b>🏷️ กลุ่มธุรกิจ:</b> ${escapeHtml(d.sector_label || d.sector || "-")}
+         <span class="tiny" style="color:#7d8b99;">(${escapeHtml(src)}${d.sic ? " · SIC " + escapeHtml(String(d.sic)) : ""})</span></div>
+       ${disabledHtml}${metricsHtml}${fairHtml}${warnHtml}${verdictHtml}
+     </div>`;
+}
+
+// การ์ดราคายุติธรรม — สีเขียว = ราคาต่ำกว่ามูลค่า (upside +), แดง = สูงกว่า
+function renderRmFair(fv) {
+  const up = fv.upside_pct;
+  const col = up == null ? "#7fa8d0" : (up >= 0 ? "#4caf7d" : "#e0785f");
+  const upTxt = up == null ? "" :
+    ` · <span style="color:${col};">${up >= 0 ? "ต่ำกว่ามูลค่า" : "สูงกว่ามูลค่า"} ${up >= 0 ? "+" : ""}${up}%</span>`;
+  const cur = fv.current_price != null ? ` · ราคาปัจจุบัน $${fv.current_price}` : "";
+  return `<div style="margin-top:8px; padding:6px 8px; border-left:3px solid ${col}; background:rgba(255,255,255,0.03);">
+      <div class="tiny" style="color:#7d8b99;">ราคายุติธรรม (${escapeHtml(fv.basis)}, ตัวคูณ ${fv.median_multiple}x)</div>
+      <div><b style="color:${col};">$${fv.fair_price}</b> <span class="tiny" style="color:#7d8b99;">(ช่วง $${fv.low}–$${fv.high})</span>${cur}${upTxt}</div>
+    </div>`;
+}
+
+// การ์ด AI verdict — สรุป cheap/fair/expensive + เหตุผล + red flags
+function renderRmVerdict(v) {
+  const map = { cheap:["ถูก","#4caf7d"], fair:["สมเหตุผล","#e2b93b"], expensive:["แพง","#e0785f"], cannot_assess:["ประเมินไม่ได้","#7d8b99"] };
+  const [label, col] = map[v.verdict] || ["—","#7d8b99"];
+  const li = arr => (arr||[]).map(x => `<li class="tiny" style="margin:2px 0;">${escapeHtml(x)}</li>`).join("");
+  const section = (title, arr, color) => (arr && arr.length)
+    ? `<div class="tiny" style="margin-top:4px; color:${color};"><b>${title}</b><ul style="margin:2px 0; padding-left:16px;">${li(arr)}</ul></div>` : "";
+  return `<div style="margin-top:8px; border:1px solid ${col}55; border-radius:8px; padding:8px 10px; background:${col}11;">
+      <div><span style="font-weight:700; color:${col};">🧠 AI: ${label}</span>
+        <span class="tiny" style="color:#7d8b99;">(ความมั่นใจ ${escapeHtml(v.confidence||"-")})</span></div>
+      <div style="margin-top:2px;">${escapeHtml(v.headline||"")}</div>
+      ${section("เหตุผล", v.reasoning, "#b9c6d2")}
+      ${section("⚠️ ข้อควรระวัง (สิ่งที่ตัวเลขซ่อน)", v.redFlags, "#c9b26a")}
+      ${section("ควรตรวจต่อ", v.nextChecks, "#7fa8d0")}
+      ${v.dataQuality ? `<div class="tiny" style="margin-top:4px; color:#7d8b99;">คุณภาพข้อมูล: ${escapeHtml(v.dataQuality)}</div>` : ""}
+      <div class="tiny" style="margin-top:4px; color:#7d8b99;">AI วิเคราะห์ข้อเท็จจริงเพื่อการศึกษา ไม่ใช่คำแนะนำซื้อขาย</div>
+    </div>`;
+}
+
+// วาดเส้นอ้างอิง median + แถบ IQR (p25/p75 ถ้ามี) — บอกว่า fair value เป็น "ช่วง" ไม่ใช่จุดเดียว
+function drawRefBand(series, ref, keepLine, bandStore) {
+  if (keepLine) series.removePriceLine(keepLine);
+  bandStore.forEach(l => series.removePriceLine(l));
+  bandStore.length = 0;
+  if (!ref) return null;
+  if (ref.low != null && ref.high != null) {
+    [["low", ref.low], ["high", ref.high]].forEach(([k, v]) => {
+      bandStore.push(series.createPriceLine({
+        price:v, color:"#5a6b7a", lineWidth:1, lineStyle:3,
+        axisLabelVisible:true, title:`${v}x (${k === "low" ? "ถูก" : "แพง"})`,
+      }));
+    });
+  }
+  return series.createPriceLine({
+    price:ref.median, color:"#7fa8d0", lineWidth:1, lineStyle:2,
+    axisLabelVisible:true, title:ref.label,
+  });
+}
+
 function renderRevenueModel(d) {
   ensureRmCharts();
   resizeRmCharts();
+  renderRmSector(d);
   const candles = d.price_candles || [];
   const pe = d.pe_series || [];
   rmCandleSeries.setData(candles.map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close })));
   rmPeSeries.setData(pe.map(p => ({ time:p.time, value:p.pe })));
-  if (rmPeLine) { rmPeSeries.removePriceLine(rmPeLine); rmPeLine = null; }
-  if (d.pe_reference) {
-    rmPeLine = rmPeSeries.createPriceLine({
-      price:d.pe_reference.median, color:"#7fa8d0", lineWidth:1, lineStyle:2,
-      axisLabelVisible:true, title:d.pe_reference.label,
-    });
-  }
+  rmPeLine = drawRefBand(rmPeSeries, d.pe_reference, rmPeLine, rmPeBandLines);
   const pfcf = d.pfcf_series || [];
   rmPfcfSeries.setData(pfcf.map(p => ({ time:p.time, value:p.pfcf })));
-  if (rmPfcfLine) { rmPfcfSeries.removePriceLine(rmPfcfLine); rmPfcfLine = null; }
-  if (d.pfcf_reference) {
-    rmPfcfLine = rmPfcfSeries.createPriceLine({
-      price:d.pfcf_reference.median, color:"#7fa8d0", lineWidth:1, lineStyle:2,
-      axisLabelVisible:true, title:d.pfcf_reference.label,
-    });
-  }
+  rmPfcfLine = drawRefBand(rmPfcfSeries, d.pfcf_reference, rmPfcfLine, rmPfcfBandLines);
   // เทียบ "ราคา" กับ "รายได้" โดยปรับฐานทั้งคู่ = 100 ที่จุดเริ่มต้นเดียวกัน (จุดแรกที่มีทั้งราคาและรายได้)
   // เพื่อดูว่าช่วงไหนราคาวิ่งนำ (เสี่ยงแพงกว่าปัจจัยพื้นฐาน) หรือตามหลังรายได้ (โอกาส deep value)
   const quarters = d.quarters || [];
