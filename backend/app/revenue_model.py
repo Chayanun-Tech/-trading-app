@@ -52,6 +52,51 @@ def _quarterly_with_fp(facts: dict, concepts: list[str], unit: str, prefer_lates
     return out
 
 
+def _quarterly_from_cumulative(facts: dict, concepts: list[str], unit: str) -> dict[str, dict]:
+    """เหมือน _quarterly_with_fp แต่รองรับบริษัทที่ยื่นกระแสเงินสด (OCF/CapEx) แบบ 'สะสมตั้งแต่ต้นปีงบ'
+    (YTD) ใน 10-Q ของ Q2/Q3 แทนยอดเฉพาะไตรมาสนั้น (พบมากในทางปฏิบัติ — เช่น Apple ยื่น CapEx ของ Q2
+    เป็นยอดสะสม 6 เดือน และ Q3 เป็นยอดสะสม 9 เดือนเสมอ ไม่เคยยื่นยอดเฉพาะไตรมาสแยกเลย) ถ้ากรองด้วย
+    duration ~90 วันแบบ _quarterly_with_fp ตรง ๆ จะเหลือแค่ Q1 (ที่ยอดสะสม = ยอดไตรมาสเดียวพอดี)
+    ทำให้ไตรมาสอื่นหายไปทั้งหมด — ฟังก์ชันนี้เก็บ Q1/Q2/Q3 ทุกแบบ (ทั้งที่ยื่นเป็นยอดเฉพาะไตรมาส ~90 วัน
+    หรือยอดสะสม ~180/~270 วัน) แล้วลบไตรมาสก่อนหน้าที่คำนวณแล้วออกเพื่อได้ยอดเฉพาะไตรมาสเสมอ
+    (Q2 เดี่ยว = สะสม 6 เดือน − Q1 เดี่ยว, Q3 เดี่ยว = สะสม 9 เดือน − สะสม 6 เดือน) — คำนวณ Q4 แยกทีหลัง
+    ด้วย _synthesize_missing_quarter (งบทั้งปี − ผลรวม Q1-Q3) เหมือนเดิม."""
+    by_end: dict[str, dict] = {}
+    for e in _entries(facts, concepts, unit):
+        if "start" not in e or not str(e.get("form", "")).startswith("10-Q"):
+            continue
+        fp, fy = e.get("fp"), e.get("fy")
+        if fp not in ("Q1", "Q2", "Q3") or fy is None:
+            continue
+        d = _days(e["start"], e["end"])
+        if d is None:
+            continue
+        if e["end"] not in by_end:
+            by_end[e["end"]] = {"val": e["val"], "fp": fp, "fy": fy, "days": d}
+
+    by_fy: dict[int, dict[str, dict]] = {}
+    for end, m in by_end.items():
+        by_fy.setdefault(m["fy"], {})[m["fp"]] = {**m, "end": end}
+
+    out: dict[str, dict] = {}
+    for fy, fps in by_fy.items():
+        cum = 0.0
+        for fp, n_quarters in (("Q1", 1), ("Q2", 2), ("Q3", 3)):
+            m = fps.get(fp)
+            if m is None:
+                break  # ไตรมาสก่อนหน้าขาด คำนวณ Q ถัดไปต่อไม่ได้ (ไม่รู้ว่าต้องลบเท่าไหร่)
+            days = m["days"]
+            if 80 <= days <= 100:
+                standalone = m["val"]  # ยื่นยอดเฉพาะไตรมาสอยู่แล้ว (ไม่ต้องแปลง)
+            elif 80 * n_quarters - 15 <= days <= 100 * n_quarters + 15:
+                standalone = m["val"] - cum  # ยอดสะสม YTD — ลบไตรมาสก่อนหน้าที่รู้แล้วออก
+            else:
+                break  # duration ไม่เข้าเกณฑ์ทั้งสองแบบ ข้ามกันเลขเพี้ยน
+            out[m["end"]] = {"val": standalone, "fp": fp, "fy": fy}
+            cum += standalone
+    return out
+
+
 def _annual_with_end(facts: dict, concepts: list[str], unit: str, prefer_latest_value: bool = False) -> dict[int, dict]:
     """งบทั้งปี (10-K, fp=FY) พร้อมวันที่ปิดงบ — ใช้สังเคราะห์ไตรมาสที่ไม่ได้ยื่นแยก (มักเป็น Q4).
     prefer_latest_value: เหมือน _quarterly_with_fp — ใช้ EPS ที่ปรับปรุงหลัง split แล้ว."""
@@ -292,13 +337,11 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         _annual_with_end(facts, _NET_INCOME_CONCEPTS, "USD"),
     )
     raw_ocf_meta = _synthesize_missing_quarter(
-        _quarterly_with_fp(facts, _OCF_CONCEPTS, "USD"),
+        _quarterly_from_cumulative(facts, _OCF_CONCEPTS, "USD"),
         _annual_with_end(facts, _OCF_CONCEPTS, "USD"),
     )
 
-    # กระแสเงินสดอิสระ (Free Cash Flow = OCF - CapEx) แบบรายปี (10-K) เท่านั้น — ไม่ใช้รายไตรมาสแบบ
-    # รายได้/กำไร เพราะหลายบริษัทยื่น XBRL ของกระแสเงินสดแบบ "สะสมตั้งแต่ต้นปีงบ" (YTD) ในไตรมาส 2-3
-    # ไม่ใช่ยอดเฉพาะไตรมาสนั้น ทำให้ดึงเป็นรายไตรมาสตรง ๆ ไม่ได้แม่นยำ ส่วนรายปีมีครบทุกบริษัทเสมอ (10-K)
+    # กระแสเงินสดอิสระรายปี (10-K) — เก็บไว้เป็น fallback เผื่อบริษัทไหนข้อมูลรายไตรมาสไม่พอสังเคราะห์ TTM ได้
     ann_ocf = _annual_with_end(facts, _OCF_CONCEPTS, "USD")
     ann_capex = _annual_with_end(facts, _CAPEX_CONCEPTS, "USD")
     ann_shares = _annual_with_end(facts, _SHARES, "shares")
@@ -310,6 +353,15 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
             "period": ann_ocf[fy]["end"], "fy": fy, "fcf": fcf_val,
             "fcf_per_share": (fcf_val / shares_val) if shares_val else None,
         })
+
+    # CapEx รายไตรมาส — ใช้ _quarterly_from_cumulative (แปลงยอดสะสม YTD กลับเป็นยอดเฉพาะไตรมาสให้ ไม่ทิ้ง
+    # ทิ้งเหมือนเดิม) แล้วสังเคราะห์ไตรมาสที่ขาด/มักเป็น Q4 จากงบทั้งปี เพื่อคำนวณ FCF ต่อไตรมาสแล้วรวมเป็น
+    # TTM ด้านล่าง — ให้เส้น "ราคาตาม FCF" อัปเดตทุกไตรมาสแทนที่จะเป็นขั้นบันไดรายปีเหมือนก่อนแก้ไข
+    raw_capex_meta = _synthesize_missing_quarter(
+        _quarterly_from_cumulative(facts, _CAPEX_CONCEPTS, "USD"),
+        _annual_with_end(facts, _CAPEX_CONCEPTS, "USD"),
+    )
+    capex_by_key = _yoy_lookup(raw_capex_meta)
 
     dates = sorted(raw_revenue_meta.keys())
     if len(dates) < 5:
@@ -330,6 +382,9 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         net_income = None
         ocf = None
         ocf_yoy = None
+        capex = None
+        fcf = None
+        fy = k[1] if k else None
         if k:
             prev = rev_by_key.get((k[0], k[1] - 1))
             if prev:
@@ -342,9 +397,12 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
             ocf_prev = ocf_by_key.get((k[0], k[1] - 1))
             if ocf is not None and ocf_prev:
                 ocf_yoy = (ocf - ocf_prev) / abs(ocf_prev)
+            capex = capex_by_key.get(k)
+            if ocf is not None and capex is not None:
+                fcf = ocf - capex
         quarters_full.append({"period": d, "label": _quarter_label(d, meta), "revenue": rev, "yoy_pct": yoy,
                               "net_income": net_income, "profit_yoy_pct": profit_yoy,
-                              "ocf": ocf, "ocf_yoy_pct": ocf_yoy})
+                              "ocf": ocf, "ocf_yoy_pct": ocf_yoy, "fcf": fcf, "fy": fy})
 
     quarters = [q for q in quarters_full if q["yoy_pct"] is not None][-max_quarters:]
     if not quarters:
@@ -362,6 +420,24 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         (eps_dates[i], sum(raw_eps[d] for d in eps_dates[i - 3:i + 1]))
         for i in range(3, len(eps_dates))
     ]
+
+    # TTM FCF ต่อไตรมาส (ผลรวม FCF 4 ไตรมาสติดกันล่าสุด ตามลำดับเวลาจริงใน quarters_full ซึ่งเรียงจากเก่า
+    # ไปใหม่แล้ว) — เกลี่ยความผันผวนตามฤดูกาล/CapEx ก้อนใหญ่รายไตรมาสออกเหมือน TTM revenue ด้านบน
+    # ใช้แทนขั้นบันไดรายปีเดิม (fcf_annual) ให้เส้น "ราคาตาม FCF" ขยับทุกไตรมาสแทนที่จะรอ 10-K ทั้งปี
+    # ไตรมาสไหนคำนวณ FCF ไม่ได้ (ไม่มี CapEx แบบ ~90 วันแยกยื่น — บางบริษัทยื่นแบบสะสม YTD เท่านั้น)
+    # จะข้ามหน้าต่าง TTM นั้นไปเลย กันเลขเพี้ยนจากข้อมูลไม่ครบ
+    fcf_quarterly = []
+    for i in range(3, len(quarters_full)):
+        window = quarters_full[i - 3:i + 1]
+        if all(q["fcf"] is not None for q in window):
+            fy = quarters_full[i]["fy"]
+            shares_val = (ann_shares.get(fy, {}).get("val") if fy is not None else None) \
+                or (ann_shares.get(fy - 1, {}).get("val") if fy is not None else None)
+            ttm_fcf = sum(q["fcf"] for q in window)
+            fcf_quarterly.append({
+                "period": quarters_full[i]["period"], "fy": fy, "fcf": ttm_fcf,
+                "fcf_per_share": (ttm_fcf / shares_val) if shares_val else None,
+            })
 
     from app.main import provider  # lazy import กันวน circular import (ตามแบบ trend_radar.py)
     get_history = getattr(provider, "get_history", None)
@@ -390,12 +466,14 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         median = pe_sorted[len(pe_sorted) // 2]
         pe_reference = {"median": round(median, 1), "label": f"{round(median)}x P/E (median, ~2 ปีล่าสุด)"}
 
-    # P/FCF (ราคา ÷ Free Cash Flow ต่อหุ้น) — ใช้ FCF ต่อหุ้นของปีงบล่าสุดที่ประกาศ "ค้างไว้" จนกว่าจะมี
-    # 10-K ปีถัดไป (อัปเดตปีละครั้งแทนรายไตรมาส เพราะข้อมูลกระแสเงินสดรายไตรมาสไม่ครบตามที่อธิบายด้านบน)
+    # P/FCF (ราคา ÷ TTM Free Cash Flow ต่อหุ้น) — ใช้ fcf_quarterly (TTM รายไตรมาส) ถ้าข้อมูลพอ
+    # อัปเดตทุกไตรมาสแทนที่จะรอ 10-K ทั้งปี ถ้าไม่พอ (บริษัทยื่น CapEx แบบสะสม YTD เท่านั้น) fallback
+    # กลับไปใช้ fcf_annual (ขั้นบันไดรายปี) แทน
+    fcf_series_for_pfcf = fcf_quarterly if len(fcf_quarterly) >= 3 else fcf_annual
     pfcf_series = []
     for w in bars:
         w_date = datetime.fromtimestamp(w["time"], tz=timezone.utc).date().isoformat()
-        entry = next((e for e in reversed(fcf_annual) if e["period"] <= w_date and e["fcf_per_share"]), None)
+        entry = next((e for e in reversed(fcf_series_for_pfcf) if e["period"] <= w_date and e["fcf_per_share"]), None)
         if entry and entry["fcf_per_share"] > 0:
             pfcf_series.append({"time": w["time"], "pfcf": round(w["close"] / entry["fcf_per_share"], 2)})
 
@@ -416,6 +494,7 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         "pe_series": pe_series[-window:],
         "pe_reference": pe_reference,
         "fcf_annual": fcf_annual,
+        "fcf_quarterly": fcf_quarterly,
         "pfcf_series": pfcf_series[-window:],
         "pfcf_reference": pfcf_reference,
         "has_preliminary": bool(prelim),

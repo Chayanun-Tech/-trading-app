@@ -880,7 +880,7 @@
         <div></div><div></div>
         <div class="field" style="align-self:end;"><button onclick="runRevenueModel(true)" title="ดึงงบสดจาก SEC ใหม่ทับ cache">🔄 ใหม่</button></div>
       </div>
-      <div class="note" style="margin-top:6px;">กราฟราคาปกติ ซูม/เลื่อนดูย้อนหลังได้ด้วยเมาส์ · กราฟด้านล่าง = อัตราเติบโตรายได้ (เขียว/แดง, แกนขวา) เทียบกำไรสุทธิ (ม่วง, แกนซ้าย) และกระแสเงินสดจากการดำเนินงาน (<span style="color:#4fd1c5;">ฟ้า เส้น</span>, แกนซ้าย) แบบปีต่อปี (YoY) คนละแกนกัน ไม่บีบกัน — เลื่อนเมาส์บนแท่งเพื่อดูตัวเลขไตรมาสนั้น · กราฟถัดไป = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) · แท่ง<span style="color:#e2b93b;">สีเหลือง</span>+ป้าย <b>*</b> = ไตรมาสล่าสุดที่บริษัทเพิ่งประกาศแต่ SEC ยังไม่ยืนยัน (ดึงสดจาก Yahoo ทุกครั้ง ไม่ cache) · <span class="tiny" style="color:#7d8b99;">เส้นกระแสเงินสดอาจมีจุดข้อมูลน้อยกว่ารายได้/กำไร เพราะหลายบริษัทยื่น SEC แบบสะสมทั้งปี (YTD) ไม่ใช่รายไตรมาสเดี่ยว ๆ ในไตรมาส 2-3</span> — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
+      <div class="note" style="margin-top:6px;">กราฟราคาปกติ ซูม/เลื่อนดูย้อนหลังได้ด้วยเมาส์ · กราฟด้านล่าง = อัตราเติบโตรายได้ (เขียว/แดง, แกนขวา) เทียบกำไรสุทธิ (ม่วง, แกนซ้าย) และกระแสเงินสดจากการดำเนินงาน (<span style="color:#4fd1c5;">ฟ้า เส้น</span>, แกนซ้าย) แบบปีต่อปี (YoY) คนละแกนกัน ไม่บีบกัน — เลื่อนเมาส์บนแท่งเพื่อดูตัวเลขไตรมาสนั้น · กราฟถัดไป = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) · แท่ง<span style="color:#e2b93b;">สีเหลือง</span>+ป้าย <b>*</b> = ไตรมาสล่าสุดที่บริษัทเพิ่งประกาศแต่ SEC ยังไม่ยืนยัน (ดึงสดจาก Yahoo ทุกครั้ง ไม่ cache) · <span class="tiny" style="color:#7d8b99;">เส้นกระแสเงินสด/FCF แปลงยอดสะสมทั้งปี (YTD) ที่บางบริษัทยื่นในไตรมาส 2-3 กลับเป็นยอดเฉพาะไตรมาสให้อัตโนมัติ — บางไตรมาสอาจยังขาดถ้า SEC ให้ข้อมูลไม่ครบ</span> — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
       <div class="note tiny" style="margin-top:2px; color:#7d8b99;">ลากมุมขวาล่างของแต่ละกรอบกราฟเพื่อปรับความสูงเองได้</div>
       <div class="chart-wrap rm-chart-wrap rm-resizable" style="margin-top:6px; position:relative;">
@@ -897,7 +897,7 @@
       <div class="subcharts">
         <div class="subchart rm-subchart rm-resizable"><div class="sub-title">ราคา (น้ำเงิน) vs รายได้ TTM (ส้ม) — ปรับฐาน = 100 ที่จุดเริ่มต้น: ราคาอยู่เหนือเส้นรายได้ = ราคาวิ่งนำหน้าพื้นฐาน (เสี่ยงตีราคาแพง) · ราคาอยู่ใต้เส้นรายได้ = ราคาตามหลังพื้นฐาน (โอกาส deep value)</div><div id="rmCompareChart" style="width:100%; height:100%;"></div></div>
         <div class="subchart rm-subchart rm-resizable"><div class="sub-title">P/E Ratio (Trailing, รายสัปดาห์)</div><div id="rmPeChart" style="width:100%; height:100%;"></div></div>
-        <div class="subchart rm-subchart rm-resizable"><div class="sub-title">P/FCF Ratio (ราคา ÷ Free Cash Flow ต่อหุ้น, อัปเดตปีละครั้งตาม 10-K) — สไตล์ที่บัฟเฟตต์ให้น้ำหนักมากกว่า P/E เพราะยึด "เงินสดที่ถอนออกมาได้จริง" ไม่ใช่กำไรทางบัญชี</div><div id="rmPfcfChart" style="width:100%; height:100%;"></div></div>
+        <div class="subchart rm-subchart rm-resizable"><div class="sub-title">P/FCF Ratio (ราคา ÷ TTM Free Cash Flow ต่อหุ้น, อัปเดตทุกไตรมาสจากงบ 10-Q — ถ้าข้อมูลไม่พอจะ fallback เป็นรายปีตาม 10-K) — สไตล์ที่บัฟเฟตต์ให้น้ำหนักมากกว่า P/E เพราะยึด "เงินสดที่ถอนออกมาได้จริง" ไม่ใช่กำไรทางบัญชี</div><div id="rmPfcfChart" style="width:100%; height:100%;"></div></div>
       </div>
     </div>
 
@@ -3349,7 +3349,7 @@ function ensureRmCharts() {
     color:"#c77dff", lineWidth:2, lineStyle:2, title:"ราคาตามรายได้ TTM (ถ้าราคาวิ่งตามรายได้ล้วน ๆ)",
   });
   rmFcfFairSeries = rmChart.addLineSeries({
-    color:"#2dd4bf", lineWidth:2, lineStyle:2, title:"ราคาตาม Free Cash Flow รายปี (ถ้าราคาวิ่งตามเงินสดล้วน ๆ)",
+    color:"#2dd4bf", lineWidth:2, lineStyle:2, title:"ราคาตาม Free Cash Flow TTM รายไตรมาส (ถ้าราคาวิ่งตามเงินสดล้วน ๆ)",
   });
   rmPeChart = LightweightCharts.createChart($("rmPeChart"), { ...base, timeScale:tsOptions, width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
   rmPeSeries = rmPeChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"P/E" });
@@ -3552,29 +3552,36 @@ function renderRevenueModel(d) {
       $("rmFairNote").innerHTML = "";
     }
     // เส้น "ราคาตาม Free Cash Flow" (OCF - CapEx) — เหมือนเส้นรายได้ด้านบนทุกประการ (ปรับสัดส่วนจากฐาน)
-    // แต่ใช้ FCF รายปี (10-K) แทนรายได้รายไตรมาส เพราะข้อมูลกระแสเงินสดรายไตรมาสไม่ครบ (อธิบายไว้ใต้กราฟเติบโต)
-    // จึงอัปเดตเป็นขั้นบันไดปีละครั้งแทนที่จะไล่ราบทุกไตรมาสแบบเส้นรายได้ — เป็นภาพที่ใกล้ "owner earnings"
-    // ของบัฟเฟตต์มากกว่า P/S เพราะยึดเงินสดที่ถอนออกมาได้จริง ไม่ใช่ยอดขายหรือกำไรทางบัญชี
+    // ใช้ TTM FCF รายไตรมาส (fcf_quarterly: ผลรวม FCF 4 ไตรมาสติดกันล่าสุด สังเคราะห์จากงบ 10-Q) เป็นหลัก
+    // เพื่อให้อัปเดตทุกไตรมาสเหมือนเส้นรายได้ (แม่นยำ/ละเอียดกว่าเดิม) — fallback ไปใช้ fcf_annual
+    // (ขั้นบันไดรายปีจาก 10-K) เฉพาะตอนข้อมูลรายไตรมาสไม่พอ (บริษัทยื่น CapEx แบบสะสม YTD เท่านั้น)
+    // เป็นภาพที่ใกล้ "owner earnings" ของบัฟเฟตต์มากกว่า P/S เพราะยึดเงินสดที่ถอนออกมาได้จริง ไม่ใช่ยอดขาย/กำไรทางบัญชี
+    const fcfQuarterly = d.fcf_quarterly || [];
     const fcfAnnual = d.fcf_annual || [];
-    if (candles.length && fcfAnnual.length) {
-      const fcfStartTime = Math.max(candles[0].time, Date.parse(fcfAnnual[0].period + "T00:00:00Z") / 1000);
+    const usingQuarterlyFcf = fcfQuarterly.length >= 3;
+    const fcfSeries = usingQuarterlyFcf ? fcfQuarterly : fcfAnnual;
+    if (candles.length && fcfSeries.length) {
+      const fcfStartTime = Math.max(candles[0].time, Date.parse(fcfSeries[0].period + "T00:00:00Z") / 1000);
       const fcfPriceBase = candles.find(c => c.time >= fcfStartTime) || candles[0];
-      const fcfBase = fcfAnnual.find(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= fcfStartTime) || fcfAnnual[0];
-      const fcfQuarters = fcfAnnual.filter(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= fcfPriceBase.time);
-      if (fcfBase.fcf > 0 && fcfQuarters.length) {
-        const fcfFairSeries = fcfQuarters.map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:fcfPriceBase.close * (q.fcf / fcfBase.fcf) }));
+      const fcfBase = fcfSeries.find(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= fcfStartTime) || fcfSeries[0];
+      const fcfPoints = fcfSeries.filter(q => Date.parse(q.period + "T00:00:00Z") / 1000 >= fcfPriceBase.time);
+      if (fcfBase.fcf > 0 && fcfPoints.length) {
+        const fcfFairSeries = fcfPoints.map(q => ({ time:Date.parse(q.period + "T00:00:00Z") / 1000, value:fcfPriceBase.close * (q.fcf / fcfBase.fcf) }));
         rmFcfFairSeries.setData(fcfFairSeries);
         const fcfFairNow = fcfFairSeries[fcfFairSeries.length - 1].value;
         const priceNow = candles[candles.length - 1].close;
         const diffPct2 = ((priceNow - fcfFairNow) / fcfFairNow) * 100;
         const cls3 = diffPct2 > 0 ? "down" : "up";
-        $("rmFcfFairNote").innerHTML = `เส้นเขียวอมฟ้าประ = "ราคาตาม Free Cash Flow" (OCF − CapEx รายปี, อัปเดตปีละครั้งตาม 10-K) — ถ้าราคาโตตาม FCF ล้วน ๆ นับจากปีงบ ${escapeHtml(String(fcfBase.fy))} `
+        const cadenceNote = usingQuarterlyFcf
+          ? "TTM รายไตรมาส, สังเคราะห์จาก 10-Q — อัปเดตทุกไตรมาส"
+          : "รายปี, อัปเดตปีละครั้งตาม 10-K เพราะบริษัทนี้ข้อมูล CapEx รายไตรมาสไม่พอสังเคราะห์ TTM";
+        $("rmFcfFairNote").innerHTML = `เส้นเขียวอมฟ้าประ = "ราคาตาม Free Cash Flow" (OCF − CapEx, ${cadenceNote}) — ถ้าราคาโตตาม FCF ล้วน ๆ นับจาก${usingQuarterlyFcf ? "ไตรมาส" : "ปีงบ"} ${escapeHtml(String(fcfBase.fy))} `
           + `(ราคา $${fcfPriceBase.close.toFixed(2)}) ราคาตอนนี้ควรอยู่ที่ <b>$${fcfFairNow.toFixed(2)}</b> `
           + `แต่ราคาจริงคือ <b>$${priceNow.toFixed(2)}</b> → <span class="${cls3}">${diffPct2 >= 0 ? "แพงกว่า" : "ถูกกว่า"}แนวโน้ม FCF ${Math.abs(diffPct2).toFixed(0)}%</span>`
-          + ` <span class="tiny" style="color:#7d8b99;">(ยึด "เงินสดที่ถอนออกมาได้จริง" ใกล้แนว owner earnings ของบัฟเฟตต์มากกว่า P/S แต่โตแบบขั้นบันไดปีต่อปี ไม่เรียบเท่าเส้นรายได้ เพราะข้อมูลกระแสเงินสดมีแค่ปีละครั้ง)</span>`;
+          + ` <span class="tiny" style="color:#7d8b99;">(ยึด "เงินสดที่ถอนออกมาได้จริง" ใกล้แนว owner earnings ของบัฟเฟตต์มากกว่า P/S)</span>`;
       } else {
         rmFcfFairSeries.setData([]);
-        $("rmFcfFairNote").innerHTML = `<span class="tiny" style="color:#7d8b99;">คำนวณเส้น "ราคาตาม FCF" ไม่ได้ — ปีฐานมี Free Cash Flow ติดลบหรือไม่พอ ทำให้ปรับสัดส่วนราคาไม่ได้</span>`;
+        $("rmFcfFairNote").innerHTML = `<span class="tiny" style="color:#7d8b99;">คำนวณเส้น "ราคาตาม FCF" ไม่ได้ — ฐานมี Free Cash Flow ติดลบหรือไม่พอ ทำให้ปรับสัดส่วนราคาไม่ได้</span>`;
       }
     } else {
       rmFcfFairSeries.setData([]);
