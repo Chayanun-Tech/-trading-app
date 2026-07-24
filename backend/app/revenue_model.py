@@ -299,7 +299,7 @@ async def _generate_verdict(symbol: str, entity: str | None, profile: dict, prof
     """เรียก LLM สรุป verdict ตาม sector — ใช้โครงสร้าง llm/ai_analyst ที่มีอยู่ (มี fallback provider).
     คืน None ถ้า AI ปิดอยู่หรือเรียกไม่สำเร็จ (ไม่ทำให้ endpoint หลักพัง)."""
     from app.config import get_settings
-    if not get_settings().llm_enabled:
+    if not get_settings().llm_enabled():
         return None
     from app import ai_analyst
 
