@@ -277,6 +277,13 @@ def _compute_sector_extras(profile_key: str, facts: dict, bars: list[dict], bars
             metrics.append(_metric("Rule of 40", f"{r40:.0f} ({growth:.0f}% โต {margin:+.0f}% FCF)",
                                    "โต% + FCF margin% ≥ 40 = สมดุลดี"))
 
+    elif profile_key == "general":
+        # General stock: use standard P/E multiple for fair value
+        ann_eps = _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True)
+        eps_vals = [ann_eps[fy]["val"] for fy in sorted(ann_eps)]
+        if eps_vals and eps_vals[-1] > 0 and pe_band:
+            fair = _fair_from_band(eps_vals[-1], pe_band, "P/E median", price)
+
     return metrics, fair, warns
 
 
