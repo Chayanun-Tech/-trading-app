@@ -339,6 +339,46 @@ def validate_anchor(series: list[dict], anchor_name: str) -> dict:
     return {"ok": True, "base_idx": base_idx, "issues": issues}
 
 
+# ── เพดานความสมเหตุสมผลของตัวคูณ ────────────────────────────────────────────
+# ตัวคูณ median = "ราคาที่ตลาดเคยให้หุ้นตัวนี้" ไม่ใช่มูลค่าที่แท้จริง — หุ้นที่ตลาดให้ราคาแพง
+# มาตลอด 2 ปีจะได้ราคายุติธรรมสูงตามไปด้วย แล้วโผล่ขึ้นหัวตาราง "undervalue" ทั้งที่ยังแพงอยู่
+# (เคสจริง: median P/E 346x → ราคายุติธรรมสูงกว่าราคาจริง 94% ทั้งที่ P/E ปัจจุบันยังเกิน 170x)
+# ด่านนี้ต่างจากด่าน "ห่างกันเกิน 5 เท่า" ใน revenue_model — ด่านนั้นจับ *ฐานพัง*, ด่านนี้จับ
+# *ฐานเฟ้อ* ซึ่งตัวเลขออกมาดูสมเหตุผลทุกอย่าง ยกเว้นระดับของตัวคูณเอง
+#   (rich, extreme) — เกิน rich = เตือน, เกิน extreme = ไม่ควรนับเป็นสัญญาณ "ถูก"
+_MULTIPLE_LIMITS: dict[str, tuple[float, float]] = {
+    "P/FFO": (25.0, 35.0),
+    "P/FCF": (35.0, 60.0),
+    "P/B": (4.0, 8.0),
+    "P/S": (10.0, 20.0),
+    "P/E": (35.0, 60.0),
+}
+
+
+def multiple_sanity(basis: str | None, multiple: float | None) -> dict:
+    """ตัวคูณ median ที่ใช้ตั้งราคายุติธรรม อยู่ในระดับที่เชื่อได้ไหม.
+
+    คืน {level, note} โดย level = ok | rich | extreme | unknown
+    (unknown = จับคู่ basis กับเพดานไม่ได้ — ไม่ตัดสิน ปล่อยผ่านแบบไม่การันตี)."""
+    if not basis or not isinstance(multiple, (int, float)) or multiple <= 0:
+        return {"level": "unknown", "note": ""}
+
+    # เรียงจากคีย์ยาวไปสั้น กัน "P/E" ไปชนกับ basis ที่จริง ๆ เป็น P/FFO/P/FCF
+    for key in sorted(_MULTIPLE_LIMITS, key=len, reverse=True):
+        if key in basis:
+            rich, extreme = _MULTIPLE_LIMITS[key]
+            if multiple >= extreme:
+                return {"level": "extreme", "note": (
+                    f"ตัวคูณฐาน {key} = {multiple:.0f}x สูงผิดปกติ (เกิน {extreme:.0f}x) — "
+                    f"ราคายุติธรรมนี้แปลว่า 'ตลาดเคยให้ราคาแพงกว่านี้' ไม่ใช่ 'หุ้นถูก'")}
+            if multiple >= rich:
+                return {"level": "rich", "note": (
+                    f"ตัวคูณฐาน {key} = {multiple:.0f}x ถือว่าแพงอยู่แล้ว (เกิน {rich:.0f}x) — "
+                    f"upside ที่เห็นวัดจากฐานที่ตลาดให้ราคาสูง ไม่ใช่จากราคาถูกโดยเนื้อธุรกิจ")}
+            return {"level": "ok", "note": ""}
+    return {"level": "unknown", "note": ""}
+
+
 # ── ชั้น 5: Median-based Fair Value Line + Band ──────────────────────────────
 def median_band(ratios: list[float], min_points: int = 8) -> dict | None:
     """สรุปชุดค่า P/X (เช่น P/E, P/FCF ทุกจุดในอดีต) เป็น median + band IQR หลังตัด outlier.

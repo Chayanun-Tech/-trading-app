@@ -31,6 +31,8 @@ from app import trend_radar
 from app import revenue_model
 from app import revenue_scanner
 from app import value_scanner
+from app import ema_scanner
+from app import confluence
 from app.engine import build_report
 from app.financials import build_financials
 from app.fundamentals import (get_fundamentals, get_offline, is_equity_symbol,
@@ -706,6 +708,7 @@ async def value_scan_sp500_route(
     auto: bool = Query(False, description="True = ถ้าผลเก่ากว่า 24 ชม. ให้สแกนสดใหม่เองอัตโนมัติ (เฉพาะตอนรันในเครื่อง)"),
     min_market_cap: float | None = Query(None, ge=0, description="กรอง market cap ขั้นต่ำ (USD)"),
     max_market_cap: float | None = Query(None, ge=0, description="กรอง market cap สูงสุด (USD)"),
+    exclude_extreme: bool = Query(True, description="True = ซ่อนหุ้นที่ตัวคูณ median สูงผิดปกติ (ฐานประเมินเฟ้อ)"),
 ):
     """สแกน S&P 500 หาหุ้นที่ราคาต่ำกว่า "ราคายุติธรรมตาม sector" (ตรรกะเดียวกับกล่องประเมินมูลค่า
     ในแท็บ 📈 โมเดลรายได้ — ธนาคารใช้ P/B, REIT ใช้ P/FFO, ทั่วไปใช้ P/E ฯลฯ).
@@ -716,6 +719,7 @@ async def value_scan_sp500_route(
         return await value_scanner.scan_sp500_fair_value(
             min_upside_pct=min_upside_pct, limit=limit, profile=profile, refresh=refresh, auto=auto,
             min_market_cap=min_market_cap, max_market_cap=max_market_cap,
+            exclude_extreme=exclude_extreme,
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"สแกนมูลค่ายุติธรรม S&P 500 ไม่สำเร็จ: {exc}")
@@ -734,6 +738,73 @@ async def value_scan_sp500_publish_route():
         f"Update S&P 500 fair-value scan ({result['success_count']}/{result['universe_count']} companies)",
     )
     return {**result, **publish}
+
+
+@app.get("/api/ema-scan/sp500")
+async def ema_scan_sp500_route(
+    period: int = Query(200, description="เส้น EMA ที่จะวัดระยะห่าง (50 / 100 / 200)"),
+    tolerance_pct: float = Query(3.0, gt=0, le=25, description="ถือว่า 'ใกล้เส้น' เมื่ออยู่ในโซน ±กี่ %"),
+    side: str = Query("both", pattern="^(both|above|below)$", description="both = ทั้งสองฝั่ง · above = เหนือเส้น · below = ใต้เส้น"),
+    trend: str = Query("any", pattern="^(any|up|down)$", description="กรองตามความชัน EMA200 (up = เส้นชี้ขึ้น)"),
+    limit: int = Query(40, ge=1, le=200),
+    refresh: bool = Query(False, description="True = สแกนสดใหม่ทั้ง S&P 500 (เหมาะกับรันในเครื่องเท่านั้น)"),
+    auto: bool = Query(False, description="True = ถ้าผลเก่ากว่า 12 ชม. ให้สแกนสดใหม่เองอัตโนมัติ (เฉพาะตอนรันในเครื่อง)"),
+    min_market_cap: float | None = Query(None, ge=0, description="กรอง market cap ขั้นต่ำ (USD)"),
+    max_market_cap: float | None = Query(None, ge=0, description="กรอง market cap สูงสุด (USD)"),
+):
+    """สแกน S&P 500 หาหุ้นที่ราคา "ลงมาใกล้" เส้น EMA 50/100/200 (เลนส์สายเทคนิค ไม่แตะงบการเงิน).
+    ผลแคชไว้ในไฟล์ (data_sp500_ema_scan.json) — เว็ปอ่านแคชทันที ไม่สแกนสดบนคลาวด์."""
+    if min_market_cap is not None and max_market_cap is not None and max_market_cap <= min_market_cap:
+        raise HTTPException(400, "max_market_cap ต้องมากกว่า min_market_cap")
+    try:
+        return await ema_scanner.scan_sp500_ema(
+            period=period, tolerance_pct=tolerance_pct, side=side, trend=trend, limit=limit,
+            refresh=refresh, auto=auto, min_market_cap=min_market_cap, max_market_cap=max_market_cap,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สแกน EMA S&P 500 ไม่สำเร็จ: {exc}")
+
+
+@app.post("/api/ema-scan/sp500/publish")
+async def ema_scan_sp500_publish_route():
+    """สแกน EMA สดใหม่ทั้ง S&P 500 แล้ว commit+push ขึ้น GitHub/HF อัตโนมัติ (เหมือนสแกนตัวอื่น)
+    ใช้ได้เฉพาะตอนรันในเครื่อง; บน HF container จะคืน pushed=false"""
+    try:
+        result = await ema_scanner.scan_sp500_ema(refresh=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สแกน EMA S&P 500 ไม่สำเร็จ: {exc}")
+    publish = _git_publish_file(
+        "backend/app/data_sp500_ema_scan.json",
+        f"Update S&P 500 EMA scan ({result['success_count']}/{result['universe_count']} companies)",
+    )
+    return {**result, **publish}
+
+
+@app.get("/api/confluence/sp500")
+async def confluence_sp500_route(
+    min_agree: int = Query(2, ge=1, le=3, description="แสดงเฉพาะหุ้นที่มีอย่างน้อยกี่เลนส์เห็นตรงกัน"),
+    max_gap_pct: float = Query(-15.0, description="เกณฑ์ผ่านของเลนส์รายได้ (ราคาต่ำกว่าที่รายได้บ่งชี้กี่ %)"),
+    min_upside_pct: float = Query(20.0, description="เกณฑ์ผ่านของเลนส์มูลค่ายุติธรรม (upside ขั้นต่ำ)"),
+    ema_zone_pct: float = Query(3.0, gt=0, le=25, description="เกณฑ์ผ่านของเลนส์ EMA (อยู่ในโซน ±กี่ % ของ EMA200)"),
+    limit: int = Query(60, ge=1, le=200),
+    min_market_cap: float | None = Query(None, ge=0, description="กรอง market cap ขั้นต่ำ (USD)"),
+    max_market_cap: float | None = Query(None, ge=0, description="กรอง market cap สูงสุด (USD)"),
+):
+    """รวมผลสแกนทุกเลนส์ (รายได้ / มูลค่ายุติธรรม / EMA) เป็นตารางเดียว เรียงตามจำนวนเลนส์ที่เห็นตรงกัน.
+    อ่านจากไฟล์แคชของแต่ละสแกน — ไม่สแกนใหม่เอง จึงตอบเร็วเสมอ (เลนส์ไหนยังไม่เคยสแกน จะขึ้นว่า
+    'ยังไม่มีข้อมูล' ไม่ใช่ 'ไม่ผ่าน')."""
+    if min_market_cap is not None and max_market_cap is not None and max_market_cap <= min_market_cap:
+        raise HTTPException(400, "max_market_cap ต้องมากกว่า min_market_cap")
+    try:
+        return await confluence.scan_confluence(
+            min_agree=min_agree, max_gap_pct=max_gap_pct, min_upside_pct=min_upside_pct,
+            ema_zone_pct=ema_zone_pct, limit=limit,
+            min_market_cap=min_market_cap, max_market_cap=max_market_cap,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"รวมผลสแกนไม่สำเร็จ: {exc}")
 
 
 @app.post("/api/analyze-fundamentals", response_model=ValueReport)

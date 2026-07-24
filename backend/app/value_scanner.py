@@ -104,13 +104,30 @@ def profile_options() -> list[dict]:
     return [{"key": k, "label": p["label"]} for k, p in sector_profile.PROFILES.items()]
 
 
+def annotate_multiple_level(row: dict) -> dict:
+    """แปะระดับความน่าเชื่อของตัวคูณฐาน (ok/rich/extreme) ให้ผลสแกน 1 แถว.
+
+    คำนวณตอนอ่านผล ไม่ได้เก็บลงไฟล์แคช — แคชเก่าที่สแกนไว้ก่อนมีฟีเจอร์นี้จึงใช้ได้ทันที
+    ไม่ต้องสแกน 500 บริษัทใหม่ และเวลาปรับเพดานใน sector_profile ก็มีผลทันทีเช่นกัน."""
+    sanity = sector_profile.multiple_sanity(row.get("basis"), row.get("median_multiple"))
+    return {**row, "multiple_level": sanity["level"], "multiple_note": sanity["note"]}
+
+
 async def _format_result(cached: dict, min_upside_pct: float, limit: int,
                          min_market_cap: float | None, max_market_cap: float | None,
-                         profile: str | None, rescanned: bool = False) -> dict:
-    candidates = [r for r in cached["results"] if r["upside_pct"] >= min_upside_pct]
+                         profile: str | None, rescanned: bool = False,
+                         exclude_extreme: bool = True) -> dict:
+    candidates = [annotate_multiple_level(r) for r in cached["results"]
+                  if r["upside_pct"] >= min_upside_pct]
     if profile:
         candidates = [r for r in candidates if r["profile_key"] == profile]
-    candidates.sort(key=lambda r: -r["upside_pct"])
+    excluded_extreme = sum(1 for r in candidates if r["multiple_level"] == "extreme")
+    if exclude_extreme:
+        candidates = [r for r in candidates if r["multiple_level"] != "extreme"]
+    # เรียงตาม "ฐานน่าเชื่อก่อน" แล้วค่อย upside — ไม่งั้นหุ้นที่ upside สูงสุดซึ่งมักมาจากฐานที่เฟ้อ
+    # ที่สุดจะยึดหัวตารางเสมอ (ปัญหาเดิม: อันดับ 1 = ตัวคูณ 346x)
+    _rank = {"ok": 0, "unknown": 1, "rich": 2, "extreme": 3}
+    candidates.sort(key=lambda r: (_rank.get(r["multiple_level"], 1), -r["upside_pct"]))
 
     cap_map = await _market_cap_lookup()
     enriched = []
@@ -136,10 +153,12 @@ async def _format_result(cached: dict, min_upside_pct: float, limit: int,
         "criteria": {
             "min_upside_pct": min_upside_pct, "limit": limit, "profile": profile,
             "min_market_cap": min_market_cap, "max_market_cap": max_market_cap,
+            "exclude_extreme": exclude_extreme,
         },
         "profiles": profile_options(),
         "candidates": candidates[:limit],
         "candidate_count": len(candidates),
+        "excluded_extreme_count": excluded_extreme,
         "methodology": (
             "ราคายุติธรรม = (metric หลักของกลุ่มธุรกิจต่อหุ้นล่าสุด) × (ตัวคูณ median ที่ตลาดให้ ~2 ปีล่าสุด) "
             "— ธนาคาร/ประกันใช้ P/B · REIT ใช้ P/FFO · ลงทุนหนักใช้ P/FCF เฉลี่ย 5 ปี · วัฏจักรใช้ EPS เฉลี่ย ~10 ปี (Shiller) · "
@@ -153,7 +172,9 @@ async def _format_result(cached: dict, min_upside_pct: float, limit: int,
         "disclaimer": (
             "ตัวคูณ median สะท้อน 'ราคาที่ตลาดเคยให้หุ้นตัวนี้ 2 ปีล่าสุด' ไม่ใช่มูลค่าที่แท้จริง — "
             "หุ้นที่ตลาดเคยให้ราคาแพงเกินจริงมาตลอดจะดู 'ถูก' ในตารางนี้ และหุ้นที่พื้นฐานเสื่อมถาวรก็เช่นกัน "
-            "ควรเปิดแท็บ 📈 โมเดลรายได้ ดูรายละเอียด/คำเตือนของหุ้นนั้นต่อเสมอ — เพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน"
+            "ระบบจึงติดป้าย 🔶 ให้หุ้นที่ตัวคูณฐานแพงอยู่แล้ว และซ่อนหุ้นที่ตัวคูณสูงผิดปกติออกโดยปริยาย "
+            "(ติ๊กช่องเพื่อดูได้) — ควรเปิดแท็บ 📈 โมเดลรายได้ ดูรายละเอียด/คำเตือนของหุ้นนั้นต่อเสมอ "
+            "เพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน"
         ),
     }
 
@@ -161,7 +182,7 @@ async def _format_result(cached: dict, min_upside_pct: float, limit: int,
 async def scan_sp500_fair_value(
     *, min_upside_pct: float = 20.0, limit: int = 40, concurrency: int = 6, refresh: bool = False,
     auto: bool = False, min_market_cap: float | None = None, max_market_cap: float | None = None,
-    profile: str | None = None,
+    profile: str | None = None, exclude_extreme: bool = True,
 ) -> dict:
     """refresh=True: สแกนสดใหม่เสมอ · auto=True: สแกนสดใหม่ให้เองเมื่อผลเก่ากว่า 24 ชม.
     (เฉพาะตอนรันในเครื่อง — บนเว็ปเสิร์ฟแคชเสมอ) · ทั้งคู่ False: อ่านแคชอย่างเดียว."""
@@ -173,4 +194,4 @@ async def scan_sp500_fair_value(
         _save_cache(cached)
         rescanned = True
     return await _format_result(cached, min_upside_pct, limit, min_market_cap, max_market_cap,
-                                profile, rescanned=rescanned)
+                                profile, rescanned=rescanned, exclude_extreme=exclude_extreme)

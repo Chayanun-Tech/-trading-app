@@ -904,11 +904,52 @@
 
     <div id="revenuescanPanel" class="panel-body hidden">
       <div style="display:flex; gap:6px; flex-wrap:wrap; padding:0 0 8px;">
-        <button class="tab active" id="scanSubRevBtn" onclick="showScanSub('rev')" title="เทียบราคากับแนวโน้มรายได้">📉 ราคาต่ำกว่ารายได้</button>
+        <button class="tab active" id="scanSubAllBtn" onclick="showScanSub('all')" title="รวมทุกเลนส์ไว้ในตารางเดียว — ดูว่าหุ้นตัวไหนที่หลายวิธีวัดเห็นตรงกัน">🎯 รวมทุกเลนส์</button>
+        <button class="tab" id="scanSubRevBtn" onclick="showScanSub('rev')" title="เทียบราคากับแนวโน้มรายได้">📉 ราคาต่ำกว่ารายได้</button>
         <button class="tab" id="scanSubValBtn" onclick="showScanSub('val')" title="เทียบราคากับราคายุติธรรมตามกลุ่มธุรกิจ (P/E, P/B, P/FFO ฯลฯ)">💎 ต่ำกว่ามูลค่ายุติธรรม</button>
+        <button class="tab" id="scanSubEmaBtn" onclick="showScanSub('ema')" title="สายเทคนิค — หาหุ้นที่ราคาลงมาใกล้เส้นค่าเฉลี่ย EMA 50/100/200">📐 ใกล้เส้น EMA</button>
       </div>
 
-      <div id="scanSubRevBox">
+      <div id="scanSubAllBox">
+        <div>
+          <b style="font-size:16px;">🎯 รวมทุกเลนส์: หุ้นที่หลายวิธีวัดเห็นตรงกัน</b>
+          <div class="note">แต่ละเลนส์ตอบคนละคำถาม — 📉 รายได้ = ราคาถูกเทียบยอดขาย · 💎 มูลค่า = ราคาถูกเทียบกำไร/สินทรัพย์ตามกลุ่มธุรกิจ · 📐 EMA = ราคาลงมาถึงโซนเส้นค่าเฉลี่ยระยะยาว ตารางนี้รวมผลจากแคชของทั้งสามสแกน แล้วนับว่ากี่เลนส์ผ่านเกณฑ์พร้อมกัน <b>เรียงตามจำนวนเลนส์ที่เห็นตรงกันก่อน ไม่ใช่ upside</b> — เพราะ upside สูงสุดมักมาจากฐานที่เพี้ยนที่สุด</div>
+        </div>
+        <div class="grid3" style="margin-top:10px;">
+          <div class="field"><label>ต้องมีอย่างน้อยกี่เลนส์เห็นตรงกัน</label>
+            <select id="cfMinAgree" onchange="runConfluenceScan()">
+              <option value="1">1 เลนส์ขึ้นไป (กว้างสุด)</option>
+              <option value="2" selected>2 เลนส์ขึ้นไป</option>
+              <option value="3">ครบ 3 เลนส์ (เข้มสุด)</option>
+            </select>
+          </div>
+          <div class="field"><label>จำนวนผลลัพธ์</label><select id="cfLimit" onchange="runConfluenceScan()"><option>30</option><option selected>60</option><option>120</option></select></div>
+          <div class="field" style="align-self:end; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="primary" onclick="runConfluenceScan()" title="อ่านจากแคชของแต่ละสแกน — ตอบทันที ไม่สแกนใหม่">🔍 รวมผล</button>
+          </div>
+        </div>
+        <div class="grid3" style="margin-top:8px;">
+          <div class="field"><label>📉 เกณฑ์รายได้ (ราคาต่ำกว่ากี่ %)</label><input id="cfMaxGap" type="number" value="-15" step="5" onchange="runConfluenceScan()" /></div>
+          <div class="field"><label>💎 เกณฑ์มูลค่า (upside ขั้นต่ำ %)</label><input id="cfMinUpside" type="number" value="20" step="5" onchange="runConfluenceScan()" /></div>
+          <div class="field"><label>📐 เกณฑ์ EMA (อยู่ในโซน ±%)</label><input id="cfEmaZone" type="number" value="3" step="0.5" min="0.5" max="25" onchange="runConfluenceScan()" /></div>
+        </div>
+        <div class="grid3" style="margin-top:8px;">
+          <div class="field"><label>Market cap ขั้นต่ำ ($B)</label><input id="cfMinCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runConfluenceScan()" /></div>
+          <div class="field"><label>Market cap สูงสุด ($B)</label><input id="cfMaxCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runConfluenceScan()" /></div>
+          <div class="field" style="align-self:end;">
+            <div class="quick" style="padding:0; border:0; gap:6px;">
+              <button onclick="setCfCapPreset(200,null)" title="เฉพาะหุ้นตัวใหญ่มาก">Mega ≥200B</button>
+              <button onclick="setCfCapPreset(10,200)" title="10B–200B">Large 10–200B</button>
+              <button onclick="setCfCapPreset(2,10)" title="2B–10B">Mid 2–10B</button>
+              <button onclick="setCfCapPreset(null,null)" title="ไม่กรอง market cap">ทั้งหมด</button>
+            </div>
+          </div>
+        </div>
+        <div id="cfStatus" class="note" style="margin-top:6px;"></div>
+        <div id="cfResult" style="margin-top:12px;"><div class="note">กำลังรวมผล...</div></div>
+      </div>
+
+      <div id="scanSubRevBox" class="hidden">
       <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <div>
           <b style="font-size:16px;">🔍 สแกน S&P 500: หุ้นราคาต่ำกว่า "ราคาตามรายได้"</b>
@@ -970,11 +1011,72 @@
         </div>
         <div class="grid3" style="margin-top:8px;">
           <div class="field"><label>กลุ่มธุรกิจ (ตามที่เครื่องประเมินจำแนก)</label><select id="vsProfile" onchange="runValueScan()"><option value="">ทุกกลุ่ม</option></select></div>
-          <div></div><div></div>
+          <div class="field" style="align-self:end;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;" title="ตัวคูณ median คือ 'ราคาที่ตลาดเคยให้หุ้นตัวนี้' ไม่ใช่มูลค่าแท้จริง — หุ้นที่ตลาดให้ราคาแพงมาตลอดจะได้ราคายุติธรรมสูงตามไปด้วย แล้วโผล่หัวตารางทั้งที่ยังแพงอยู่">
+              <input id="vsExcludeExtreme" type="checkbox" checked onchange="runValueScan()" style="width:auto; margin:0;" />
+              <span>ซ่อนหุ้นที่ตัวคูณฐานสูงผิดปกติ</span>
+            </label>
+          </div>
+          <div></div>
         </div>
         <div id="vsStatus" class="note" style="margin-top:6px;"></div>
         <div id="vsResult" style="margin-top:12px;">
           <div class="note">กำลังโหลดผลอัตโนมัติเมื่อเปิดเมนูนี้ — ผลยังใหม่จะแสดงทันที ถ้าเก่ากว่า 24 ชม. จะสแกนสดใหม่ให้เอง (อ่านงบ SEC + ราคาย้อนหลังของ 500 บริษัท ใช้เวลาหลายนาที)</div>
+        </div>
+      </div>
+
+      <div id="scanSubEmaBox" class="hidden">
+        <div>
+          <b style="font-size:16px;">📐 สแกน S&P 500: หุ้นที่ราคาลงมาใกล้เส้น EMA</b>
+          <div class="note">เลนส์สายเทคนิคล้วน — ไม่แตะงบการเงินเลย ดูแค่โครงสร้างราคา: ตอนนี้ราคาห่างจากเส้นค่าเฉลี่ยกี่ % · นอกจากระยะห่างยังบอก <b>ความชันของ EMA200</b> (ราคาแตะเส้นตอนขาขึ้น = ย่อพัก แตะตอนเส้นชี้ลง = เทรนด์ใหญ่เสีย คนละเรื่องกัน) และ <b>2 ปีที่ผ่านมาลงมาแตะโซนนี้กี่ครั้ง</b> — ตรวจสอบด้วยตัวเลขจริงว่าหุ้นตัวนั้น "นาน ๆ ลงมาที" จริงหรือเปล่า</div>
+        </div>
+        <div class="grid3" style="margin-top:10px;">
+          <div class="field"><label>เส้นที่จะวัด</label>
+            <select id="esPeriod" onchange="runEmaScan()">
+              <option value="200" selected>EMA 200 (เทรนด์ใหญ่)</option>
+              <option value="100">EMA 100 (เทรนด์กลาง)</option>
+              <option value="50">EMA 50 (เทรนด์สั้น)</option>
+            </select>
+          </div>
+          <div class="field"><label>ถือว่า "ใกล้เส้น" เมื่ออยู่ในโซน ± กี่ %</label><input id="esTolerance" type="number" value="3" step="0.5" min="0.5" max="25" onchange="runEmaScan()" /></div>
+          <div class="field" style="align-self:end; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="primary" onclick="runEmaScan()" title="ผลยังใหม่ = แสดงทันที · ผลเก่ากว่า 12 ชม. = สแกนสดใหม่ให้อัตโนมัติ">🔍 สแกนหาหุ้น</button>
+            <button onclick="runEmaScan(true)" title="สแกนสดใหม่ทั้ง 500 บริษัท — ใช้เวลาหลายนาที เหมาะกับรันในเครื่องเท่านั้น">🔄 สแกนสดใหม่</button>
+            <button onclick="publishEmaScan()" title="สแกนสดใหม่ + commit/push ขึ้น GitHub+HF อัตโนมัติ — ใช้ได้เฉพาะตอนรันในเครื่อง">📤 สแกน + ดันขึ้นเว็ป</button>
+          </div>
+        </div>
+        <div class="grid3" style="margin-top:8px;">
+          <div class="field"><label>ฝั่งของเส้น</label>
+            <select id="esSide" onchange="runEmaScan()">
+              <option value="both" selected>ทั้งสองฝั่ง</option>
+              <option value="below">เฉพาะที่ราคาอยู่ใต้เส้น</option>
+              <option value="above">เฉพาะที่ราคาอยู่เหนือเส้น</option>
+            </select>
+          </div>
+          <div class="field"><label>ความชัน EMA200 (เทรนด์ใหญ่)</label>
+            <select id="esTrend" onchange="runEmaScan()">
+              <option value="any" selected>ไม่กรอง</option>
+              <option value="up">เฉพาะเส้นชี้ขึ้น (ย่อในขาขึ้น)</option>
+              <option value="down">เฉพาะเส้นชี้ลง (เทรนด์เสีย)</option>
+            </select>
+          </div>
+          <div class="field"><label>จำนวนผลลัพธ์</label><select id="esLimit" onchange="runEmaScan()"><option>20</option><option selected>40</option><option>60</option><option>120</option></select></div>
+        </div>
+        <div class="grid3" style="margin-top:8px;">
+          <div class="field"><label>Market cap ขั้นต่ำ ($B)</label><input id="esMinCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runEmaScan()" /></div>
+          <div class="field"><label>Market cap สูงสุด ($B)</label><input id="esMaxCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runEmaScan()" /></div>
+          <div class="field" style="align-self:end;">
+            <div class="quick" style="padding:0; border:0; gap:6px;">
+              <button onclick="setEsCapPreset(200,null)" title="เฉพาะหุ้นตัวใหญ่มาก">Mega ≥200B</button>
+              <button onclick="setEsCapPreset(10,200)" title="10B–200B">Large 10–200B</button>
+              <button onclick="setEsCapPreset(2,10)" title="2B–10B">Mid 2–10B</button>
+              <button onclick="setEsCapPreset(null,null)" title="ไม่กรอง market cap">ทั้งหมด</button>
+            </div>
+          </div>
+        </div>
+        <div id="esStatus" class="note" style="margin-top:6px;"></div>
+        <div id="esResult" style="margin-top:12px;">
+          <div class="note">กำลังโหลดผลอัตโนมัติเมื่อเปิดเมนูนี้ — ผลยังใหม่จะแสดงทันที ถ้าเก่ากว่า 12 ชม. จะสแกนสดใหม่ให้เอง (ดึงราคาย้อนหลัง ~3 ปีของ 500 บริษัท ใช้เวลาหลายนาที)</div>
         </div>
       </div>
     </div>
@@ -3735,29 +3837,35 @@ function renderRevenueModel(d) {
   setTimeout(refitRmCharts, 350);
 }
 
-// ---------- S&P 500 scanner: สลับเมนูย่อย (รายได้ / มูลค่ายุติธรรม) ----------
+// ---------- S&P 500 scanner: สลับเมนูย่อย (รวมทุกเลนส์ / รายได้ / มูลค่ายุติธรรม / EMA) ----------
 // โหลดผลให้อัตโนมัติครั้งแรกที่เปิดแต่ละเมนูย่อย (ไม่ต้องกดปุ่มเอง) — ครั้งต่อไปในเซสชันเดียวกัน
 // ปล่อยให้ผู้ใช้กดปุ่มเองเวลาต้องการรีเฟรช จะได้ไม่ยิงซ้ำทุกครั้งที่สลับแท็บไปมา
-const scanAutoLoaded = { rev:false, val:false };
+const SCAN_SUBS = {
+  all: { box:"scanSubAllBox", btn:"scanSubAllBtn", load:() => runConfluenceScan() },
+  rev: { box:"scanSubRevBox", btn:"scanSubRevBtn", load:() => runRevenueScan() },
+  val: { box:"scanSubValBox", btn:"scanSubValBtn", load:() => runValueScan() },
+  ema: { box:"scanSubEmaBox", btn:"scanSubEmaBtn", load:() => runEmaScan() },
+};
+const scanAutoLoaded = {};
 function autoLoadScanSub(which) {
-  if (scanAutoLoaded[which]) return;
+  if (scanAutoLoaded[which] || !SCAN_SUBS[which]) return;
   scanAutoLoaded[which] = true;
-  if (which === "val") runValueScan(); else runRevenueScan();
+  SCAN_SUBS[which].load();
 }
 
 function showScanSub(which) {
-  const isVal = which === "val";
-  $("scanSubRevBox").classList.toggle("hidden", isVal);
-  $("scanSubValBox").classList.toggle("hidden", !isVal);
-  $("scanSubRevBtn").classList.toggle("active", !isVal);
-  $("scanSubValBtn").classList.toggle("active", isVal);
-  autoLoadScanSub(isVal ? "val" : "rev");
+  if (!SCAN_SUBS[which]) which = "all";
+  for (const [key, cfg] of Object.entries(SCAN_SUBS)) {
+    $(cfg.box)?.classList.toggle("hidden", key !== which);
+    $(cfg.btn)?.classList.toggle("active", key === which);
+  }
+  autoLoadScanSub(which);
 }
 
 // เปิดแท็บ 🔍 สแกน S&P 500 = โหลดผลของเมนูย่อยที่เปิดอยู่ให้เลย
 function autoLoadActiveScanSub() {
-  if (!$("scanSubValBox")) return;
-  autoLoadScanSub($("scanSubValBox").classList.contains("hidden") ? "rev" : "val");
+  const open = Object.entries(SCAN_SUBS).find(([, cfg]) => $(cfg.box) && !$(cfg.box).classList.contains("hidden"));
+  if (open) autoLoadScanSub(open[0]);
 }
 
 // ---------- S&P 500 revenue-vs-price scanner ----------
@@ -3882,6 +3990,7 @@ async function runValueScan(refresh) {
   try {
     // auto=true: ผลยังใหม่ = ตอบจากแคชทันที, เก่ากว่า 24 ชม. = สแกนสดใหม่ให้เลย (เฉพาะตอนรันในเครื่อง)
     const params = new URLSearchParams({ min_upside_pct:isNaN(minUpside) ? 20 : minUpside, limit, auto:"true" });
+    params.set("exclude_extreme", $("vsExcludeExtreme")?.checked ? "true" : "false");
     if (refresh) params.set("refresh", "true");
     if (profile) params.set("profile", profile);
     if (!isNaN(minCapB)) params.set("min_market_cap", String(minCapB * 1e9));
@@ -3937,7 +4046,10 @@ function renderValueScan(d) {
   const capNote = (crit.min_market_cap != null || crit.max_market_cap != null)
     ? ` · กรอง market cap: ${crit.min_market_cap != null ? fmtMarketCap(crit.min_market_cap) : "ไม่จำกัด"} – ${crit.max_market_cap != null ? fmtMarketCap(crit.max_market_cap) : "ไม่จำกัด"}`
     : "";
-  let html = `<div class="note">สแกนล่าสุด: <b>${E(d.as_of_label || "-")}</b> · ประเมินได้ ${d.success_count}/${d.universe_count} บริษัท · เข้าเกณฑ์ ${d.candidate_count} บริษัท${E(capNote)} ${staleNote}</div>`;
+  const hiddenNote = (d.excluded_extreme_count && crit.exclude_extreme)
+    ? ` · <span style="color:#e2b93b;">ซ่อนไว้ ${d.excluded_extreme_count} ตัวที่ตัวคูณฐานสูงผิดปกติ</span>`
+    : "";
+  let html = `<div class="note">สแกนล่าสุด: <b>${E(d.as_of_label || "-")}</b> · ประเมินได้ ${d.success_count}/${d.universe_count} บริษัท · เข้าเกณฑ์ ${d.candidate_count} บริษัท${E(capNote)}${hiddenNote} ${staleNote}</div>`;
   if (!cands.length) {
     html += `<div class="note" style="margin-top:8px;">ไม่มีหุ้นเข้าเกณฑ์ตอนนี้ — ลองลด upside ขั้นต่ำ (เช่น 10% แทน 20%) ขยายกรอบ market cap หรือเลือก "ทุกกลุ่ม"</div>`;
   } else {
@@ -3945,8 +4057,11 @@ function renderValueScan(d) {
       const warn = (c.warnings || []).length
         ? `<span title="${E((c.warnings || []).join(" | "))}" style="cursor:help;">⚠️${c.warnings.length}</span>`
         : "";
+      // 🔶 = ตัวเลข upside ผ่านเกณฑ์ แต่ฐานที่ใช้คำนวณคือตัวคูณที่แพงอยู่แล้ว
+      const lvl = c.multiple_level === "extreme" ? `<span title="${E(c.multiple_note || "")}" style="cursor:help;">🔴</span>`
+        : c.multiple_level === "rich" ? `<span title="${E(c.multiple_note || "")}" style="cursor:help;">🔶</span>` : "";
       return `<tr style="cursor:pointer;" onclick="openSymbolInRevenueModel('${E(c.symbol)}')">`
-        + `<td style="padding:5px 8px;"><b>${E(c.symbol)}</b><div class="tiny" style="color:#7d8b99;">${E(c.name)}</div></td>`
+        + `<td style="padding:5px 8px;"><b>${E(c.symbol)}</b> ${lvl}<div class="tiny" style="color:#7d8b99;">${E(c.name)}</div></td>`
         + `<td style="padding:5px 8px; color:#7d8b99; font-size:12px;">${E(c.profile_label || "")}`
         + `<div class="tiny" style="color:#5f6d7a;">${E(c.basis || "")} ${c.median_multiple}x${c.sector_source === "sic" ? "" : " · เดาจากงบ"}</div></td>`
         + `<td style="padding:5px 8px; text-align:right;">${fmtMarketCap(c.market_cap)}</td>`
@@ -3969,6 +4084,214 @@ function renderValueScan(d) {
   html += `<div class="note" style="margin-top:4px;">${E(d.coverage_note || "")}</div>`;
   html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
   $("vsResult").innerHTML = html;
+}
+
+// ---------- S&P 500 EMA-proximity scanner (เลนส์สายเทคนิค) ----------
+function setEsCapPreset(minB, maxB) {
+  $("esMinCap").value = minB == null ? "" : minB;
+  $("esMaxCap").value = maxB == null ? "" : maxB;
+  runEmaScan();
+}
+
+async function runEmaScan(refresh) {
+  const period = parseInt($("esPeriod").value, 10) || 200;
+  const tol = parseFloat($("esTolerance").value);
+  const limit = parseInt($("esLimit").value, 10) || 40;
+  const minCapB = parseFloat($("esMinCap").value);
+  const maxCapB = parseFloat($("esMaxCap").value);
+  $("esStatus").innerHTML = refresh
+    ? `<div class="note">🔄 กำลังสแกนสดใหม่ทั้ง S&P 500 (ดึงราคาย้อนหลัง ~3 ปีของ 500 บริษัท) — อาจใช้เวลาหลายนาที กรุณารอ...</div>`
+    : `<div class="note">กำลังโหลดผลสแกน... (ถ้าผลเก่ากว่า 12 ชม. จะสแกนสดใหม่ให้อัตโนมัติ)</div>`;
+  try {
+    const params = new URLSearchParams({
+      period, tolerance_pct:isNaN(tol) ? 3 : tol, side:$("esSide").value,
+      trend:$("esTrend").value, limit, auto:"true",
+    });
+    if (refresh) params.set("refresh", "true");
+    if (!isNaN(minCapB)) params.set("min_market_cap", String(minCapB * 1e9));
+    if (!isNaN(maxCapB)) params.set("max_market_cap", String(maxCapB * 1e9));
+    const res = await fetch(`${API}/api/ema-scan/sp500?${params.toString()}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    renderEmaScan(await res.json());
+    $("esStatus").innerHTML = "";
+  } catch (e) {
+    notifyError(errorMessage(e), "สแกน EMA ไม่สำเร็จ");
+    $("esStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+async function publishEmaScan() {
+  $("esStatus").innerHTML = `<div class="note">📤 กำลังสแกนสดใหม่ทั้ง S&P 500 แล้ว push ขึ้นเว็ป — อาจใช้เวลาหลายนาที กรุณารอ...</div>`;
+  try {
+    const res = await fetch(`${API}/api/ema-scan/sp500/publish`, { method:"POST" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    const d = await res.json();
+    renderEmaScan(d);
+    $("esStatus").innerHTML = d.pushed
+      ? `<div class="up">✅ สแกนใหม่แล้ว push ขึ้น GitHub+HF สำเร็จ</div>`
+      : `<div class="down">สแกนสำเร็จแต่ push ไม่สำเร็จ: ${escapeHtml(d.error || "ไม่ทราบสาเหตุ")}</div>`;
+  } catch (e) {
+    notifyError(errorMessage(e), "สแกน+push ไม่สำเร็จ");
+    $("esStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+// "ลงมาแตะกี่ครั้งใน 2 ปี" — ยิ่งน้อย + ครั้งล่าสุดยิ่งนาน = โอกาสที่หายากจริงตามสมมติฐาน
+// ยิ่งมาก = ราคาป้วนเปี้ยนแถวเส้นเป็นปกติ ไม่ใช่เหตุการณ์พิเศษอะไร
+function emaRarityLabel(touches, daysSince) {
+  if (touches == null) return { text:"—", color:"#7d8b99" };
+  const rare = touches <= 3;
+  const color = rare ? "#4ade80" : touches <= 6 ? "#e2b93b" : "#7d8b99";
+  const since = daysSince == null ? "" : (daysSince === 0 ? " · อยู่ในโซนตอนนี้" : ` · ล่าสุด ${daysSince} วันก่อน`);
+  return { text:`${touches} ครั้ง/2 ปี${since}`, color };
+}
+
+function renderEmaScan(d) {
+  const E = escapeHtml;
+  const cands = d.candidates || [];
+  const crit = d.criteria || {};
+  const staleNote = d.rescanned
+    ? `<span class="up">✅ สแกนสดใหม่ให้อัตโนมัติแล้ว</span>`
+    : (d.stale ? `<span class="down">⚠️ ผลสแกนนี้เก่ากว่า 12 ชม. — ราคา/EMA ที่แสดงเป็นค่า ณ วันที่สแกน ${d.can_scan_live ? `กด "สแกนสดใหม่" เพื่ออัปเดต` : "(เว็ปเสิร์ฟผลที่แคชไว้เท่านั้น)"}</span>` : "");
+  const capNote = (crit.min_market_cap != null || crit.max_market_cap != null)
+    ? ` · กรอง market cap: ${crit.min_market_cap != null ? fmtMarketCap(crit.min_market_cap) : "ไม่จำกัด"} – ${crit.max_market_cap != null ? fmtMarketCap(crit.max_market_cap) : "ไม่จำกัด"}`
+    : "";
+  let html = `<div class="note">สแกนล่าสุด: <b>${E(d.as_of_label || "-")}</b> · คำนวณได้ ${d.success_count}/${d.universe_count} บริษัท · อยู่ในโซน EMA${crit.period} ±${crit.tolerance_pct}% จำนวน ${d.candidate_count} บริษัท${E(capNote)} ${staleNote}</div>`;
+
+  if (!cands.length) {
+    html += `<div class="note" style="margin-top:8px;">ไม่มีหุ้นอยู่ในโซนนี้ตอนนี้ — ลองขยายโซน (เช่น ±5% แทน ±3%) เปลี่ยนเส้น (EMA100 แกว่งเข้าออกบ่อยกว่า EMA200) หรือเลิกกรองความชัน</div>`;
+  } else {
+    const rows = cands.map(c => {
+      const dist = c.distance_pct;
+      const distColor = Math.abs(dist) <= 1 ? "#4ade80" : "#9fb0c0";
+      const slope = c.ema200_slope_pct;
+      const slopeTxt = slope == null ? "—" : `${slope >= 0 ? "+" : ""}${slope}%`;
+      const slopeColor = slope == null ? "#7d8b99" : slope > 1 ? "#4ade80" : slope < -1 ? "#f87171" : "#e2b93b";
+      const rarity = emaRarityLabel(c.touches_2y, c.days_since_touch);
+      return `<tr style="cursor:pointer;" onclick="openSymbolInRevenueModel('${E(c.symbol)}')" title="${E(c.zone_hint || "")}">`
+        + `<td style="padding:5px 8px;"><b>${E(c.symbol)}</b><div class="tiny" style="color:#7d8b99;">${E(c.name)}</div></td>`
+        + `<td style="padding:5px 8px; color:#7d8b99; font-size:12px;">${E(c.sector || "")}</td>`
+        + `<td style="padding:5px 8px; text-align:right;">${fmtMarketCap(c.market_cap)}</td>`
+        + `<td style="padding:5px 8px; text-align:right;">$${c.price}</td>`
+        + `<td style="padding:5px 8px; text-align:right;">$${c[`ema${crit.period}`] ?? "—"}</td>`
+        + `<td style="padding:5px 8px; text-align:right; color:${distColor};"><b>${dist >= 0 ? "+" : ""}${dist}%</b></td>`
+        + `<td style="padding:5px 8px; text-align:right; color:${slopeColor};">${slopeTxt}</td>`
+        + `<td style="padding:5px 8px; text-align:right; font-size:12px; color:${rarity.color};">${E(rarity.text)}</td>`
+        + `<td style="padding:5px 8px; text-align:right; font-size:12px; color:#7d8b99;">${c.drawdown_pct != null ? c.drawdown_pct + "%" : "—"}</td>`
+        + `</tr>`;
+    }).join("");
+    html += `<table class="biz-rev" style="width:100%; margin-top:8px;">`
+      + `<thead><tr style="color:#9fb0c0; font-size:12px;">`
+      + `<th style="text-align:left; padding:4px 8px;">หุ้น</th><th style="text-align:left; padding:4px 8px;">Sector</th>`
+      + `<th style="text-align:right; padding:4px 8px;">Market cap</th>`
+      + `<th style="text-align:right; padding:4px 8px;">ราคา</th>`
+      + `<th style="text-align:right; padding:4px 8px;">EMA${crit.period}</th>`
+      + `<th style="text-align:right; padding:4px 8px;" title="ราคาห่างจากเส้นกี่ % (บวก = เหนือเส้น)">ห่างจากเส้น</th>`
+      + `<th style="text-align:right; padding:4px 8px;" title="EMA200 เปลี่ยนไปกี่ % ใน ~3 เดือน — บวก = เทรนด์ใหญ่ยังขาขึ้น">ความชัน EMA200</th>`
+      + `<th style="text-align:right; padding:4px 8px;" title="2 ปีที่ผ่านมาราคาลงมาอยู่ในโซน ±3% ของ EMA200 กี่ครั้ง (นับช่วงที่อยู่ติดกันเป็นครั้งเดียว)">ความถี่ที่ลงมาแตะ</th>`
+      + `<th style="text-align:right; padding:4px 8px;" title="ห่างจากจุดสูงสุด 52 สัปดาห์">จากจุดสูง 52w</th>`
+      + `</tr></thead><tbody>${rows}</tbody></table>`
+      + `<div class="tiny" style="margin-top:6px; color:#7d8b99;">คลิกแถวเพื่อเปิดกราฟ + งบในแท็บ 📈 โมเดลรายได้ · <span style="color:#4ade80;">เขียว</span> ที่คอลัมน์ความถี่ = ลงมาไม่เกิน 3 ครั้งใน 2 ปี (หายากจริง) · <span style="color:#f87171;">แดง</span> ที่ความชัน = EMA200 ชี้ลง เทรนด์ใหญ่เสียแล้ว</div>`;
+  }
+  html += `<div class="note" style="margin-top:10px;">${E(d.methodology || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.coverage_note || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
+  $("esResult").innerHTML = html;
+}
+
+// ---------- S&P 500 confluence: รวมทุกเลนส์ไว้ในตารางเดียว ----------
+function setCfCapPreset(minB, maxB) {
+  $("cfMinCap").value = minB == null ? "" : minB;
+  $("cfMaxCap").value = maxB == null ? "" : maxB;
+  runConfluenceScan();
+}
+
+async function runConfluenceScan() {
+  const minCapB = parseFloat($("cfMinCap").value);
+  const maxCapB = parseFloat($("cfMaxCap").value);
+  $("cfStatus").innerHTML = `<div class="note">กำลังรวมผลจากแคชของแต่ละสแกน...</div>`;
+  try {
+    const params = new URLSearchParams({
+      min_agree:$("cfMinAgree").value, limit:$("cfLimit").value,
+      max_gap_pct:parseFloat($("cfMaxGap").value) || -15,
+      min_upside_pct:parseFloat($("cfMinUpside").value) || 20,
+      ema_zone_pct:parseFloat($("cfEmaZone").value) || 3,
+    });
+    if (!isNaN(minCapB)) params.set("min_market_cap", String(minCapB * 1e9));
+    if (!isNaN(maxCapB)) params.set("max_market_cap", String(maxCapB * 1e9));
+    const res = await fetch(`${API}/api/confluence/sp500?${params.toString()}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    renderConfluence(await res.json());
+    $("cfStatus").innerHTML = "";
+  } catch (e) {
+    notifyError(errorMessage(e), "รวมผลสแกนไม่สำเร็จ");
+    $("cfStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+// สัญลักษณ์สถานะของเลนส์เดียว — na (ไม่มีข้อมูล) ต้องดูต่างจาก fail (ไม่ผ่าน) ชัดเจน
+const CF_LENS_ICON = { pass:"🟢", flag:"🔶", fail:"⚪", na:"—" };
+
+function cfLensCell(lens) {
+  const E = escapeHtml;
+  const icon = CF_LENS_ICON[lens.status] || "—";
+  const color = lens.status === "pass" ? "#4ade80" : lens.status === "flag" ? "#e2b93b"
+    : lens.status === "na" ? "#5f6d7a" : "#7d8b99";
+  const val = lens.value == null ? "" : `<div class="tiny" style="color:${color};">${lens.value >= 0 ? "+" : ""}${Number(lens.value).toFixed(1)}%</div>`;
+  return `<td style="padding:5px 8px; text-align:center;" title="${E(lens.detail || "")}">`
+    + `<span style="cursor:help; font-size:15px;">${icon}</span>${val}</td>`;
+}
+
+function renderConfluence(d) {
+  const E = escapeHtml;
+  const cands = d.candidates || [];
+  const L = d.lenses || {};
+
+  // สถานะของแต่ละเลนส์: สแกนไว้เมื่อไร เก่าหรือยัง — เลนส์ที่ยังไม่เคยสแกนต้องบอกให้ชัด
+  const lensBar = Object.entries(L).map(([, m]) => {
+    if (!m.available) return `<span style="color:#f87171;">${E(m.label)}: ยังไม่เคยสแกน</span>`;
+    const color = m.stale ? "#e2b93b" : "#4ade80";
+    return `<span style="color:${color};">${E(m.label)}: ${E(m.as_of_label)}${m.stale ? " (เก่า)" : ""} · ${m.count} บริษัท</span>`;
+  }).join(" &nbsp;|&nbsp; ");
+
+  let html = `<div class="note">${lensBar}</div>`;
+  if ((d.missing_lenses || []).length) {
+    html += `<div class="note" style="margin-top:6px; color:#e2b93b;">⚠️ ยังไม่มีข้อมูลของเลนส์: ${E(d.missing_lenses.join(", "))} — `
+      + `เปิดเมนูย่อยของเลนส์นั้นแล้วกด "สแกนสดใหม่" ก่อน ระหว่างนี้เลนส์ดังกล่าวจะขึ้นเป็น "—" (ไม่มีข้อมูล) ไม่ใช่ "ไม่ผ่าน"</div>`;
+  }
+  html += `<div class="note" style="margin-top:6px;">พบ <b>${d.candidate_count}</b> บริษัทที่มีอย่างน้อย ${d.criteria.min_agree} เลนส์เห็นตรงกัน</div>`;
+
+  if (!cands.length) {
+    html += `<div class="note" style="margin-top:8px;">ไม่มีหุ้นเข้าเกณฑ์ — ลองลดจำนวนเลนส์ที่ต้องเห็นตรงกัน ผ่อนเกณฑ์แต่ละเลนส์ หรือขยายโซน EMA (เช่น ±5%)</div>`;
+  } else {
+    const rows = cands.map(c => {
+      const ln = c.lenses;
+      const agreeColor = c.agree_count >= 3 ? "#4ade80" : c.agree_count === 2 ? "#e2b93b" : "#7d8b99";
+      return `<tr style="cursor:pointer;" onclick="openSymbolInRevenueModel('${E(c.symbol)}')" title="${E(c.verdict)}">`
+        + `<td style="padding:5px 8px;"><b>${E(c.symbol)}</b><div class="tiny" style="color:#7d8b99;">${E(c.name)}</div></td>`
+        + `<td style="padding:5px 8px; color:#7d8b99; font-size:12px;">${E(c.sector || "")}</td>`
+        + `<td style="padding:5px 8px; text-align:right;">${fmtMarketCap(c.market_cap)}</td>`
+        + `<td style="padding:5px 8px; text-align:right;">${c.price != null ? "$" + c.price : "—"}</td>`
+        + cfLensCell(ln.revenue) + cfLensCell(ln.value) + cfLensCell(ln.ema)
+        + `<td style="padding:5px 8px; text-align:center; color:${agreeColor};"><b>${E(c.badge)}</b>`
+        + `<div class="tiny" style="color:${agreeColor};">${c.agree_count}/${c.available_lenses} เลนส์</div></td>`
+        + `</tr>`;
+    }).join("");
+    html += `<table class="biz-rev" style="width:100%; margin-top:8px;">`
+      + `<thead><tr style="color:#9fb0c0; font-size:12px;">`
+      + `<th style="text-align:left; padding:4px 8px;">หุ้น</th><th style="text-align:left; padding:4px 8px;">Sector</th>`
+      + `<th style="text-align:right; padding:4px 8px;">Market cap</th><th style="text-align:right; padding:4px 8px;">ราคา</th>`
+      + `<th style="text-align:center; padding:4px 8px;" title="ราคาต่ำกว่าที่แนวโน้มรายได้บ่งชี้">📉 รายได้</th>`
+      + `<th style="text-align:center; padding:4px 8px;" title="ราคาต่ำกว่าราคายุติธรรมตามตัวคูณของกลุ่มธุรกิจ">💎 มูลค่า</th>`
+      + `<th style="text-align:center; padding:4px 8px;" title="ราคาอยู่ในโซนเส้น EMA200">📐 EMA</th>`
+      + `<th style="text-align:center; padding:4px 8px;">เห็นตรงกัน</th>`
+      + `</tr></thead><tbody>${rows}</tbody></table>`
+      + `<div class="tiny" style="margin-top:6px; color:#7d8b99;">คลิกแถวเพื่อเปิดกราฟ + งบในแท็บ 📈 โมเดลรายได้ · เลื่อนเมาส์บนไอคอนแต่ละเลนส์เพื่อดูเหตุผล</div>`;
+  }
+  html += `<div class="note" style="margin-top:10px;">${E(d.legend || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.methodology || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
+  $("cfResult").innerHTML = html;
 }
 
 function renderRadar(d) {
