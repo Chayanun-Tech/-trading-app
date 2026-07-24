@@ -112,7 +112,7 @@ def _fmt_money(v: float | None) -> str | None:
 
 def _bvps_points(facts: dict) -> list[dict]:
     """มูลค่าตามบัญชีต่อหุ้นรายปี (ธนาคาร/ประกัน) — จับคู่ส่วนของผู้ถือหุ้น ณ วันสิ้นปีงบกับจำนวนหุ้น."""
-    ann_shares = _annual_with_end(facts, _SHARES, "shares")
+    ann_shares = _annual_shares(facts)
     eq = _instants_by_end(facts, _EQUITY_CONCEPTS, "USD")
     pref = _instants_by_end(facts, _PREFERRED_CONCEPTS, "USD")
     pts = []
@@ -129,7 +129,7 @@ def _ffo_points(facts: dict) -> list[dict]:
     ann_ni = _annual_with_end(facts, _NET_INCOME_CONCEPTS, "USD")
     ann_dep = _annual_with_end(facts, _DEPRECIATION_CONCEPTS, "USD")
     ann_gain = _annual_with_end(facts, _GAINS_ON_SALE_CONCEPTS, "USD")
-    ann_shares = _annual_with_end(facts, _SHARES, "shares")
+    ann_shares = _annual_shares(facts)
     pts = []
     for fy in sorted(ann_ni):
         sh = ann_shares.get(fy, {}).get("val")
@@ -140,6 +140,52 @@ def _ffo_points(facts: dict) -> list[dict]:
         if f is not None and f > 0:
             pts.append({"period": ann_ni[fy]["end"], "per_share": f / sh})
     return pts
+
+
+def _annual_shares(facts: dict) -> dict[int, dict]:
+    """จำนวนหุ้นถัวเฉลี่ยรายปี (10-K) ที่แก้ปัญหา "หน่วยไม่ตรงกันข้ามปี" แล้ว.
+
+    บางบริษัทยื่นจำนวนหุ้นเป็น "พันหุ้น" ในงบเก่าและเป็น "หุ้น" ในงบใหม่ (เช่น ConocoPhillips:
+    FY2020 = 1,078,030 แต่ FY2022 = 1,278,163,000 ทั้งที่จำนวนหุ้นจริงใกล้เคียงกัน) ทำให้ค่าต่อหุ้น
+    ของปีเก่าใหญ่เกินจริง 1,000 เท่า — ค่าเฉลี่ยหลายปี (normalized FCF/share) จึงระเบิด และราคายุติธรรม
+    ที่คำนวณต่อจากนั้นเพี้ยนไปหลักหมื่นเปอร์เซ็นต์.
+
+    วิธีแก้: ยึดปีล่าสุด (งบใหม่สุด = หน่วยที่ตรงกับจำนวนหุ้นจริงวันนี้) เป็นหลัก แล้วปรับเฉพาะปีที่
+    ต่างกันระดับ 1,000 เท่า (100–10,000 เท่า) เท่านั้น — ไม่แตะความต่างระดับสิบเท่า เพราะนั่นคือการ
+    split หุ้นจริง (เช่น 20:1) ที่ต้องคงไว้ตามที่บริษัทยื่น."""
+    ann = _annual_with_end(facts, _SHARES, "shares")
+    if len(ann) < 2:
+        return ann
+    ref = ann[max(ann)]["val"]
+    if not ref or ref <= 0:
+        return ann
+    out: dict[int, dict] = {}
+    for fy, m in ann.items():
+        v = m["val"]
+        if v and v > 0:
+            if 100 <= ref / v <= 10_000:
+                v *= 1000        # ปีนี้ยื่นเป็น "พันหุ้น" — คูณกลับเป็นจำนวนหุ้นจริง
+            elif 100 <= v / ref <= 10_000:
+                v /= 1000        # กรณีกลับกัน (งบเก่ายื่นเป็นหุ้น งบใหม่ยื่นเป็นพันหุ้น)
+        out[fy] = {**m, "val": v}
+    return out
+
+
+def _fcf_annual_points(facts: dict) -> list[dict]:
+    """กระแสเงินสดอิสระรายปีจาก 10-K (OCF − CapEx) พร้อมต่อหุ้น — ใช้ทั้งใน get_revenue_model
+    (เป็น fallback ของเส้น P/FCF) และในตัวสแกนมูลค่าทั้ง S&P 500 (value_scanner)."""
+    ann_ocf = _annual_with_end(facts, _OCF_CONCEPTS, "USD")
+    ann_capex = _annual_with_end(facts, _CAPEX_CONCEPTS, "USD")
+    ann_shares = _annual_shares(facts)
+    out = []
+    for fy in sorted(set(ann_ocf) & set(ann_capex)):
+        fcf_val = ann_ocf[fy]["val"] - ann_capex[fy]["val"]
+        shares_val = ann_shares.get(fy, {}).get("val")
+        out.append({
+            "period": ann_ocf[fy]["end"], "fy": fy, "fcf": fcf_val,
+            "fcf_per_share": (fcf_val / shares_val) if shares_val else None,
+        })
+    return out
 
 
 def _multiple_band(bars: list[dict], points: list[dict], bars_per_q: int) -> dict | None:
@@ -283,6 +329,19 @@ def _compute_sector_extras(profile_key: str, facts: dict, bars: list[dict], bars
         eps_vals = [ann_eps[fy]["val"] for fy in sorted(ann_eps)]
         if eps_vals and eps_vals[-1] > 0 and pe_band:
             fair = _fair_from_band(eps_vals[-1], pe_band, "P/E median", price)
+
+    # ด่านสุดท้าย: ตัวคูณ median ที่คำนวณจากช่วงที่ metric "เกือบศูนย์" (เช่น FCF ปีที่เจ๊งพอดี)
+    # จะพุ่งเป็นหลักร้อย-พันเท่า แล้วดันราคายุติธรรมหลุดโลก (เคยได้ราคายุติธรรม $4,740 ของหุ้นราคา $92)
+    # ตัวเลขแบบนี้ไม่ใช่ "โอกาส" แต่เป็นสัญญาณว่าฐานคำนวณพัง — ปิดการแสดงพร้อมบอกเหตุผล
+    if fair and fair.get("current_price"):
+        ratio = fair["fair_price"] / fair["current_price"]
+        if ratio > 5 or ratio < 0.2:
+            warns.append(
+                f"ปิดการประเมินราคายุติธรรมของหุ้นตัวนี้ — ผลที่ได้ ({fair['basis']} → ${fair['fair_price']:,.2f} "
+                f"เทียบราคาจริง ${fair['current_price']:,.2f}) ห่างกันเกิน 5 เท่า มักเกิดจากปีฐานที่ "
+                f"{fair['basis'].split()[0]} เกือบศูนย์/ติดลบ ทำให้ตัวคูณ ({fair['median_multiple']}x) ไม่มีความหมาย"
+            )
+            fair = None
 
     return metrics, fair, warns
 
@@ -647,17 +706,8 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
     )
 
     # กระแสเงินสดอิสระรายปี (10-K) — เก็บไว้เป็น fallback เผื่อบริษัทไหนข้อมูลรายไตรมาสไม่พอสังเคราะห์ TTM ได้
-    ann_ocf = _annual_with_end(facts, _OCF_CONCEPTS, "USD")
-    ann_capex = _annual_with_end(facts, _CAPEX_CONCEPTS, "USD")
-    ann_shares = _annual_with_end(facts, _SHARES, "shares")
-    fcf_annual = []
-    for fy in sorted(set(ann_ocf) & set(ann_capex)):
-        fcf_val = ann_ocf[fy]["val"] - ann_capex[fy]["val"]
-        shares_val = ann_shares.get(fy, {}).get("val")
-        fcf_annual.append({
-            "period": ann_ocf[fy]["end"], "fy": fy, "fcf": fcf_val,
-            "fcf_per_share": (fcf_val / shares_val) if shares_val else None,
-        })
+    ann_shares = _annual_shares(facts)
+    fcf_annual = _fcf_annual_points(facts)
 
     # CapEx รายไตรมาส — ใช้ _quarterly_from_cumulative (แปลงยอดสะสม YTD กลับเป็นยอดเฉพาะไตรมาสให้ ไม่ทิ้ง
     # ทิ้งเหมือนเดิม) แล้วสังเคราะห์ไตรมาสที่ขาด/มักเป็น Q4 จากงบทั้งปี เพื่อคำนวณ FCF ต่อไตรมาสแล้วรวมเป็น
@@ -871,4 +921,92 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
                          "ยังไม่ผ่านการยื่น 10-Q อย่างเป็นทางการกับ SEC อาจมีการปรับแก้ภายหลัง — "
                          if prelim else "")
                       + "เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน",
+    }
+
+
+async def sector_fair_value(symbol: str, *, granularity: str = "weekly", refresh: bool = False,
+                            max_bars: int = 900) -> dict:
+    """ประเมิน "ราคายุติธรรมตาม sector" ของหุ้นตัวเดียว — ตรรกะเดียวกับกล่องประเมินมูลค่าในแท็บ
+    📈 โมเดลรายได้ (จำแนก sector → เลือก metric หลักของกลุ่ม → median multiple + band p25–p75)
+    แต่ตัดส่วนที่ตัวสแกนไม่ได้ใช้ออก (กล่อง YoY, ซีรีส์กราฟ, ไตรมาสเบื้องต้นจาก Yahoo, AI verdict)
+    เพื่อให้รันไล่ทั้ง S&P 500 ได้ในเวลาที่ยอมรับได้.
+
+    ต่างจาก get_revenue_model จุดเดียว: สร้าง band ของ P/FCF จาก FCF "รายปี" (10-K) แทน TTM ราย
+    ไตรมาส — เป็นชุดข้อมูลเดียวกับที่โมเดลหลัก fallback ไปใช้อยู่แล้วเมื่อข้อมูลรายไตรมาสไม่พอ ผลจึง
+    ต่างกันได้เล็กน้อยเฉพาะกลุ่ม "ลงทุนหนัก" (ที่ใช้ P/FCF เป็นฐาน) ส่วน P/E, P/B, P/FFO เหมือนกันทุกประการ.
+
+    คืน dict ที่มี fair_value (อาจเป็น None ถ้ากลุ่มนั้นประเมินด้วย multiple ไม่ได้ เช่น biotech)
+    ยก ValueError ถ้าไม่ใช่หุ้น US ที่ยื่น SEC หรือข้อมูลไม่พอ."""
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        raise ValueError("กรุณาระบุสัญลักษณ์หุ้น")
+    if granularity not in _BARS_PER_QUARTER:
+        raise ValueError("granularity ต้องเป็น daily, weekly หรือ monthly")
+
+    facts = await edgar.get_company_facts(symbol, force_refresh=refresh)
+
+    # EPS TTM รายไตรมาส (สำหรับ P/E band) — สังเคราะห์ไตรมาสที่ไม่ได้ยื่นแยกเหมือนโมเดลหลัก
+    raw_eps = {d: m["val"] for d, m in _synthesize_missing_quarter(
+        _quarterly_with_fp(facts, _EPS, "USD/shares", prefer_latest_value=True),
+        _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True),
+    ).items()}
+    eps_dates = sorted(raw_eps)
+    ttm_eps_by_date = [(eps_dates[i], sum(raw_eps[d] for d in eps_dates[i - 3:i + 1]))
+                       for i in range(3, len(eps_dates))]
+    fcf_annual = _fcf_annual_points(facts)
+
+    from app.main import provider  # lazy import กันวน circular import (ตามแบบ get_revenue_model)
+    get_history = getattr(provider, "get_history", None)
+    candles = await get_history(symbol, "1d", max_bars=max_bars) if get_history \
+        else await provider.get_candles(symbol, "1d", max_bars)
+    if not candles:
+        raise ValueError("ดึงราคาย้อนหลังไม่ได้ — ประเมินตัวคูณ (multiple) ที่ตลาดให้ไม่ได้")
+    bars = _resample(candles, granularity)
+    bars_per_q = _BARS_PER_QUARTER[granularity]
+
+    def _band(per_share_at):
+        """median+IQR ของ (ราคา ÷ metric ต่อหุ้น) จาก ~2 ปีล่าสุด (8 ไตรมาส)."""
+        ratios = []
+        for w in bars[-(bars_per_q * 8):]:
+            w_date = datetime.fromtimestamp(w["time"], tz=timezone.utc).date().isoformat()
+            ps = per_share_at(w_date)
+            if ps and ps > 0:
+                ratios.append(w["close"] / ps)
+        return sector_profile.median_band(ratios)
+
+    pe_band = _band(lambda d: next((v for qd, v in reversed(ttm_eps_by_date) if qd <= d), None))
+    pfcf_band = _band(lambda d: next((e["fcf_per_share"] for e in reversed(fcf_annual)
+                                      if e["period"] <= d and e["fcf_per_share"]), None))
+
+    try:
+        sic = (await edgar.get_submissions(symbol)).get("sic") or None
+    except Exception:  # noqa: BLE001 — ดึง SIC ไม่ได้ก็ยังจำแนกจากงบได้ (heuristic)
+        sic = None
+
+    fin_snapshot = _financials_snapshot(facts)
+    sector_info = sector_profile.classify_sector(sic, fin_snapshot)
+    profile_key = sector_info["profile"]
+    profile = sector_profile.get_profile(profile_key)
+    if sector_profile.is_disabled(profile_key, "pfcf"):
+        pfcf_band = None
+
+    extra_metrics, fair_value, extra_warns = _compute_sector_extras(
+        profile_key, facts, bars, bars_per_q, fin_snapshot, fcf_annual, pe_band, pfcf_band)
+
+    return {
+        "symbol": symbol,
+        "entity_name": facts.get("entityName"),
+        "price": round(bars[-1]["close"], 2),
+        "sic": sic,
+        "sector": sector_info["sector"],
+        "sector_label": profile["label"],
+        "sector_source": sector_info["source"],
+        "profile_key": profile_key,
+        "primary": profile.get("primary"),
+        "fair_value": fair_value,
+        "extra_metrics": extra_metrics,
+        # แยกคำเตือน 2 แบบ: profile_warnings = ข้อความประจำกลุ่มธุรกิจ (เหมือนกันทุกตัวในกลุ่ม)
+        # ส่วน data_warnings = ปัญหาที่พบในข้อมูลของ "หุ้นตัวนี้" จริง ๆ (ฐานติดลบ/ข้อมูลไม่ครบ/M&A)
+        "profile_warnings": list(profile.get("warnings", [])),
+        "data_warnings": extra_warns,
     }

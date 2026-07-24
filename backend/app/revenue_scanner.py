@@ -171,6 +171,12 @@ def _save_cache(payload: dict) -> None:
     _SCAN_CACHE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
+def can_scan_live() -> bool:
+    """สแกนสดได้เฉพาะตอนรันในเครื่อง (มี .git) — บน HF Space เสิร์ฟแคชอย่างเดียว
+    ไม่งั้นคนเข้าเว็ปกดปุ่มเดียว = ยิง SEC/Yahoo อีก 500 ครั้งบนคลาวด์ (rate-limit + timeout)."""
+    return (Path(__file__).resolve().parents[2] / ".git").exists()
+
+
 async def _market_cap_lookup() -> dict[str, float]:
     """symbol -> market cap (USD) จาก Nasdaq screener (ครอบคลุมหุ้น US ทุกตลาด ไม่ใช่แค่ Nasdaq)
     ใช้แคช 30 นาทีเดียวกับ multibagger_scanner กันยิง API ซ้ำ."""
@@ -198,6 +204,7 @@ async def _market_cap_lookup() -> dict[str, float]:
 async def _format_result(
     cached: dict, max_gap_pct: float, limit: int,
     min_market_cap: float | None = None, max_market_cap: float | None = None,
+    rescanned: bool = False,
 ) -> dict:
     candidates = [r for r in cached["results"] if r["gap_pct"] <= max_gap_pct]
     candidates.sort(key=lambda r: r["gap_pct"])
@@ -218,6 +225,8 @@ async def _format_result(
         "as_of": as_of,
         "as_of_label": datetime.fromtimestamp(as_of, tz=timezone.utc).astimezone().strftime("%d %b %Y %H:%M"),
         "stale": (time.time() - as_of) > _SCAN_TTL,
+        "rescanned": rescanned,          # True = รอบนี้สแกนสดใหม่ให้อัตโนมัติ (ไม่ได้อ่านแคชเก่า)
+        "can_scan_live": can_scan_live(),
         "universe_count": cached["universe_count"],
         "success_count": cached["success_count"],
         "criteria": {
@@ -245,11 +254,17 @@ async def _format_result(
 
 async def scan_sp500_revenue_gap(
     *, max_gap_pct: float = -15.0, limit: int = 40, lookback_quarters: int = 8,
-    concurrency: int = 8, refresh: bool = False,
+    concurrency: int = 8, refresh: bool = False, auto: bool = False,
     min_market_cap: float | None = None, max_market_cap: float | None = None,
 ) -> dict:
+    """refresh=True: สแกนสดใหม่เสมอ · auto=True: สแกนสดใหม่ให้เองเมื่อผลเก่ากว่า 24 ชม.
+    (เฉพาะตอนรันในเครื่อง — บนเว็ปเสิร์ฟแคชเสมอ) · ทั้งคู่ False: อ่านแคชอย่างเดียว."""
     cached = None if refresh else _load_cache()
-    if cached is None:
+    outdated = cached is not None and (time.time() - cached["as_of"]) > _SCAN_TTL
+    rescanned = False
+    if cached is None or (auto and outdated and can_scan_live()):
         cached = await _run_full_scan(lookback_quarters, concurrency)
         _save_cache(cached)
-    return await _format_result(cached, max_gap_pct, limit, min_market_cap, max_market_cap)
+        rescanned = True
+    return await _format_result(cached, max_gap_pct, limit, min_market_cap, max_market_cap,
+                                rescanned=rescanned)

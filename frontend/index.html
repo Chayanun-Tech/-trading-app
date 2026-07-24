@@ -903,6 +903,12 @@
     </div>
 
     <div id="revenuescanPanel" class="panel-body hidden">
+      <div style="display:flex; gap:6px; flex-wrap:wrap; padding:0 0 8px;">
+        <button class="tab active" id="scanSubRevBtn" onclick="showScanSub('rev')" title="เทียบราคากับแนวโน้มรายได้">📉 ราคาต่ำกว่ารายได้</button>
+        <button class="tab" id="scanSubValBtn" onclick="showScanSub('val')" title="เทียบราคากับราคายุติธรรมตามกลุ่มธุรกิจ (P/E, P/B, P/FFO ฯลฯ)">💎 ต่ำกว่ามูลค่ายุติธรรม</button>
+      </div>
+
+      <div id="scanSubRevBox">
       <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <div>
           <b style="font-size:16px;">🔍 สแกน S&P 500: หุ้นราคาต่ำกว่า "ราคาตามรายได้"</b>
@@ -913,7 +919,7 @@
         <div class="field"><label>ราคาต่ำกว่ารายได้อย่างน้อยกี่ % (ยิ่งลบมาก ยิ่งถูก)</label><input id="rsMaxGap" type="number" value="-15" step="5" /></div>
         <div class="field"><label>จำนวนผลลัพธ์</label><select id="rsLimit"><option>20</option><option selected>40</option><option>60</option></select></div>
         <div class="field" style="align-self:end; display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="primary" onclick="runRevenueScan()">โหลดผลสแกน</button>
+          <button class="primary" onclick="runRevenueScan()" title="ผลยังใหม่ = แสดงทันที · ผลเก่ากว่า 24 ชม. = สแกนสดใหม่ให้อัตโนมัติ">🔍 สแกนหาหุ้น</button>
           <button onclick="runRevenueScan(true)" title="สแกนสดใหม่ทั้ง 500 บริษัท (ไม่ push) — ใช้เวลาหลายนาที เหมาะกับรันในเครื่องเท่านั้น">🔄 สแกนสดใหม่</button>
           <button onclick="publishRevenueScan()" title="สแกนสดใหม่ + commit/push ขึ้น GitHub+HF อัตโนมัติ — ใช้ได้เฉพาะตอนรันในเครื่อง">📤 สแกน + ดันขึ้นเว็ป</button>
         </div>
@@ -932,7 +938,44 @@
       </div>
       <div id="rsStatus" class="note" style="margin-top:6px;"></div>
       <div id="rsResult" style="margin-top:12px;">
-        <div class="note">กด "โหลดผลสแกน" เพื่อดูผลล่าสุด (ผลสแกนแคชไว้ล่วงหน้า โหลดเร็ว) — "สแกนสดใหม่" ใช้เวลาหลายนาทีเพราะอ่านงบ SEC + ราคาของ 500 บริษัท</div>
+        <div class="note">กำลังโหลดผลอัตโนมัติเมื่อเปิดแท็บนี้ — ผลยังใหม่จะแสดงทันที ถ้าเก่ากว่า 24 ชม. จะสแกนสดใหม่ให้เอง (อ่านงบ SEC + ราคาของ 500 บริษัท ใช้เวลาหลายนาที)</div>
+      </div>
+      </div>
+
+      <div id="scanSubValBox" class="hidden">
+        <div>
+          <b style="font-size:16px;">💎 สแกน S&P 500: หุ้นราคาต่ำกว่า "มูลค่ายุติธรรม" (undervalue)</b>
+          <div class="note">ใช้เครื่องประเมินมูลค่าตัวเดียวกับกล่อง "ราคายุติธรรม" ในแท็บ 📈 โมเดลรายได้ — จำแนกกลุ่มธุรกิจจากรหัส SIC ของ SEC แล้วใช้ตัวชี้วัดที่เหมาะกับกลุ่มนั้น (ธนาคาร/ประกัน = P/B · REIT = P/FFO · ลงทุนหนัก = P/FCF เฉลี่ย 5 ปี · วัฏจักร = EPS เฉลี่ย ~10 ปี · ทั่วไป = P/E) เทียบกับตัวคูณ median ที่ตลาดให้ ~2 ปีล่าสุด</div>
+        </div>
+        <div class="grid3" style="margin-top:10px;">
+          <div class="field"><label>ราคาต่ำกว่ามูลค่ายุติธรรมอย่างน้อยกี่ % (upside ขั้นต่ำ)</label><input id="vsMinUpside" type="number" value="20" step="5" /></div>
+          <div class="field"><label>จำนวนผลลัพธ์</label><select id="vsLimit"><option>20</option><option selected>40</option><option>60</option></select></div>
+          <div class="field" style="align-self:end; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="primary" onclick="runValueScan()" title="ผลยังใหม่ = แสดงทันที · ผลเก่ากว่า 24 ชม. = สแกนสดใหม่ให้อัตโนมัติ">🔍 สแกนหาหุ้น</button>
+            <button onclick="runValueScan(true)" title="สแกนสดใหม่ทั้ง 500 บริษัท (ไม่ push) — ใช้เวลาหลายนาที เหมาะกับรันในเครื่องเท่านั้น">🔄 สแกนสดใหม่</button>
+            <button onclick="publishValueScan()" title="สแกนสดใหม่ + commit/push ขึ้น GitHub+HF อัตโนมัติ — ใช้ได้เฉพาะตอนรันในเครื่อง">📤 สแกน + ดันขึ้นเว็ป</button>
+          </div>
+        </div>
+        <div class="grid3" style="margin-top:8px;">
+          <div class="field"><label>Market cap ขั้นต่ำ ($B)</label><input id="vsMinCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runValueScan()" /></div>
+          <div class="field"><label>Market cap สูงสุด ($B)</label><input id="vsMaxCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runValueScan()" /></div>
+          <div class="field" style="align-self:end;">
+            <div class="quick" style="padding:0; border:0; gap:6px;">
+              <button onclick="setVsCapPreset(200,null)" title="เฉพาะหุ้นตัวใหญ่มาก">Mega ≥200B</button>
+              <button onclick="setVsCapPreset(10,200)" title="10B–200B">Large 10–200B</button>
+              <button onclick="setVsCapPreset(2,10)" title="2B–10B">Mid 2–10B</button>
+              <button onclick="setVsCapPreset(null,null)" title="ไม่กรอง market cap">ทั้งหมด</button>
+            </div>
+          </div>
+        </div>
+        <div class="grid3" style="margin-top:8px;">
+          <div class="field"><label>กลุ่มธุรกิจ (ตามที่เครื่องประเมินจำแนก)</label><select id="vsProfile" onchange="runValueScan()"><option value="">ทุกกลุ่ม</option></select></div>
+          <div></div><div></div>
+        </div>
+        <div id="vsStatus" class="note" style="margin-top:6px;"></div>
+        <div id="vsResult" style="margin-top:12px;">
+          <div class="note">กำลังโหลดผลอัตโนมัติเมื่อเปิดเมนูนี้ — ผลยังใหม่จะแสดงทันที ถ้าเก่ากว่า 24 ชม. จะสแกนสดใหม่ให้เอง (อ่านงบ SEC + ราคาย้อนหลังของ 500 บริษัท ใช้เวลาหลายนาที)</div>
+        </div>
       </div>
     </div>
 
@@ -2929,6 +2972,7 @@ function showTab(tab) {
     if (panel) panel.classList.toggle("hidden", name !== tab);
     if (btn) btn.classList.toggle("active", name === tab);
   });
+  if (tab === "revenuescan") autoLoadActiveScanSub();
 }
 
 function loading(msg) {
@@ -3691,6 +3735,31 @@ function renderRevenueModel(d) {
   setTimeout(refitRmCharts, 350);
 }
 
+// ---------- S&P 500 scanner: สลับเมนูย่อย (รายได้ / มูลค่ายุติธรรม) ----------
+// โหลดผลให้อัตโนมัติครั้งแรกที่เปิดแต่ละเมนูย่อย (ไม่ต้องกดปุ่มเอง) — ครั้งต่อไปในเซสชันเดียวกัน
+// ปล่อยให้ผู้ใช้กดปุ่มเองเวลาต้องการรีเฟรช จะได้ไม่ยิงซ้ำทุกครั้งที่สลับแท็บไปมา
+const scanAutoLoaded = { rev:false, val:false };
+function autoLoadScanSub(which) {
+  if (scanAutoLoaded[which]) return;
+  scanAutoLoaded[which] = true;
+  if (which === "val") runValueScan(); else runRevenueScan();
+}
+
+function showScanSub(which) {
+  const isVal = which === "val";
+  $("scanSubRevBox").classList.toggle("hidden", isVal);
+  $("scanSubValBox").classList.toggle("hidden", !isVal);
+  $("scanSubRevBtn").classList.toggle("active", !isVal);
+  $("scanSubValBtn").classList.toggle("active", isVal);
+  autoLoadScanSub(isVal ? "val" : "rev");
+}
+
+// เปิดแท็บ 🔍 สแกน S&P 500 = โหลดผลของเมนูย่อยที่เปิดอยู่ให้เลย
+function autoLoadActiveScanSub() {
+  if (!$("scanSubValBox")) return;
+  autoLoadScanSub($("scanSubValBox").classList.contains("hidden") ? "rev" : "val");
+}
+
 // ---------- S&P 500 revenue-vs-price scanner ----------
 function setRsCapPreset(minB, maxB) {
   $("rsMinCap").value = minB == null ? "" : minB;
@@ -3706,9 +3775,11 @@ async function runRevenueScan(refresh) {
   const maxCapB = parseFloat($("rsMaxCap").value);
   $("rsStatus").innerHTML = refresh
     ? `<div class="note">🔄 กำลังสแกนสดใหม่ทั้ง S&P 500 (500 บริษัท) — อาจใช้เวลาหลายนาที กรุณารอ...</div>`
-    : `<div class="note">กำลังโหลดผลสแกน...</div>`;
+    : `<div class="note">กำลังโหลดผลสแกน... (ถ้าผลเก่ากว่า 24 ชม. จะสแกนสดใหม่ให้อัตโนมัติ อาจใช้เวลาหลายนาที)</div>`;
   try {
-    const params = new URLSearchParams({ max_gap_pct:maxGap, limit });
+    // auto=true: ให้ backend ตัดสินใจเอง — ผลยังใหม่ = ตอบจากแคชทันที, เก่ากว่า 24 ชม. = สแกนสดใหม่ให้เลย
+    // (เฉพาะตอนรันในเครื่อง; บนเว็ป HF เสิร์ฟแคชเสมอ กัน 1 คลิก = ยิง SEC/Yahoo 500 ครั้งบนคลาวด์)
+    const params = new URLSearchParams({ max_gap_pct:maxGap, limit, auto:"true" });
     if (refresh) params.set("refresh", "true");
     if (!isNaN(minCapB)) params.set("min_market_cap", String(minCapB * 1e9));
     if (!isNaN(maxCapB)) params.set("max_market_cap", String(maxCapB * 1e9));
@@ -3757,7 +3828,9 @@ function fmtMarketCap(v) {
 function renderRevenueScan(d) {
   const E = escapeHtml;
   const cands = d.candidates || [];
-  const staleNote = d.stale ? `<span class="down">⚠️ ผลสแกนนี้เก่ากว่า 24 ชม. — กด "สแกนสดใหม่" เพื่ออัปเดต (รันในเครื่องเท่านั้น)</span>` : "";
+  const staleNote = d.rescanned
+    ? `<span class="up">✅ สแกนสดใหม่ให้อัตโนมัติแล้ว</span>`
+    : (d.stale ? `<span class="down">⚠️ ผลสแกนนี้เก่ากว่า 24 ชม. — ${d.can_scan_live ? `กด "สแกนสดใหม่" เพื่ออัปเดต` : "เว็ปเสิร์ฟผลที่แคชไว้เท่านั้น (สแกนสดต้องรันในเครื่อง)"}</span>` : "");
   const capCriteria = d.criteria || {};
   const capNote = (capCriteria.min_market_cap != null || capCriteria.max_market_cap != null)
     ? ` · กรอง market cap: ${capCriteria.min_market_cap != null ? fmtMarketCap(capCriteria.min_market_cap) : "ไม่จำกัด"} – ${capCriteria.max_market_cap != null ? fmtMarketCap(capCriteria.max_market_cap) : "ไม่จำกัด"}`
@@ -3788,6 +3861,114 @@ function renderRevenueScan(d) {
   html += `<div class="note" style="margin-top:4px;">${E(d.coverage_note || "")}</div>`;
   html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
   $("rsResult").innerHTML = html;
+}
+
+// ---------- S&P 500 fair-value / undervalue scanner ----------
+function setVsCapPreset(minB, maxB) {
+  $("vsMinCap").value = minB == null ? "" : minB;
+  $("vsMaxCap").value = maxB == null ? "" : maxB;
+  runValueScan();
+}
+
+async function runValueScan(refresh) {
+  const minUpside = parseFloat($("vsMinUpside").value);
+  const limit = parseInt($("vsLimit").value, 10) || 40;
+  const minCapB = parseFloat($("vsMinCap").value);
+  const maxCapB = parseFloat($("vsMaxCap").value);
+  const profile = $("vsProfile").value;
+  $("vsStatus").innerHTML = refresh
+    ? `<div class="note">🔄 กำลังสแกนสดใหม่ทั้ง S&P 500 (500 บริษัท) — อาจใช้เวลาหลายนาที กรุณารอ...</div>`
+    : `<div class="note">กำลังโหลดผลสแกน... (ถ้าผลเก่ากว่า 24 ชม. จะสแกนสดใหม่ให้อัตโนมัติ อาจใช้เวลาหลายนาที)</div>`;
+  try {
+    // auto=true: ผลยังใหม่ = ตอบจากแคชทันที, เก่ากว่า 24 ชม. = สแกนสดใหม่ให้เลย (เฉพาะตอนรันในเครื่อง)
+    const params = new URLSearchParams({ min_upside_pct:isNaN(minUpside) ? 20 : minUpside, limit, auto:"true" });
+    if (refresh) params.set("refresh", "true");
+    if (profile) params.set("profile", profile);
+    if (!isNaN(minCapB)) params.set("min_market_cap", String(minCapB * 1e9));
+    if (!isNaN(maxCapB)) params.set("max_market_cap", String(maxCapB * 1e9));
+    const res = await fetch(`${API}/api/value-scan/sp500?${params.toString()}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    renderValueScan(await res.json());
+    $("vsStatus").innerHTML = "";
+  } catch (e) {
+    notifyError(errorMessage(e), "สแกนมูลค่ายุติธรรมไม่สำเร็จ");
+    $("vsStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+async function publishValueScan() {
+  $("vsStatus").innerHTML = `<div class="note">📤 กำลังสแกนสดใหม่ทั้ง S&P 500 แล้ว push ขึ้นเว็ป — อาจใช้เวลาหลายนาที กรุณารอ...</div>`;
+  try {
+    const res = await fetch(`${API}/api/value-scan/sp500/publish`, { method:"POST" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    const d = await res.json();
+    renderValueScan(d);
+    $("vsStatus").innerHTML = d.pushed
+      ? `<div class="up">✅ สแกนใหม่แล้ว push ขึ้น GitHub+HF สำเร็จ</div>`
+      : `<div class="down">สแกนสำเร็จแต่ push ไม่สำเร็จ: ${escapeHtml(d.error || "ไม่ทราบสาเหตุ")}</div>`;
+  } catch (e) {
+    notifyError(errorMessage(e), "สแกน+push ไม่สำเร็จ");
+    $("vsStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+// เติมตัวเลือก "กลุ่มธุรกิจ" จาก PROFILES ของ backend (ครั้งแรกเท่านั้น) — กันรายชื่อกลุ่มสองฝั่งไม่ตรงกัน
+function fillValueScanProfiles(profiles) {
+  const sel = $("vsProfile");
+  if (!sel || !profiles || sel.options.length > 1) return;
+  const current = sel.value;
+  profiles.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.key;
+    opt.textContent = p.label;
+    sel.appendChild(opt);
+  });
+  sel.value = current;
+}
+
+function renderValueScan(d) {
+  const E = escapeHtml;
+  const cands = d.candidates || [];
+  fillValueScanProfiles(d.profiles);
+  const staleNote = d.rescanned
+    ? `<span class="up">✅ สแกนสดใหม่ให้อัตโนมัติแล้ว</span>`
+    : (d.stale ? `<span class="down">⚠️ ผลสแกนนี้เก่ากว่า 24 ชม. — ราคาที่แสดงเป็นราคา ณ วันที่สแกน ${d.can_scan_live ? `กด "สแกนสดใหม่" เพื่ออัปเดต` : "(เว็ปเสิร์ฟผลที่แคชไว้เท่านั้น สแกนสดต้องรันในเครื่อง)"}</span>` : "");
+  const crit = d.criteria || {};
+  const capNote = (crit.min_market_cap != null || crit.max_market_cap != null)
+    ? ` · กรอง market cap: ${crit.min_market_cap != null ? fmtMarketCap(crit.min_market_cap) : "ไม่จำกัด"} – ${crit.max_market_cap != null ? fmtMarketCap(crit.max_market_cap) : "ไม่จำกัด"}`
+    : "";
+  let html = `<div class="note">สแกนล่าสุด: <b>${E(d.as_of_label || "-")}</b> · ประเมินได้ ${d.success_count}/${d.universe_count} บริษัท · เข้าเกณฑ์ ${d.candidate_count} บริษัท${E(capNote)} ${staleNote}</div>`;
+  if (!cands.length) {
+    html += `<div class="note" style="margin-top:8px;">ไม่มีหุ้นเข้าเกณฑ์ตอนนี้ — ลองลด upside ขั้นต่ำ (เช่น 10% แทน 20%) ขยายกรอบ market cap หรือเลือก "ทุกกลุ่ม"</div>`;
+  } else {
+    const rows = cands.map(c => {
+      const warn = (c.warnings || []).length
+        ? `<span title="${E((c.warnings || []).join(" | "))}" style="cursor:help;">⚠️${c.warnings.length}</span>`
+        : "";
+      return `<tr style="cursor:pointer;" onclick="openSymbolInRevenueModel('${E(c.symbol)}')">`
+        + `<td style="padding:5px 8px;"><b>${E(c.symbol)}</b><div class="tiny" style="color:#7d8b99;">${E(c.name)}</div></td>`
+        + `<td style="padding:5px 8px; color:#7d8b99; font-size:12px;">${E(c.profile_label || "")}`
+        + `<div class="tiny" style="color:#5f6d7a;">${E(c.basis || "")} ${c.median_multiple}x${c.sector_source === "sic" ? "" : " · เดาจากงบ"}</div></td>`
+        + `<td style="padding:5px 8px; text-align:right;">${fmtMarketCap(c.market_cap)}</td>`
+        + `<td style="padding:5px 8px; text-align:right;">$${c.price}</td>`
+        + `<td style="padding:5px 8px; text-align:right;">$${c.fair_price}<div class="tiny" style="color:#7d8b99;">$${c.low}–$${c.high}</div></td>`
+        + `<td style="padding:5px 8px; text-align:right;" class="up">+${c.upside_pct}%</td>`
+        + `<td style="padding:5px 8px; text-align:center; font-size:12px;">${warn}</td>`
+        + `</tr>`;
+    }).join("");
+    html += `<table class="biz-rev" style="width:100%; margin-top:8px;">`
+      + `<thead><tr style="color:#9fb0c0; font-size:12px;">`
+      + `<th style="text-align:left; padding:4px 8px;">หุ้น</th><th style="text-align:left; padding:4px 8px;">กลุ่ม / ฐานประเมิน</th>`
+      + `<th style="text-align:right; padding:4px 8px;">Market cap</th>`
+      + `<th style="text-align:right; padding:4px 8px;">ราคาจริง</th><th style="text-align:right; padding:4px 8px;">ราคายุติธรรม (ช่วง)</th>`
+      + `<th style="text-align:right; padding:4px 8px;">Upside</th><th style="text-align:center; padding:4px 8px;">ข้อควรระวัง</th>`
+      + `</tr></thead><tbody>${rows}</tbody></table>`
+      + `<div class="tiny" style="margin-top:6px; color:#7d8b99;">คลิกแถวเพื่อเปิดกราฟ + กล่องประเมินมูลค่าเต็มในแท็บ 📈 โมเดลรายได้ (กดปุ่ม "ให้ AI สรุป" ที่นั่นได้)</div>`;
+  }
+  html += `<div class="note" style="margin-top:10px;">${E(d.methodology || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.coverage_note || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
+  $("vsResult").innerHTML = html;
 }
 
 function renderRadar(d) {

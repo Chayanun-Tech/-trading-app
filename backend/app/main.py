@@ -30,6 +30,7 @@ from app import macro_business
 from app import trend_radar
 from app import revenue_model
 from app import revenue_scanner
+from app import value_scanner
 from app.engine import build_report
 from app.financials import build_financials
 from app.fundamentals import (get_fundamentals, get_offline, is_equity_symbol,
@@ -664,6 +665,7 @@ async def revenue_scan_sp500_route(
     max_gap_pct: float = Query(-15.0, description="แสดงเฉพาะหุ้นที่ราคาต่ำกว่าราคาตามรายได้อย่างน้อยกี่ % (ค่าติดลบ)"),
     limit: int = Query(40, ge=1, le=200),
     refresh: bool = Query(False, description="True = สแกนสดใหม่ทั้ง S&P 500 (ใช้เวลาหลายนาที เหมาะกับรันในเครื่องเท่านั้น)"),
+    auto: bool = Query(False, description="True = ถ้าผลเก่ากว่า 24 ชม. ให้สแกนสดใหม่เองอัตโนมัติ (เฉพาะตอนรันในเครื่อง)"),
     min_market_cap: float | None = Query(None, ge=0, description="กรอง market cap ขั้นต่ำ (USD)"),
     max_market_cap: float | None = Query(None, ge=0, description="กรอง market cap สูงสุด (USD)"),
 ):
@@ -673,7 +675,7 @@ async def revenue_scan_sp500_route(
         raise HTTPException(400, "max_market_cap ต้องมากกว่า min_market_cap")
     try:
         return await revenue_scanner.scan_sp500_revenue_gap(
-            max_gap_pct=max_gap_pct, limit=limit, refresh=refresh,
+            max_gap_pct=max_gap_pct, limit=limit, refresh=refresh, auto=auto,
             min_market_cap=min_market_cap, max_market_cap=max_market_cap,
         )
     except Exception as exc:  # noqa: BLE001
@@ -691,6 +693,45 @@ async def revenue_scan_sp500_publish_route():
     publish = _git_publish_file(
         "backend/app/data_sp500_revenue_scan.json",
         f"Update S&P 500 revenue scan ({result['success_count']}/{result['universe_count']} companies)",
+    )
+    return {**result, **publish}
+
+
+@app.get("/api/value-scan/sp500")
+async def value_scan_sp500_route(
+    min_upside_pct: float = Query(20.0, description="แสดงเฉพาะหุ้นที่ราคายุติธรรมสูงกว่าราคาปัจจุบันอย่างน้อยกี่ %"),
+    limit: int = Query(40, ge=1, le=200),
+    profile: str | None = Query(None, description="กรองเฉพาะกลุ่มธุรกิจ (bank/reit/cyclical/... ตาม PROFILES)"),
+    refresh: bool = Query(False, description="True = สแกนสดใหม่ทั้ง S&P 500 (หลายนาที เหมาะกับรันในเครื่องเท่านั้น)"),
+    auto: bool = Query(False, description="True = ถ้าผลเก่ากว่า 24 ชม. ให้สแกนสดใหม่เองอัตโนมัติ (เฉพาะตอนรันในเครื่อง)"),
+    min_market_cap: float | None = Query(None, ge=0, description="กรอง market cap ขั้นต่ำ (USD)"),
+    max_market_cap: float | None = Query(None, ge=0, description="กรอง market cap สูงสุด (USD)"),
+):
+    """สแกน S&P 500 หาหุ้นที่ราคาต่ำกว่า "ราคายุติธรรมตาม sector" (ตรรกะเดียวกับกล่องประเมินมูลค่า
+    ในแท็บ 📈 โมเดลรายได้ — ธนาคารใช้ P/B, REIT ใช้ P/FFO, ทั่วไปใช้ P/E ฯลฯ).
+    ผลแคชไว้ในไฟล์ (data_sp500_value_scan.json) — เว็ปอ่านแคชทันที ไม่สแกนสดบนคลาวด์."""
+    if min_market_cap is not None and max_market_cap is not None and max_market_cap <= min_market_cap:
+        raise HTTPException(400, "max_market_cap ต้องมากกว่า min_market_cap")
+    try:
+        return await value_scanner.scan_sp500_fair_value(
+            min_upside_pct=min_upside_pct, limit=limit, profile=profile, refresh=refresh, auto=auto,
+            min_market_cap=min_market_cap, max_market_cap=max_market_cap,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สแกนมูลค่ายุติธรรม S&P 500 ไม่สำเร็จ: {exc}")
+
+
+@app.post("/api/value-scan/sp500/publish")
+async def value_scan_sp500_publish_route():
+    """สแกนสดใหม่ทั้ง S&P 500 แล้ว commit+push ผลขึ้น GitHub/HF อัตโนมัติ (เหมือน revenue-scan)
+    ใช้ได้เฉพาะตอนรันในเครื่อง; บน HF container จะคืน pushed=false"""
+    try:
+        result = await value_scanner.scan_sp500_fair_value(refresh=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สแกนมูลค่ายุติธรรม S&P 500 ไม่สำเร็จ: {exc}")
+    publish = _git_publish_file(
+        "backend/app/data_sp500_value_scan.json",
+        f"Update S&P 500 fair-value scan ({result['success_count']}/{result['universe_count']} companies)",
     )
     return {**result, **publish}
 
