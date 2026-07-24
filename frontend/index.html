@@ -884,6 +884,13 @@
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
       <div id="rmSector" style="margin-top:6px;"></div>
       <div class="note tiny" style="margin-top:2px; color:#7d8b99;">ลากมุมขวาล่างของแต่ละกรอบกราฟเพื่อปรับความสูงเองได้</div>
+      <div style="margin-top:6px; display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+        <span class="tiny" style="color:#7d8b99;">เส้นค่าเฉลี่ย EMA (คาบปรับตามความละเอียดกราฟให้ตรงกับตัวสแกนอัตโนมัติ):</span>
+        <label class="checkrow" style="gap:5px;"><span style="color:#3b82f6;">EMA 50</span><input id="rmShowEma50" type="checkbox" onchange="renderRmEmas()" /></label>
+        <label class="checkrow" style="gap:5px;"><span style="color:#f59e0b;">EMA 100</span><input id="rmShowEma100" type="checkbox" onchange="renderRmEmas()" /></label>
+        <label class="checkrow" style="gap:5px;"><span style="color:#a78bfa;">EMA 200</span><input id="rmShowEma200" type="checkbox" checked onchange="renderRmEmas()" /></label>
+        <span id="rmEmaNote" class="tiny" style="color:#5f6d7a;"></span>
+      </div>
       <div class="chart-wrap rm-chart-wrap rm-resizable" style="margin-top:6px; position:relative;">
         <div id="rmChart" style="width:100%; height:100%;"></div>
       </div>
@@ -3467,6 +3474,7 @@ function renderAnalyst(d) {
 // (histogram + line) ในพาเนลแยกต่างหากแทน — ไลบรารีจัดตำแหน่ง/สเกล/zoom/pan ให้เองอัตโนมัติ ไม่ต้อง
 // คำนวณพิกัดเอง ไม่มีปัญหา sync อีก ป้ายกำกับใช้ tooltip ตอน hover แทน (โชว์ทีละไตรมาสเดียว ไม่ทับกัน)
 let rmChart = null, rmCandleSeries = null, rmFairSeries = null, rmFcfFairSeries = null, rmPeChart = null, rmPeSeries = null, rmPeLine = null;
+let rmEma50Series = null, rmEma100Series = null, rmEma200Series = null;
 let rmPfcfChart = null, rmPfcfSeries = null, rmPfcfLine = null;
 let rmPeBandLines = [], rmPfcfBandLines = [];
 let rmCompareChart = null, rmPriceIdxSeries = null, rmRevIdxSeries = null;
@@ -3499,6 +3507,11 @@ function ensureRmCharts() {
   rmFcfFairSeries = rmChart.addLineSeries({
     color:"#2dd4bf", lineWidth:2, lineStyle:2, title:"ราคาตาม Free Cash Flow TTM รายไตรมาส (ถ้าราคาวิ่งตามเงินสดล้วน ๆ)",
   });
+  // เส้น EMA เทคนิค (คาบปรับตาม granularity ใน renderRmEmas) — สีเดียวกับกราฟเทคนิคหลักด้านบน
+  // ให้จำง่ายว่าเส้นไหนคือเส้นไหน (fast=น้ำเงิน mid=ส้ม slow=ม่วง)
+  rmEma50Series = rmChart.addLineSeries({ color:"#3b82f6", lineWidth:1, lastValueVisible:false, priceLineVisible:false, crosshairMarkerVisible:false, title:"EMA 50" });
+  rmEma100Series = rmChart.addLineSeries({ color:"#f59e0b", lineWidth:1, lastValueVisible:false, priceLineVisible:false, crosshairMarkerVisible:false, title:"EMA 100" });
+  rmEma200Series = rmChart.addLineSeries({ color:"#a78bfa", lineWidth:2, lastValueVisible:false, priceLineVisible:false, crosshairMarkerVisible:false, title:"EMA 200" });
   rmPeChart = LightweightCharts.createChart($("rmPeChart"), { ...base, timeScale:tsOptions, width:$("rmPeChart").clientWidth, height:$("rmPeChart").clientHeight });
   rmPeSeries = rmPeChart.addLineSeries({ color:"#e2b93b", lineWidth:2, title:"P/E" });
 
@@ -3704,6 +3717,43 @@ function drawRefBand(series, ref, keepLine, bandStore) {
   });
 }
 
+// กราฟโมเดลรายได้เป็นราย "สัปดาห์" (หรือวัน/เดือน) แต่ตัวสแกน EMA วัดเป็นราย "วัน" —
+// ถ้าเอา EMA200 มาคำนวณบนแท่งรายสัปดาห์ตรง ๆ จะได้ EMA200 สัปดาห์ (≈ 4 ปี) คนละเส้นกับที่สแกนวัด
+// จึงแปลงคาบจาก "วันทำการ" เป็น "จำนวนแท่ง" ตามความละเอียดกราฟ ให้เส้นที่วาดตรงกับตัวสแกน:
+//   1 ไตรมาส ≈ 63 วันทำการ ≈ 13 สัปดาห์ ≈ 3 เดือน (อัตราส่วนเดียวกับ _BARS_PER_QUARTER ฝั่ง backend)
+const RM_BARS_PER_DAY = { daily:1, weekly:13 / 63, monthly:3 / 63 };
+
+function renderRmEmas() {
+  if (!rmChart || !rmData) return;
+  const candles = rmData.price_candles || [];
+  const closes = candles.map(c => c.close);
+  const gran = rmData.granularity || "weekly";
+  const scale = RM_BARS_PER_DAY[gran] || (13 / 63);
+  const cfg = [
+    { days:50, series:rmEma50Series, show:$("rmShowEma50")?.checked },
+    { days:100, series:rmEma100Series, show:$("rmShowEma100")?.checked },
+    { days:200, series:rmEma200Series, show:$("rmShowEma200")?.checked },
+  ];
+  const drawnPeriods = [];
+  for (const { days, series, show } of cfg) {
+    if (!series) continue;
+    if (!show) { series.setData([]); continue; }
+    // ปัดคาบเป็นจำนวนแท่งอย่างน้อย 2 แท่ง — ที่ความละเอียดรายเดือน EMA50 วัน ≈ 2.4 แท่ง
+    const period = Math.max(2, Math.round(days * scale));
+    const ema = calcEMA(closes, period);
+    series.setData(candles.map((c, i) => (ema[i] == null ? null : { time:c.time, value:ema[i] }))
+      .filter(p => p !== null));
+    drawnPeriods.push(days);
+  }
+  const note = $("rmEmaNote");
+  if (note) {
+    const label = { daily:"รายวัน", weekly:"รายสัปดาห์", monthly:"รายเดือน" }[gran] || gran;
+    note.textContent = drawnPeriods.length
+      ? `กราฟ${label} → EMA ${drawnPeriods.join("/")} วันทำการ (ปรับเป็น ${drawnPeriods.map(d => Math.max(2, Math.round(d * scale))).join("/")} แท่ง)`
+      : "";
+  }
+}
+
 function renderRevenueModel(d) {
   ensureRmCharts();
   resizeRmCharts();
@@ -3711,6 +3761,7 @@ function renderRevenueModel(d) {
   const candles = d.price_candles || [];
   const pe = d.pe_series || [];
   rmCandleSeries.setData(candles.map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close })));
+  renderRmEmas();   // วาดเส้น EMA ทับแท่งเทียน (ใช้ candles จาก rmData ล่าสุด)
   rmPeSeries.setData(pe.map(p => ({ time:p.time, value:p.pe })));
   rmPeLine = drawRefBand(rmPeSeries, d.pe_reference, rmPeLine, rmPeBandLines);
   const pfcf = d.pfcf_series || [];
