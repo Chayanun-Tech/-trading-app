@@ -1468,6 +1468,97 @@
 .db-badge { display:inline-block; font-size:13px; padding:2px 7px; border-radius:10px; font-weight:600; text-transform:uppercase; margin-bottom:5px; }
 </style>
 
+<!-- ===================================================================
+     QUANT TERMINAL SKIN  (theme overlay — ลบบล็อก <style id="quant-terminal-skin"> นี้บล็อกเดียวเพื่อกลับธีมเดิม)
+     ต้นฉบับดีไซน์: ทิศทาง 02 "Quant Terminal" — mono ล้วน, เขียวฟอสฟอร์, สแกนไลน์, density สูง
+=================================================================== -->
+<style id="quant-terminal-skin">
+  :root{
+    /* remap ตัวแปรสีทั้งหมด -> พาเลตต์เทอร์มินัล */
+    --bg:#06080b; --panel:#0a0e0c; --panel2:#080c0a; --surface:#070a08; --border:#17281f;
+    --text:#cdd8d2; --muted:#6a9a80; --accent:#2fd47a; --accent2:#8ff36b; --green:#2fd47a;
+    --red:#e0344d; --amber:#f5b23d; --cyan:#4fd1c5; --violet:#8ff36b;
+    --term-mono:ui-monospace,"Cascadia Code","JetBrains Mono","SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --term-dim:#4e6b5c; --term-bright:#e6f2ec; --term-line:#132018; --term-glow:rgba(47,212,122,.55);
+  }
+
+  /* ---- ฟอนต์ monospace ทั้งจอ (อีโมจิยังแสดงปกติ) ---- */
+  body, button, input, select, textarea, table, th, td, label,
+  h1, h2, h3, h4, h5, .badge, .brand-kicker, code, pre{
+    font-family:var(--term-mono) !important;
+    letter-spacing:.01em;
+  }
+
+  /* ---- พื้นหลัง + สแกนไลน์แบบ CRT ---- */
+  body{
+    background:#06080b !important;
+    color:var(--text);
+  }
+  body::before{
+    content:""; position:fixed; inset:0; z-index:9999; pointer-events:none;
+    background:
+      repeating-linear-gradient(0deg, rgba(47,212,122,.035) 0 1px, transparent 1px 3px),
+      radial-gradient(120% 80% at 50% 0%, rgba(47,212,122,.06), transparent 60%);
+    mix-blend-mode:screen;
+  }
+
+  /* ---- โครงหลัก (ค่าฝังตายในไฟล์เดิม จึง override ตรง ๆ) ---- */
+  header{ background:#080d0a !important; border-bottom:1px solid var(--border) !important;
+          box-shadow:0 1px 0 rgba(47,212,122,.12), 0 10px 30px rgba(0,0,0,.4) !important; }
+  .left{ background:#080c0a !important; border-color:var(--border) !important; }
+  .right{ background:#090d0b !important; border-color:var(--border) !important; }
+  .toolbar{ background:#0a0f0c !important; border-color:var(--border) !important; }
+
+  /* เส้นกริดฟอสฟอร์จาง ๆ ในพาเนลหลัก */
+  .left, .right{
+    background-image:repeating-linear-gradient(0deg, rgba(47,212,122,.025) 0 1px, transparent 1px 4px) !important;
+  }
+
+  /* ---- ปุ่ม / อินพุต ---- */
+  button, input, select, textarea{
+    background:#0a0f0c !important; border-color:var(--border) !important; color:var(--text) !important;
+  }
+  button:hover{ border-color:var(--accent) !important; color:var(--term-bright) !important;
+                box-shadow:0 0 0 1px rgba(47,212,122,.25) inset !important; }
+  button.primary{ background:var(--accent) !important; border-color:var(--accent) !important;
+                  color:#032312 !important; font-weight:700 !important;
+                  text-shadow:none !important; box-shadow:0 0 14px rgba(47,212,122,.35) !important; }
+  button.primary:hover{ background:#3fe488 !important; }
+
+  /* ---- badge / chip ---- */
+  .badge{ background:#0a0f0c !important; border-color:var(--border) !important; color:#a9c3b6 !important;
+          border-radius:4px !important; text-transform:uppercase; font-size:12px !important; letter-spacing:.06em; }
+  .brand-kicker{ color:var(--accent) !important; text-shadow:0 0 10px var(--term-glow); }
+  h1{ color:var(--term-bright) !important; }
+
+  /* ---- ปุ่มเปิดพอร์ต ---- */
+  .portfolio-launch{ border-color:rgba(47,212,122,.4) !important;
+    background:linear-gradient(135deg, rgba(47,212,122,.14), rgba(47,212,122,.05)) !important; }
+  .portfolio-launch:hover{ border-color:var(--accent) !important;
+    background:linear-gradient(135deg, rgba(47,212,122,.22), rgba(47,212,122,.08)) !important; }
+  .portfolio-launch-icon{ color:#062; background:rgba(47,212,122,.85) !important; }
+
+  /* ---- ตัวเลข/ราคาเรืองแสงนิด ๆ ---- */
+  .big, .price, .portfolio-metric b{ text-shadow:0 0 12px rgba(47,212,122,.18); }
+
+  /* ---- แถบเลื่อน ---- */
+  ::-webkit-scrollbar{ width:9px; height:9px; }
+  ::-webkit-scrollbar-track{ background:#06080b; }
+  ::-webkit-scrollbar-thumb{ background:#1c3327; border-radius:0; }
+  ::-webkit-scrollbar-thumb:hover{ background:#2a5a3e; }
+
+  /* ---- ลิงก์ / hover ทั่วไป -> เขียว ---- */
+  a{ color:var(--accent) !important; }
+
+  /* ---- แท็บโหมดวิเคราะห์ (เดิมน้ำเงิน) ---- */
+  .an-mode{ border-color:var(--border) !important; background:rgba(47,212,122,.04) !important; color:#a9c3b6 !important; border-radius:4px !important; }
+  .an-mode.active{ background:rgba(47,212,122,.16) !important; border-color:var(--accent) !important; color:var(--term-bright) !important; box-shadow:0 0 12px rgba(47,212,122,.2); }
+
+  @media (prefers-reduced-motion: no-preference){
+    /* คงสแกนไลน์แบบนิ่ง ไม่ต้องกระพริบ เพื่อไม่ให้ล้าตา */
+  }
+</style>
+
 <script src="./config.js"></script>
 <script>
 const API = (window.API_BASE_URL || "").replace(/\/$/, "");
