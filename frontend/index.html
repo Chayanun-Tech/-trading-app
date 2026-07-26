@@ -3847,9 +3847,9 @@ function renderRmIndustry(p) {
   const table = `<div style="margin-top:8px; overflow-x:auto;">
       <div class="tiny" style="color:#7d8b99; margin-bottom:2px;">👥 คู่แข่งในกลุ่มเดียวกัน (คลิกแถวเพื่อสลับไปหุ้นนั้น) · PE <span style="color:#4caf7d;">เขียว</span>=ถูกกว่ากลาง <span style="color:#e0785f;">แดง</span>=แพงกว่า</div>
       <table style="width:100%; border-collapse:collapse; font-size:12px;">
-        <thead><tr style="color:#7d8b99; text-align:right;">
-          <th style="padding:3px 6px; text-align:left;">หุ้น</th><th style="padding:3px 6px;">PE</th>
-          <th style="padding:3px 6px;">upside มูลค่า</th><th style="padding:3px 6px;">โตรายได้ YoY</th></tr></thead>
+        <thead><tr style="color:#7d8b99;">
+          <th style="padding:3px 6px; text-align:left;">หุ้น</th><th style="padding:3px 6px; text-align:right;">PE</th>
+          <th style="padding:3px 6px; text-align:right;">upside มูลค่า</th><th style="padding:3px 6px; text-align:right;">โตรายได้ YoY</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       ${peers.length > shown.length ? `<div class="tiny" style="color:#7d8b99; margin-top:2px;">แสดง ${shown.length}/${peers.length} ตัว</div>` : ""}
