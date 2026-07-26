@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AI Trade Assistant</title>
+<title>Critical Analysis Stock</title>
 <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
   :root {
@@ -429,8 +429,8 @@
 <body>
 <header>
   <div class="brand-block">
-    <span class="brand-kicker">Trading Command Center</span>
-    <h1>AI Trade Assistant</h1>
+    <span class="brand-kicker">Value Investing Research</span>
+    <h1>Critical Analysis Stock</h1>
   </div>
   <div class="badge-row">
     <span class="badge" id="providerBadge">provider: ...</span>
@@ -516,8 +516,6 @@
       <button class="tab" onclick="openDashboard()" style="background:var(--accent);border-color:var(--accent);color:#fff;">DASH BOARD</button>
       <button class="tab active" id="tabReport" onclick="showTab('report')">Report</button>
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
-      <button class="tab" id="tabImage" onclick="showTab('image')">Image</button>
-      <button class="tab" id="tabStrategy" onclick="showTab('strategy')">Strategy</button>
       <button class="tab" id="tabBusiness" onclick="showTab('business')">ธุรกิจ</button>
       <button class="tab" id="tabMacro" onclick="showTab('macro')">มหภาค→ธุรกิจ</button>
       <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">VIพื้นฐาน</button>
@@ -1100,17 +1098,6 @@
       <div id="ivResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้นแล้วกด "คำนวณมูลค่า IV"</div></div>
     </div>
 
-    <div id="imagePanel" class="panel-body hidden">
-      <div class="grid3">
-        <input type="file" id="imgFile" accept="image/*" onchange="previewImg()" />
-        <input id="imgSymbol" placeholder="Symbol" />
-        <input id="imgTf" placeholder="Timeframe" />
-      </div>
-      <textarea id="imgNote" placeholder="Note" style="width:100%; min-height:64px; margin-top:8px;"></textarea>
-      <div style="margin-top:8px;"><button class="primary" onclick="runImageAnalysis()">Analyze image</button></div>
-      <img id="imgPreview" style="display:none; max-width:100%; max-height:380px; margin-top:10px; border:1px solid var(--border); border-radius:8px;" />
-    </div>
-
     <div id="indicatorsPanel" class="panel-body hidden">
       <h3>Chart style <button style="float:right; min-height:28px; padding:4px 10px; font-size:13px;" onclick="resetIndicatorSettings()">↺ Reset defaults</button></h3>
       <div class="grid3">
@@ -1164,57 +1151,6 @@
         <label class="checkrow"><span>MACD</span><input id="showMACD" type="checkbox" checked onchange="renderIndicators()" /></label>
         <label class="checkrow"><span>Volume</span><input id="showVolume" type="checkbox" checked onchange="renderIndicators()" /></label>
       </div>
-    </div>
-
-    <div id="strategyPanel" class="panel-body hidden">
-      <h3>⚔️ ท่าไม้ตาย — ระบบเทรดรวมทุกศาสตร์ + Backtest ย้อนหลังยาว</h3>
-      <div class="note" style="margin-bottom:10px;">
-        ทุกแท่งในอดีต ทุกศาสตร์จะโหวต → รวมเป็น "คะแนนฉันทามติ". เข้า Order เมื่อหลายศาสตร์
-        เห็นพ้องแรงพอ + ผ่าน Trend Filter แล้วจำลองผลย้อนหลัง พร้อมจุดเข้า-ออกบนกราฟ.
-      </div>
-      <div style="margin-bottom:10px;">
-        <label style="display:block; margin-bottom:6px;">⚡ ท่าสำเร็จรูป (กดแล้วรันได้เลย):</label>
-        <div class="quick" style="padding:0; border:0; gap:6px;">
-          <button onclick="applyPreset('winrate')" title="ชนะบ่อย 60-67% บนหุ้นเทรนด์ขึ้น (RR0.5/ATR2.5/เข้า60/Long)">🎯 ชนะบ่อย 60-67%</button>
-          <button onclick="applyPreset('winmax')" title="เน้น %ชนะสูงสุด ~66% (RR0.5/ATR2.0/เข้า70/Long)">🎯 ชนะบ่อยสุด ~66%</button>
-          <button onclick="applyPreset('sniper')" title="ยิงน้อย ~4 ไม้/ปี ไม้ชนะใหญ่ 3 เท่า กำไร +350% (เข้า85/MDW5/RR3/Long)">🎯 สไนเปอร์ (กำไร/ไม้สูงสุด)</button>
-          <button onclick="applyPreset('snipebal')" title="สไนเปอร์ชนะ ~50% ยิงน้อย (เข้า85/MDW5/RR1.2/Long)">🎯 สไนเปอร์สมดุล ~50%</button>
-          <button onclick="applyPreset('coach')" title="สไตล์ Coach James: MMC Liquidity Sweep + EMA80 (ทอง/forex 1h)">🥇 Coach James MMC (ทอง)</button>
-          <button onclick="applyPreset('balanced')" title="สมดุล กำไร/ไม้ใหญ่ (RR1.8/ATR1.5/เข้า65/Long+Short)">⚖️ สมดุล (กำไร/ไม้ใหญ่)</button>
-        </div>
-        <div id="presetNote" class="tiny" style="margin-top:6px;"></div>
-      </div>
-      <div class="grid3">
-        <div class="field"><label>Timeframe (ย้อนหลัง)</label>
-          <select id="bt_timeframe">
-            <option value="1m">1m (~7 days)</option>
-            <option value="1d" selected>1d (ยาวสุด — หลายสิบปี)</option>
-            <option value="4h">4h (~2 ปี)</option>
-            <option value="1h">1h (~2 ปี)</option>
-            <option value="15m">15m (~60 วัน)</option>
-            <option value="5m">5m (~60 วัน)</option>
-          </select>
-        </div>
-        <div class="field"><label>Direction</label>
-          <select id="bt_direction">
-            <option value="both" selected>Long + Short</option>
-            <option value="long">Long เท่านั้น</option>
-            <option value="short">Short เท่านั้น</option>
-          </select>
-        </div>
-        <div class="field"><label>เกณฑ์เข้า (ฉันทามติ %)</label><input id="bt_entry" type="number" min="51" max="95" value="65" /></div>
-        <div class="field"><label>Risk:Reward</label><input id="bt_rr" type="number" min="0.5" max="10" step="0.1" value="1.8" /></div>
-        <div class="field"><label>ATR x (ระยะ Stop)</label><input id="bt_atr" type="number" min="0.2" max="10" step="0.1" value="1.5" /></div>
-        <div class="field"><label>ถือสูงสุด (แท่ง)</label><input id="bt_hold" type="number" min="3" max="500" value="60" /></div>
-        <div class="field"><label>ศาสตร์เห็นพ้องขั้นต่ำ (น้ำหนัก)</label><input id="bt_mdw" type="number" min="0.5" max="12" step="0.5" value="2" title="สูง = ต้องหลายศาสตร์เห็นตรงกัน = เทรดน้อยลงแต่คัดกว่า" /></div>
-        <div class="field"><label>ขนาดพอร์ต ($)</label><input id="bt_account" type="number" min="1" step="100" value="1000" title="ใช้คำนวณขนาดโพสิชันตอน Go Live" /></div>
-        <div class="field"><label>ความเสี่ยง/ไม้ (% พอร์ต)</label><input id="bt_risk" type="number" min="0.1" max="20" step="0.1" value="1" title="เสี่ยงกี่ % ของพอร์ตต่อการเทรด 1 ไม้" /></div>
-      </div>
-      <label class="checkrow" style="margin-top:8px;"><span>Trend Filter (Long เหนือ SMA200 / Short ใต้ SMA200)</span><input id="bt_trend" type="checkbox" checked /></label>
-      <div style="margin-top:10px;"><button class="primary" style="width:100%;" onclick="runBacktest()">▶ รัน Backtest ท่าไม้ตาย</button></div>
-      <div style="margin-top:8px;"><button style="width:100%;" onclick="applyStrategyToBot()" title="คัดลอกพารามิเตอร์กลยุทธ์นี้ (timeframe, เกณฑ์เข้า, RR, ATR, น้ำหนักศาสตร์ ฯลฯ) ไปยัง Auto Bot">⤵ ใช้กลยุทธ์นี้กับ Auto Bot</button></div>
-      <div id="backtestResult" class="note" style="margin-top:12px;">ยังไม่ได้รัน — กดปุ่มด้านบนเพื่อเริ่ม</div>
-      <div id="liveSignalBox" class="hidden" style="margin-top:12px;"></div>
     </div>
 
     <div id="autoPanel" class="panel-body hidden">
