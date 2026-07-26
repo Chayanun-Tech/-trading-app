@@ -671,6 +671,59 @@ def _resample(candles: list, granularity: str) -> list[dict]:
     return _group_candles(candles, lambda c: datetime.fromtimestamp(c.time, tz=timezone.utc).isocalendar()[:2])
 
 
+def _cagr(series: list[tuple[str, float]], years: int | None) -> float | None:
+    """อัตราเติบโตทบต้น (%/ปี) ของ TTM series ย้อนหลัง `years` ปี (None = ตลอดอายุข้อมูล).
+
+    series: list ของ (date_iso, value) เรียงเก่า→ใหม่. คืน None (ไม่ระเบิด) เมื่อ:
+      • ข้อมูลน้อยกว่า 2 จุด
+      • ฐาน/ปลายทาง ≤ 0 (คิด CAGR จากฐานติดลบไม่มีความหมาย)
+      • ข้อมูลย้อนหลังไม่ถึงหน้าต่างที่ขอ (เช่นขอ 10 ปีแต่มีแค่ 6 ปี)
+    """
+    pts = [(d, v) for d, v in series if isinstance(v, (int, float))]
+    if len(pts) < 2:
+        return None
+    latest_d, latest_v = pts[-1]
+    if latest_v <= 0:
+        return None
+    ld = datetime.strptime(latest_d[:10], "%Y-%m-%d")
+    if years is None:
+        base_d, base_v = pts[0]
+    else:
+        try:
+            target = ld.replace(year=ld.year - years)
+        except ValueError:  # 29 ก.พ. ในปีที่ไม่ใช่อธิกสุรทิน
+            target = ld.fromordinal(ld.toordinal() - int(years * 365.25))
+        earlier = [(d, v) for d, v in pts if datetime.strptime(d[:10], "%Y-%m-%d") <= target]
+        if not earlier:               # ข้อมูลย้อนหลังไม่ถึงหน้าต่างนี้
+            return None
+        base_d, base_v = earlier[-1]
+    if base_v <= 0:
+        return None
+    yrs = (ld - datetime.strptime(base_d[:10], "%Y-%m-%d")).days / 365.25
+    if yrs < 0.75:                    # ช่วงสั้นเกินไป CAGR ไม่มีความหมาย
+        return None
+    return round(((latest_v / base_v) ** (1.0 / yrs) - 1.0) * 100, 1)
+
+
+def _growth_stats(ttm_revenue: list[tuple[str, float]], ttm_eps: list[tuple[str, float]],
+                  current_price: float | None) -> dict:
+    """สถิติการเติบโต (CAGR รายได้/EPS 3/5/10 ปี/ตลอดอายุ) + ค่าปัจจุบัน — ป้อนแผงคาดการณ์ (ข้อ 4)."""
+    cur_eps = ttm_eps[-1][1] if ttm_eps else None
+    cur_rev = ttm_revenue[-1][1] if ttm_revenue else None
+    cur_pe = (round(current_price / cur_eps, 1)
+              if isinstance(current_price, (int, float)) and isinstance(cur_eps, (int, float)) and cur_eps > 0
+              else None)
+    windows = {"y3": 3, "y5": 5, "y10": 10, "life": None}
+    return {
+        "current_eps": round(cur_eps, 2) if isinstance(cur_eps, (int, float)) else None,
+        "current_revenue": cur_rev,
+        "current_price": round(current_price, 2) if isinstance(current_price, (int, float)) else None,
+        "current_pe": cur_pe,
+        "revenue_cagr": {k: _cagr(ttm_revenue, w) for k, w in windows.items()},
+        "eps_cagr": {k: _cagr(ttm_eps, w) for k, w in windows.items()},
+    }
+
+
 async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: int = 40,
                             granularity: str = "weekly", include_ai: bool = False) -> dict:
     symbol = (symbol or "").strip().upper()
@@ -882,6 +935,14 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         profile_key, facts, bars, bars_per_q, fin_snapshot, fcf_annual, pe_band, pfcf_band)
     warnings.extend(extra_warns)
 
+    # ข้อ 4: สถิติการเติบโต (CAGR รายได้/EPS หลายหน้าต่าง) สำหรับแผงคาดการณ์มูลค่าอนาคต ฝั่ง frontend
+    # TTM revenue = ผลรวมรายได้ 4 ไตรมาสติดกัน (เกลี่ยฤดูกาล เทียบข้ามปีได้) — คู่ขนานกับ ttm_eps_by_date
+    rev_dates = sorted(raw_revenue_meta.keys())
+    ttm_revenue = [(rev_dates[i], sum(raw_revenue_meta[d]["val"] for d in rev_dates[i - 3:i + 1]))
+                   for i in range(3, len(rev_dates))]
+    growth_stats = _growth_stats(ttm_revenue, ttm_eps_by_date,
+                                 bars[-1]["close"] if bars else None)
+
     # ชั้น 6: AI narrative — เรียกเฉพาะเมื่อผู้ใช้ร้องขอ (ai=true) และตั้งค่าคีย์ AI แล้ว
     verdict = await _generate_verdict(symbol, facts.get("entityName"), profile, profile_key,
                                       extra_metrics, fair_value, warnings) if include_ai else None
@@ -913,6 +974,7 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         "warnings": warnings,
         "extra_metrics": extra_metrics,
         "fair_value": fair_value,
+        "growth_stats": growth_stats,
         "verdict": verdict,
         "has_preliminary": bool(prelim),
         "disclaimer": "ข้อมูลจาก SEC EDGAR (งบที่ยื่นจริง) + ราคาย้อนหลังจาก provider ปัจจุบัน — "

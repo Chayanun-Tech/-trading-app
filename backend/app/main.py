@@ -30,6 +30,7 @@ from app import macro_business
 from app import trend_radar
 from app import revenue_model
 from app import revenue_scanner
+from app import industry_peers
 from app import value_scanner
 from app import ema_scanner
 from app import confluence
@@ -662,6 +663,19 @@ async def revenue_model_route(symbol: str = Query(..., description="สัญล
         raise HTTPException(502, f"สร้างโมเดลรายได้ไม่สำเร็จ: {exc}")
 
 
+@app.get("/api/industry/peers")
+async def industry_peers_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น NVDA (S&P 500)")):
+    """เลนส์ 'เทียบอุตสาหกรรม': PE เฉลี่ยของกลุ่ม (GICS Sub-Industry → fallback Sector) +
+    ตารางคู่แข่งในอุตสาหกรรมเดียวกัน + ราคาที่ควรเป็นตาม PE กลุ่ม (EPS จริง × PE median).
+    อ่านจากไฟล์แคชสแกน — ตอบเร็ว ไม่ยิงเน็ต. หุ้นนอก S&P 500 คืนโครงว่าง (ไม่ error)."""
+    try:
+        return industry_peers.peers_for(symbol)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูลอุตสาหกรรมไม่สำเร็จ: {exc}")
+
+
 @app.get("/api/revenue-scan/sp500")
 async def revenue_scan_sp500_route(
     max_gap_pct: float = Query(-15.0, description="แสดงเฉพาะหุ้นที่ราคาต่ำกว่าราคาตามรายได้อย่างน้อยกี่ % (ค่าติดลบ)"),
@@ -716,13 +730,19 @@ async def value_scan_sp500_route(
     if min_market_cap is not None and max_market_cap is not None and max_market_cap <= min_market_cap:
         raise HTTPException(400, "max_market_cap ต้องมากกว่า min_market_cap")
     try:
-        return await value_scanner.scan_sp500_fair_value(
+        result = await value_scanner.scan_sp500_fair_value(
             min_upside_pct=min_upside_pct, limit=limit, profile=profile, refresh=refresh, auto=auto,
             min_market_cap=min_market_cap, max_market_cap=max_market_cap,
             exclude_extreme=exclude_extreme,
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"สแกนมูลค่ายุติธรรม S&P 500 ไม่สำเร็จ: {exc}")
+    # แนบ PE เฉลี่ยอุตสาหกรรมต่อแถว (เทียบกับ P/E ของหุ้นเองในตาราง) — ไม่ล้มถ้า join พลาด
+    try:
+        result["candidates"] = industry_peers.attach_industry_pe(result.get("candidates", []))
+    except Exception:  # noqa: BLE001
+        pass
+    return result
 
 
 @app.post("/api/value-scan/sp500/publish")

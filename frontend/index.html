@@ -883,6 +883,8 @@
       <div class="note" style="margin-top:6px;">กราฟราคาปกติ ซูม/เลื่อนดูย้อนหลังได้ด้วยเมาส์ · กราฟด้านล่าง = อัตราเติบโตรายได้ (เขียว/แดง, แกนขวา) เทียบกำไรสุทธิ (ม่วง, แกนซ้าย) และกระแสเงินสดจากการดำเนินงาน (<span style="color:#4fd1c5;">ฟ้า เส้น</span>, แกนซ้าย) แบบปีต่อปี (YoY) คนละแกนกัน ไม่บีบกัน — เลื่อนเมาส์บนแท่งเพื่อดูตัวเลขไตรมาสนั้น · กราฟถัดไป = P/E ย้อนหลัง (ราคา ÷ EPS สะสม 4 ไตรมาส) · แท่ง<span style="color:#e2b93b;">สีเหลือง</span>+ป้าย <b>*</b> = ไตรมาสล่าสุดที่บริษัทเพิ่งประกาศแต่ SEC ยังไม่ยืนยัน (ดึงสดจาก Yahoo ทุกครั้ง ไม่ cache) · <span class="tiny" style="color:#7d8b99;">เส้นกระแสเงินสด/FCF แปลงยอดสะสมทั้งปี (YTD) ที่บางบริษัทยื่นในไตรมาส 2-3 กลับเป็นยอดเฉพาะไตรมาสให้อัตโนมัติ — บางไตรมาสอาจยังขาดถ้า SEC ให้ข้อมูลไม่ครบ</span> — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="rmStatus" class="note" style="margin-top:6px;"></div>
       <div id="rmSector" style="margin-top:6px;"></div>
+      <div id="rmIndustry" style="margin-top:8px;"></div>
+      <div id="rmProjection" style="margin-top:8px;"></div>
       <div class="note tiny" style="margin-top:2px; color:#7d8b99;">ลากมุมขวาล่างของแต่ละกรอบกราฟเพื่อปรับความสูงเองได้</div>
       <div style="margin-top:6px; display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
         <span class="tiny" style="color:#7d8b99;">เส้นค่าเฉลี่ย EMA (คาบปรับตามความละเอียดกราฟให้ตรงกับตัวสแกนอัตโนมัติ):</span>
@@ -3619,6 +3621,8 @@ async function runRevenueModel(refresh, withAi) {
     rmData = await res.json();
     renderRevenueModel(rmData);
     $("rmStatus").innerHTML = "";
+    // เลนส์เทียบอุตสาหกรรม + แผงคาดการณ์ — โหลดแยก ไม่บล็อกกราฟหลัก (พังก็แค่ซ่อนการ์ด)
+    loadRmIndustry(sym);
   } catch (e) {
     notifyError(errorMessage(e), "สร้างโมเดลรายได้ไม่สำเร็จ");
     $("rmStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
@@ -3694,6 +3698,239 @@ function renderRmVerdict(v) {
       ${section("ควรตรวจต่อ", v.nextChecks, "#7fa8d0")}
       ${v.dataQuality ? `<div class="tiny" style="margin-top:4px; color:#7d8b99;">คุณภาพข้อมูล: ${escapeHtml(v.dataQuality)}</div>` : ""}
       <div class="tiny" style="margin-top:4px; color:#7d8b99;">AI วิเคราะห์ข้อเท็จจริงเพื่อการศึกษา ไม่ใช่คำแนะนำซื้อขาย</div>
+    </div>`;
+}
+
+// ── เลนส์เทียบอุตสาหกรรม (ข้อ 1-3) + แผงคาดการณ์มูลค่าอนาคต (ข้อ 4) ─────────────────
+let rmPeerData = null;   // เก็บผลอุตสาหกรรมล่าสุด ไว้ให้แผงคาดการณ์ใช้ PE กลุ่มเป็นตัวคูณ
+
+async function loadRmIndustry(sym) {
+  const indEl = $("rmIndustry");
+  const projEl = $("rmProjection");
+  if (indEl) indEl.innerHTML = `<div class="tiny" style="color:#7d8b99;">⏳ กำลังโหลดข้อมูลอุตสาหกรรม...</div>`;
+  try {
+    const res = await fetch(`${API}/api/industry/peers?symbol=${encodeURIComponent(sym)}`);
+    rmPeerData = res.ok ? await res.json() : null;
+  } catch (e) { rmPeerData = null; }
+  renderRmIndustry(rmPeerData);
+  renderRmProjection(rmData && rmData.growth_stats, rmPeerData);
+}
+
+// ดึงค่าอุตสาหกรรมสดใหม่ตามสั่ง — สแกนราคา/งบทั้ง S&P 500 ใหม่ (หลายนาที) แล้วโหลดการ์ดซ้ำ
+async function refreshRmIndustry(sym) {
+  const btn = $("rmIndRefreshBtn");
+  const msg = $("rmIndRefreshMsg");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ กำลังสแกน..."; }
+  if (msg) msg.innerHTML = `<span style="color:#e2b93b;">กำลังสแกนราคา/งบทั้ง S&P 500 ใหม่เพื่ออัปเดต PE กลุ่ม — อาจใช้เวลาหลายนาที กรุณาอย่าปิดหน้านี้...</span>`;
+  try {
+    // refresh=true = บังคับสแกนสดใหม่ทั้งดัชนีแล้วเซฟแคช (limit=1 เพราะเราต้องการแค่ให้แคชอัปเดต)
+    const res = await fetch(`${API}/api/value-scan/sp500?refresh=true&limit=1&exclude_extreme=false`);
+    if (!res.ok) {
+      const detail = (await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText;
+      throw new Error(detail);
+    }
+    const d = await res.json();
+    if (d && d.rescanned === false && !d.can_scan_live) {
+      throw new Error("เซิร์ฟเวอร์นี้เสิร์ฟแคชอย่างเดียว (ไม่มี .git) — สแกนสดต้องรันในเครื่อง");
+    }
+    if (msg) msg.innerHTML = `<span style="color:#4caf7d;">✅ สแกนใหม่แล้ว กำลังอัปเดตการ์ด...</span>`;
+    await loadRmIndustry(sym);   // โหลด peers ใหม่ (จะ render การ์ด+วันที่ล่าสุดให้เอง)
+  } catch (e) {
+    if (typeof notifyError === "function") notifyError(errorMessage ? errorMessage(e) : String(e), "ดึงค่าอุตสาหกรรมใหม่ไม่สำเร็จ");
+    if (msg) msg.innerHTML = `<span style="color:#e0785f;">❌ ดึงค่าใหม่ไม่สำเร็จ: ${escapeHtml(e.message || String(e))}</span>`;
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 ลองใหม่"; }
+  }
+}
+
+// ข้อ 1 (PE เฉลี่ยกลุ่ม) + ข้อ 3 (ราคาตาม PE กลุ่ม) + ข้อ 2 (ตารางคู่แข่ง)
+function renderRmIndustry(p) {
+  const el = $("rmIndustry");
+  if (!el) return;
+  if (!p || !p.industry) {
+    el.innerHTML = `<div class="tiny" style="color:#7d8b99; border:1px dashed #33404d; border-radius:8px; padding:6px 10px;">
+        🏭 ยังไม่มีข้อมูลอุตสาหกรรมให้เทียบ ${p && p.note ? "— " + escapeHtml(p.note) : "(หุ้นนอก S&P 500 หรือข้อมูลเพื่อนไม่พอ)"}</div>`;
+    return;
+  }
+  const ind = p.industry;
+  const levelTxt = ind.level === "sub_industry" ? "อุตสาหกรรมย่อย" : "กลุ่มเซกเตอร์ (fallback — อุตฯย่อยตัวอย่างน้อย)";
+
+  // แถวสถานะความสด: วันที่สแกนล่าสุด + ปุ่มดึงค่าใหม่ (กดเองได้ทุกเมื่อ ถ้ารันในเครื่อง)
+  let ageTxt = "ไม่ทราบวันที่สแกน", ageCol = "#7d8b99";
+  if (p.as_of) {
+    const d = new Date(p.as_of * 1000);
+    const ageH = (Date.now() - p.as_of * 1000) / 3600000;
+    ageCol = ageH > 168 ? "#e0785f" : (ageH > 48 ? "#e2b93b" : "#7d8b99");  // >7วัน แดง, >2วัน เหลือง
+    ageTxt = `ข้อมูล PE กลุ่ม ณ ${d.toLocaleString("th-TH", { day:"2-digit", month:"short", year:"2-digit", hour:"2-digit", minute:"2-digit" })}` +
+             (ageH > 48 ? ` (${Math.round(ageH/24)} วันก่อน)` : "");
+  }
+  const refreshBtn = p.can_scan_live
+    ? `<button id="rmIndRefreshBtn" type="button" onclick="refreshRmIndustry('${escapeHtml(p.symbol)}')" style="padding:2px 8px; font-size:12px;" title="สแกนราคา/งบสดใหม่ทั้ง S&P 500 แล้วคำนวณ PE กลุ่มใหม่ — อาจใช้เวลาหลายนาที">🔄 ดึงค่าใหม่</button>`
+    : `<span class="tiny" style="color:#7d8b99;" title="บนเว็บเสิร์ฟแคชที่ push จากเครื่อง — สแกนสดต้องรันในเครื่อง">🔒 อัปเดตจากการ push ในเครื่อง</span>`;
+  const statusRow = `<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:4px;">
+      <span class="tiny" style="color:${ageCol};">📅 ${ageTxt}</span>${refreshBtn}
+      <span id="rmIndRefreshMsg" class="tiny" style="color:#7d8b99;"></span></div>`;
+
+  // ── ข้อ 1: ชิป PE กลุ่ม เทียบ PE หุ้นนี้
+  const myPe = p.justified ? p.justified.current_pe : null;
+  const peCol = (myPe == null) ? "#7d8b99" : (myPe <= ind.pe_median ? "#4caf7d" : "#e0785f");
+  const chip1 = `<div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+      <div style="border:1px solid #33404d; border-radius:6px; padding:4px 8px; background:rgba(255,255,255,0.03);">
+        <div class="tiny" style="color:#7d8b99;">PE กลาง${escapeHtml(ind.name ? " · " + ind.name : "")} (${ind.n} ตัว)</div>
+        <div style="font-weight:600;">${ind.pe_median}x <span class="tiny" style="color:#7d8b99;">(เฉลี่ย ${ind.pe_mean}x)</span></div>
+      </div>
+      ${myPe != null ? `<div style="border:1px solid #33404d; border-radius:6px; padding:4px 8px; background:rgba(255,255,255,0.03);">
+        <div class="tiny" style="color:#7d8b99;">PE หุ้นนี้</div>
+        <div style="font-weight:600; color:${peCol};">${myPe}x <span class="tiny">${myPe <= ind.pe_median ? "ถูกกว่ากลุ่ม" : "แพงกว่ากลุ่ม"}</span></div>
+      </div>` : ""}
+    </div>`;
+
+  // ── ข้อ 3: ราคาที่ควรเป็นตาม PE อุตสาหกรรม
+  let card3 = "";
+  if (p.justified && p.justified.implied_price != null) {
+    const j = p.justified;
+    const up = j.upside_pct;
+    const col = up == null ? "#7fa8d0" : (up >= 0 ? "#4caf7d" : "#e0785f");
+    const upTxt = up == null ? "" : ` · <span style="color:${col};">${up >= 0 ? "ต่ำกว่าที่ควร +" : "สูงกว่าที่ควร "}${up}%</span>`;
+    card3 = `<div style="margin-top:8px; padding:6px 8px; border-left:3px solid ${col}; background:rgba(255,255,255,0.03);">
+        <div class="tiny" style="color:#7d8b99;">ราคาที่ควรเป็นตาม PE อุตสาหกรรม = EPS $${j.eps} × ${j.industry_pe}x</div>
+        <div><b style="color:${col};">$${j.implied_price}</b>${j.current_price != null ? ` <span class="tiny" style="color:#7d8b99;">(ราคาปัจจุบัน $${j.current_price})</span>` : ""}${upTxt}</div>
+      </div>`;
+  }
+
+  // ── ข้อ 2: ตารางคู่แข่ง (แสดงสูงสุด 20 แถว แต่ดันแถวหุ้นนี้เข้ามาเสมอ)
+  const MAXP = 20;
+  let peers = p.peers || [];
+  const focusRow = peers.find(x => x.is_focus);
+  let shown = peers.slice(0, MAXP);
+  if (focusRow && !shown.includes(focusRow)) shown = shown.slice(0, MAXP - 1).concat([focusRow]);
+  const fmtPe = v => v == null ? "—" : v + "x";
+  const fmtPct = v => v == null ? "—" : `<span style="color:${v >= 0 ? "#4caf7d" : "#e0785f"};">${v >= 0 ? "+" : ""}${v}%</span>`;
+  const rows = shown.map(x => {
+    const hl = x.is_focus ? ' style="background:rgba(127,168,208,0.14); cursor:pointer;"' : ' style="cursor:pointer;"';
+    const peCell = (x.pe != null && x.pe > ind.pe_median) ? `<span style="color:#e0785f;">${fmtPe(x.pe)}</span>`
+                 : (x.pe != null ? `<span style="color:#4caf7d;">${fmtPe(x.pe)}</span>` : "—");
+    return `<tr${hl} onclick="openSymbolInRevenueModel('${escapeHtml(x.symbol)}')" title="เปิดโมเดลรายได้ของ ${escapeHtml(x.symbol)}">
+        <td style="padding:3px 6px;"><b>${escapeHtml(x.symbol)}</b>${x.is_focus ? ' <span class="tiny" style="color:#7fa8d0;">(หุ้นนี้)</span>' : ""}
+          <div class="tiny" style="color:#7d8b99;">${escapeHtml((x.name || "").slice(0, 22))}</div></td>
+        <td style="padding:3px 6px; text-align:right;">${peCell}</td>
+        <td style="padding:3px 6px; text-align:right;">${fmtPct(x.upside_pct)}</td>
+        <td style="padding:3px 6px; text-align:right;">${fmtPct(x.yoy_pct)}</td>
+      </tr>`;
+  }).join("");
+  const table = `<div style="margin-top:8px; overflow-x:auto;">
+      <div class="tiny" style="color:#7d8b99; margin-bottom:2px;">👥 คู่แข่งในกลุ่มเดียวกัน (คลิกแถวเพื่อสลับไปหุ้นนั้น) · PE <span style="color:#4caf7d;">เขียว</span>=ถูกกว่ากลาง <span style="color:#e0785f;">แดง</span>=แพงกว่า</div>
+      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead><tr style="color:#7d8b99; text-align:right;">
+          <th style="padding:3px 6px; text-align:left;">หุ้น</th><th style="padding:3px 6px;">PE</th>
+          <th style="padding:3px 6px;">upside มูลค่า</th><th style="padding:3px 6px;">โตรายได้ YoY</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${peers.length > shown.length ? `<div class="tiny" style="color:#7d8b99; margin-top:2px;">แสดง ${shown.length}/${peers.length} ตัว</div>` : ""}
+    </div>`;
+
+  el.innerHTML = `<div style="border:1px solid #33404d; border-radius:8px; padding:8px 10px; background:rgba(90,140,90,0.06);">
+      <div><b>🏭 เทียบอุตสาหกรรม:</b> ${escapeHtml(ind.name || "-")}
+        <span class="tiny" style="color:#7d8b99;">(${levelTxt})</span></div>
+      ${statusRow}${chip1}${card3}${table}
+    </div>`;
+}
+
+// ข้อ 4: แผงคาดการณ์มูลค่าปีอนาคต — กรอกได้ คำนวณสดฝั่ง client
+function renderRmProjection(g, p) {
+  const el = $("rmProjection");
+  if (!el) return;
+  if (!g || g.current_eps == null || g.current_eps <= 0 || g.current_price == null) {
+    el.innerHTML = `<div class="tiny" style="color:#7d8b99; border:1px dashed #33404d; border-radius:8px; padding:6px 10px;">
+        🔮 คาดการณ์มูลค่าอนาคตยังไม่พร้อม — ต้องมี EPS (TTM) เป็นบวกและราคาปัจจุบัน (หุ้นขาดทุน/กลุ่มที่ไม่ประเมินด้วย P/E จะข้ามส่วนนี้)</div>`;
+    return;
+  }
+  const curYear = new Date().getFullYear();
+  const rc = g.revenue_cagr || {}, ec = g.eps_cagr || {};
+  // ปุ่มลัดอัตราโต: เลือก EPS CAGR ก่อน (ตรงกับกำไร) ไม่มีค่อย fallback revenue CAGR
+  const presets = [["3 ปี","y3"],["5 ปี","y5"],["10 ปี","y10"],["ตลอดอายุ","life"]]
+    .map(([lbl,k]) => {
+      const v = (ec[k] != null ? ec[k] : rc[k]);
+      const src = (ec[k] != null ? "EPS" : (rc[k] != null ? "รายได้" : null));
+      return v == null ? "" :
+        `<button type="button" class="rmGrowthPreset" data-g="${v}" style="padding:3px 8px; font-size:12px;"
+           title="CAGR ${src} ${lbl} = ${v}%/ปี">${lbl}: ${v}%</button>`;
+    }).join("");
+
+  const indPe = (p && p.industry && p.industry.pe_median) || null;
+  const curPe = g.current_pe;
+  // ตัวเลือกตัวคูณ exit
+  const multOpts = [
+    indPe != null ? `<option value="${indPe}">PE อุตสาหกรรม (${indPe}x)</option>` : "",
+    curPe != null ? `<option value="${curPe}">PE ปัจจุบัน (${curPe}x)</option>` : "",
+    `<option value="custom">กรอกเอง...</option>`,
+  ].join("");
+  const defaultG = (ec.y5 != null ? ec.y5 : (rc.y5 != null ? rc.y5 : (rc.life != null ? rc.life : 10)));
+
+  el.innerHTML = `<div style="border:1px solid #33404d; border-radius:8px; padding:8px 10px; background:rgba(127,168,208,0.06);">
+      <div><b>🔮 คาดการณ์มูลค่าปีอนาคต</b> <span class="tiny" style="color:#7d8b99;">— ถ้ากำไรโตตามอัตราที่กรอก อีกกี่ปีราคาควรเป็นเท่าไร คุ้มลงทุนตอนนี้ไหม</span></div>
+      <div class="tiny" style="color:#7d8b99; margin-top:2px;">EPS ปัจจุบัน (TTM) $${g.current_eps} · ราคาปัจจุบัน $${g.current_price}${curPe != null ? " · PE "+curPe+"x" : ""}</div>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-top:8px;">
+        <label class="tiny" style="color:#7d8b99;">ปีเป้าหมาย<br>
+          <input id="rmProjYear" type="number" value="${curYear+5}" min="${curYear+1}" max="${curYear+30}" style="width:90px;"></label>
+        <label class="tiny" style="color:#7d8b99;">อัตราโตกำไร (%/ปี)<br>
+          <input id="rmProjGrowth" type="number" value="${defaultG}" step="0.1" style="width:100px;"></label>
+        <label class="tiny" style="color:#7d8b99;">ตัวคูณราคาปลายทาง (exit multiple)<br>
+          <select id="rmProjMult" style="width:180px;">${multOpts}</select></label>
+        <label class="tiny" id="rmProjCustomWrap" style="color:#7d8b99; display:none;">ตัวคูณกรอกเอง<br>
+          <input id="rmProjCustom" type="number" value="${indPe != null ? indPe : (curPe != null ? curPe : 20)}" step="0.5" style="width:90px;"></label>
+      </div>
+      <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+        <span class="tiny" style="color:#7d8b99;">อัตราโตอ้างอิงจากสถิติ (คลิกเพื่อเติม):</span>${presets || '<span class="tiny" style="color:#7d8b99;">— ข้อมูลไม่พอ</span>'}
+      </div>
+      <div id="rmProjResult" style="margin-top:8px;"></div>
+      <div class="tiny" style="color:#7d8b99; margin-top:6px;">สมมติฐานล้วน (กำไรโตคงที่ + ตัวคูณคงเดิม) เพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน</div>
+    </div>`;
+
+  // ผูก event: กรอก/เลือกอะไรก็คำนวณใหม่ทันที
+  const recompute = () => computeRmProjection(g);
+  ["rmProjYear","rmProjGrowth","rmProjMult","rmProjCustom"].forEach(id => {
+    const node = $(id); if (node) node.addEventListener("input", () => {
+      if (id === "rmProjMult") $("rmProjCustomWrap").style.display = (node.value === "custom") ? "" : "none";
+      recompute();
+    });
+  });
+  el.querySelectorAll(".rmGrowthPreset").forEach(b => b.addEventListener("click", () => {
+    $("rmProjGrowth").value = b.getAttribute("data-g"); recompute();
+  }));
+  recompute();
+}
+
+function computeRmProjection(g) {
+  const out = $("rmProjResult");
+  if (!out) return;
+  const curYear = new Date().getFullYear();
+  const targetYear = parseInt($("rmProjYear").value, 10);
+  const growth = parseFloat($("rmProjGrowth").value);
+  const multSel = $("rmProjMult").value;
+  const mult = (multSel === "custom") ? parseFloat($("rmProjCustom").value) : parseFloat(multSel);
+  const n = targetYear - curYear;
+  if (!Number.isFinite(n) || n < 1) { out.innerHTML = `<div class="tiny down">ปีเป้าหมายต้องมากกว่าปีนี้</div>`; return; }
+  if (!Number.isFinite(growth) || !Number.isFinite(mult) || mult <= 0) { out.innerHTML = `<div class="tiny down">กรอกอัตราโตและตัวคูณให้ครบ</div>`; return; }
+  const futureEps = g.current_eps * Math.pow(1 + growth / 100, n);
+  const futurePrice = futureEps * mult;
+  const curPrice = g.current_price;
+  const totalReturn = (futurePrice / curPrice - 1) * 100;
+  const annual = (Math.pow(futurePrice / curPrice, 1 / n) - 1) * 100;
+  // ป้ายตัดสิน: ผลตอบแทนทบต้นต่อปี เทียบ hurdle
+  let verdict, vcol;
+  if (annual >= 15) { verdict = "น่าลงทุนมาก"; vcol = "#4caf7d"; }
+  else if (annual >= 10) { verdict = "น่าสนใจ"; vcol = "#7fbf6a"; }
+  else if (annual >= 5) { verdict = "พอใช้ (ต่ำกว่าตลาดเฉลี่ย)"; vcol = "#e2b93b"; }
+  else if (annual >= 0) { verdict = "ผลตอบแทนต่ำ"; vcol = "#e0904f"; }
+  else { verdict = "ขาดทุน (ราคาปัจจุบันแพงเกินสมมติฐาน)"; vcol = "#e0785f"; }
+  out.innerHTML = `<div style="border-left:3px solid ${vcol}; background:rgba(255,255,255,0.03); padding:6px 10px;">
+      <div style="display:flex; flex-wrap:wrap; gap:16px;">
+        <div><div class="tiny" style="color:#7d8b99;">EPS ปี ${targetYear} (คาด)</div><div style="font-weight:600;">$${futureEps.toFixed(2)}</div></div>
+        <div><div class="tiny" style="color:#7d8b99;">ราคาปี ${targetYear} (คาด)</div><div style="font-weight:700; color:${vcol};">$${futurePrice.toFixed(2)}</div></div>
+        <div><div class="tiny" style="color:#7d8b99;">ผลตอบแทนรวม ${n} ปี</div><div style="font-weight:600;">${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(0)}%</div></div>
+        <div><div class="tiny" style="color:#7d8b99;">ผลตอบแทนต่อปี (CAGR)</div><div style="font-weight:700; color:${vcol};">${annual >= 0 ? "+" : ""}${annual.toFixed(1)}%</div></div>
+      </div>
+      <div style="margin-top:4px; color:${vcol}; font-weight:600;">${verdict}</div>
     </div>`;
 }
 
@@ -4086,6 +4323,18 @@ function fillValueScanProfiles(profiles) {
   sel.value = current;
 }
 
+// เซลล์ "PE หุ้น / กลุ่ม" ในตารางสแกนมูลค่า — P/E ปัจจุบัน (price÷EPS เฉพาะฐาน P/E) เทียบ PE กลางกลุ่ม
+function vsPeCell(c) {
+  const ip = c.industry_pe;
+  const isPE = (c.basis || "").indexOf("P/E") === 0;
+  const myPe = (isPE && c.per_share > 0 && c.price > 0) ? c.price / c.per_share : null;
+  if (myPe == null && ip == null) return "—";
+  const col = (myPe != null && ip != null) ? (myPe <= ip ? "#4caf7d" : "#e0785f") : "#c9d3dd";
+  const my = myPe != null ? `<span style="color:${col};">${myPe.toFixed(1)}x</span>` : "—";
+  const grp = ip != null ? `<div class="tiny" style="color:#7d8b99;" title="${escapeHtml(c.industry_name || "")}">กลุ่ม ${ip}x</div>` : "";
+  return my + grp;
+}
+
 function renderValueScan(d) {
   const E = escapeHtml;
   const cands = d.candidates || [];
@@ -4118,6 +4367,7 @@ function renderValueScan(d) {
         + `<td style="padding:5px 8px; text-align:right;">${fmtMarketCap(c.market_cap)}</td>`
         + `<td style="padding:5px 8px; text-align:right;">$${c.price}</td>`
         + `<td style="padding:5px 8px; text-align:right;">$${c.fair_price}<div class="tiny" style="color:#7d8b99;">$${c.low}–$${c.high}</div></td>`
+        + `<td style="padding:5px 8px; text-align:right;">${vsPeCell(c)}</td>`
         + `<td style="padding:5px 8px; text-align:right;" class="up">+${c.upside_pct}%</td>`
         + `<td style="padding:5px 8px; text-align:center; font-size:12px;">${warn}</td>`
         + `</tr>`;
@@ -4127,6 +4377,7 @@ function renderValueScan(d) {
       + `<th style="text-align:left; padding:4px 8px;">หุ้น</th><th style="text-align:left; padding:4px 8px;">กลุ่ม / ฐานประเมิน</th>`
       + `<th style="text-align:right; padding:4px 8px;">Market cap</th>`
       + `<th style="text-align:right; padding:4px 8px;">ราคาจริง</th><th style="text-align:right; padding:4px 8px;">ราคายุติธรรม (ช่วง)</th>`
+      + `<th style="text-align:right; padding:4px 8px;" title="P/E ของหุ้น เทียบ P/E กลางของอุตสาหกรรม">PE หุ้น / กลุ่ม</th>`
       + `<th style="text-align:right; padding:4px 8px;">Upside</th><th style="text-align:center; padding:4px 8px;">ข้อควรระวัง</th>`
       + `</tr></thead><tbody>${rows}</tbody></table>`
       + `<div class="tiny" style="margin-top:6px; color:#7d8b99;">คลิกแถวเพื่อเปิดกราฟ + กล่องประเมินมูลค่าเต็มในแท็บ 📈 โมเดลรายได้ (กดปุ่ม "ให้ AI สรุป" ที่นั่นได้)</div>`;
