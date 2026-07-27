@@ -34,6 +34,7 @@ from app import revenue_scanner
 from app import industry_peers
 from app import value_scanner
 from app import ema_scanner
+from app import lynch_scanner
 from app import confluence
 from app.engine import build_report
 from app.financials import build_financials
@@ -772,6 +773,44 @@ async def value_scan_sp500_publish_route():
     publish = _git_publish_file(
         "backend/app/data_sp500_value_scan.json",
         f"Update S&P 500 fair-value scan ({result['success_count']}/{result['universe_count']} companies)",
+    )
+    return {**result, **publish}
+
+
+@app.get("/api/lynch-scan/sp500")
+async def lynch_scan_sp500_route(
+    category: str | None = Query(None, description="กรองเฉพาะประเภท Peter Lynch (Fast Grower/Stalwart/Slow Grower/Cyclical/Turnaround/Asset Play)"),
+    sector: str | None = Query(None, description="กรองเฉพาะ GICS Sector"),
+    limit: int = Query(500, ge=1, le=600),
+    refresh: bool = Query(False, description="True = สแกนสดใหม่ทั้ง S&P 500 (หลายนาที เหมาะกับรันในเครื่องเท่านั้น)"),
+    auto: bool = Query(False, description="True = ถ้าผลเก่ากว่า 24 ชม. ให้สแกนสดใหม่เองอัตโนมัติ (เฉพาะตอนรันในเครื่อง)"),
+    min_market_cap: float | None = Query(None, ge=0, description="กรอง market cap ขั้นต่ำ (USD)"),
+    max_market_cap: float | None = Query(None, ge=0, description="กรอง market cap สูงสุด (USD)"),
+):
+    """สแกน S&P 500 แล้วจัดกลุ่มหุ้นตาม 6 ประเภทของ Peter Lynch (ใช้ตัวจำแนกตัวเดียวกับกล่อง
+    'ประเภทหุ้น' ในแท็บมูลค่า IV). ผลแคชไว้ในไฟล์ (data_sp500_lynch_scan.json) — เว็ปอ่านแคชทันที."""
+    if min_market_cap is not None and max_market_cap is not None and max_market_cap <= min_market_cap:
+        raise HTTPException(400, "max_market_cap ต้องมากกว่า min_market_cap")
+    try:
+        return await lynch_scanner.scan_sp500_lynch(
+            category=category, sector=sector, limit=limit, refresh=refresh, auto=auto,
+            min_market_cap=min_market_cap, max_market_cap=max_market_cap,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สแกนจัดกลุ่ม Peter Lynch S&P 500 ไม่สำเร็จ: {exc}")
+
+
+@app.post("/api/lynch-scan/sp500/publish")
+async def lynch_scan_sp500_publish_route():
+    """สแกนสดใหม่ทั้ง S&P 500 แล้ว commit+push ผลขึ้น GitHub/HF อัตโนมัติ (เหมือน value-scan)
+    ใช้ได้เฉพาะตอนรันในเครื่อง; บน HF container จะคืน pushed=false"""
+    try:
+        result = await lynch_scanner.scan_sp500_lynch(refresh=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สแกนจัดกลุ่ม Peter Lynch S&P 500 ไม่สำเร็จ: {exc}")
+    publish = _git_publish_file(
+        "backend/app/data_sp500_lynch_scan.json",
+        f"Update S&P 500 Peter Lynch classification scan ({result['success_count']}/{result['universe_count']} companies)",
     )
     return {**result, **publish}
 

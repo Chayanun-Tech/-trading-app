@@ -950,6 +950,7 @@
         <button class="tab" id="scanSubRevBtn" onclick="showScanSub('rev')" title="เทียบราคากับแนวโน้มรายได้">📉 ราคาต่ำกว่ารายได้</button>
         <button class="tab" id="scanSubValBtn" onclick="showScanSub('val')" title="เทียบราคากับราคายุติธรรมตามกลุ่มธุรกิจ (P/E, P/B, P/FFO ฯลฯ)">💎 ต่ำกว่ามูลค่ายุติธรรม</button>
         <button class="tab" id="scanSubEmaBtn" onclick="showScanSub('ema')" title="สายเทคนิค — หาหุ้นที่ราคาลงมาใกล้เส้นค่าเฉลี่ย EMA 50/100/200">📐 ใกล้เส้น EMA</button>
+        <button class="tab" id="scanSubLynchBtn" onclick="showScanSub('lynch')" title="จัดกลุ่มหุ้นทั้ง S&P 500 ตาม 6 ประเภทของ Peter Lynch แล้วซอยย่อยตาม Sector">🎯 จัดกลุ่ม Peter Lynch</button>
       </div>
 
       <div id="scanSubAllBox">
@@ -1119,6 +1120,38 @@
         <div id="esStatus" class="note" style="margin-top:6px;"></div>
         <div id="esResult" style="margin-top:12px;">
           <div class="note">กำลังโหลดผลอัตโนมัติเมื่อเปิดเมนูนี้ — ผลยังใหม่จะแสดงทันที ถ้าเก่ากว่า 12 ชม. จะสแกนสดใหม่ให้เอง (ดึงราคาย้อนหลัง ~3 ปีของ 500 บริษัท ใช้เวลาหลายนาที)</div>
+        </div>
+      </div>
+
+      <div id="scanSubLynchBox" class="hidden">
+        <div>
+          <b style="font-size:16px;">🎯 จัดกลุ่มหุ้น S&P 500 ตาม 6 ประเภทของ Peter Lynch</b>
+          <div class="note">สแกนทั้งดัชนีแล้วจัดหุ้นแต่ละตัวเข้ากลุ่ม 🚀 เติบโตเร็ว · 🏛️ ใหญ่แข็งแกร่ง · 🐢 เติบโตช้า/ปันผล · 🔄 วัฏจักร · 🩹 ฟื้นตัว · 💰 สินทรัพย์ — ใช้ตัวจำแนกตัวเดียวกับกล่อง "ประเภทหุ้น" ในแท็บมูลค่า IV คลิกการ์ดประเภทเพื่อดูรายชื่อหุ้นในกลุ่มนั้น (ซอยย่อยตาม Sector ได้)</div>
+        </div>
+        <div class="grid3" style="margin-top:10px;">
+          <div class="field"><label>Sector (GICS)</label><select id="lsSector" onchange="runLynchScan()"><option value="">ทุก Sector</option></select></div>
+          <div class="field"><label>จำนวนหุ้นสูงสุดที่แสดงต่อรายการ</label><select id="lsLimit" onchange="runLynchScan()"><option>50</option><option selected>100</option><option>200</option><option value="500">ทั้งหมด</option></select></div>
+          <div class="field" style="align-self:end; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="primary" onclick="runLynchScan()" title="ผลยังใหม่ = แสดงทันที · ผลเก่ากว่า 24 ชม. = สแกนสดใหม่ให้อัตโนมัติ">🔍 จัดกลุ่ม</button>
+            <button onclick="runLynchScan(true)" title="สแกนสดใหม่ทั้ง 500 บริษัท (ไม่ push) — ใช้เวลาหลายนาที เหมาะกับรันในเครื่องเท่านั้น">🔄 สแกนสดใหม่</button>
+            <button onclick="publishLynchScan()" title="สแกนสดใหม่ + commit/push ขึ้น GitHub+HF อัตโนมัติ — ใช้ได้เฉพาะตอนรันในเครื่อง">📤 สแกน + ดันขึ้นเว็ป</button>
+          </div>
+        </div>
+        <div class="grid3" style="margin-top:8px;">
+          <div class="field"><label>Market cap ขั้นต่ำ ($B)</label><input id="lsMinCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runLynchScan()" /></div>
+          <div class="field"><label>Market cap สูงสุด ($B)</label><input id="lsMaxCap" type="number" placeholder="ไม่จำกัด" step="1" min="0" onchange="runLynchScan()" /></div>
+          <div class="field" style="align-self:end;">
+            <div class="quick" style="padding:0; border:0; gap:6px;">
+              <button onclick="setLsCapPreset(200,null)" title="เฉพาะหุ้นตัวใหญ่มาก">Mega ≥200B</button>
+              <button onclick="setLsCapPreset(10,200)" title="10B–200B">Large 10–200B</button>
+              <button onclick="setLsCapPreset(2,10)" title="2B–10B">Mid 2–10B</button>
+              <button onclick="setLsCapPreset(null,null)" title="ไม่กรอง market cap">ทั้งหมด</button>
+            </div>
+          </div>
+        </div>
+        <div id="lsStatus" class="note" style="margin-top:6px;"></div>
+        <div id="lsResult" style="margin-top:12px;">
+          <div class="note">กำลังโหลดผลอัตโนมัติเมื่อเปิดเมนูนี้ — ผลยังใหม่จะแสดงทันที ถ้าเก่ากว่า 24 ชม. จะสแกนสดใหม่ให้เอง (ดึงพื้นฐาน 500 บริษัทจาก Yahoo ใช้เวลาหลายนาที)</div>
         </div>
       </div>
     </div>
@@ -1437,6 +1470,29 @@
 .type-commodity{ background:rgba(255,215,0,.12);   color:#ffd700; border:1px solid rgba(255,215,0,.3);}
 .type-index    { background:rgba(47,129,247,.12);  color:#2f81f7; border:1px solid rgba(47,129,247,.3);}
 .db-badge { display:inline-block; font-size:13px; padding:2px 7px; border-radius:10px; font-weight:600; text-transform:uppercase; margin-bottom:5px; }
+
+/* Peter Lynch classifier: การ์ดสรุป 6 ประเภท + ป้ายในตาราง */
+.lynch-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; margin-top:10px; }
+.lynch-card { background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:10px 12px; cursor:pointer; transition:border-color .15s, transform .1s; }
+.lynch-card:hover { transform:translateY(-1px); }
+.lynch-card.active { border-width:2px; padding:9px 11px; }
+.lynch-card-top { display:flex; align-items:center; justify-content:space-between; }
+.lynch-emoji { font-size:18px; }
+.lynch-count { font-size:20px; font-weight:700; }
+.lynch-card-label { font-size:12px; color:#9fb0c0; margin-top:2px; }
+.lynch-badge { display:inline-block; font-size:12px; padding:1px 7px; border-radius:10px; font-weight:600; white-space:nowrap; }
+.lynch-fast     { background:rgba(63,185,80,.15);   color:#3fb950; border:1px solid rgba(63,185,80,.35); }
+.lynch-fast.active     { border-color:#3fb950; }
+.lynch-stalwart { background:rgba(47,129,247,.15);  color:#2f81f7; border:1px solid rgba(47,129,247,.35); }
+.lynch-stalwart.active { border-color:#2f81f7; }
+.lynch-slow     { background:rgba(188,140,255,.15); color:#bc8cff; border:1px solid rgba(188,140,255,.35); }
+.lynch-slow.active     { border-color:#bc8cff; }
+.lynch-cyclical { background:rgba(255,166,0,.15);   color:#ffa600; border:1px solid rgba(255,166,0,.35); }
+.lynch-cyclical.active { border-color:#ffa600; }
+.lynch-turn     { background:rgba(248,81,73,.15);   color:#f85149; border:1px solid rgba(248,81,73,.35); }
+.lynch-turn.active     { border-color:#f85149; }
+.lynch-asset    { background:rgba(255,215,0,.13);   color:#ffd700; border:1px solid rgba(255,215,0,.35); }
+.lynch-asset.active    { border-color:#ffd700; }
 </style>
 
 <!-- ===================================================================
@@ -4197,6 +4253,7 @@ const SCAN_SUBS = {
   rev: { box:"scanSubRevBox", btn:"scanSubRevBtn", load:() => runRevenueScan() },
   val: { box:"scanSubValBox", btn:"scanSubValBtn", load:() => runValueScan() },
   ema: { box:"scanSubEmaBox", btn:"scanSubEmaBtn", load:() => runEmaScan() },
+  lynch: { box:"scanSubLynchBox", btn:"scanSubLynchBtn", load:() => runLynchScan() },
 };
 const scanAutoLoaded = {};
 function autoLoadScanSub(which) {
@@ -4450,6 +4507,164 @@ function renderValueScan(d) {
   html += `<div class="note" style="margin-top:4px;">${E(d.coverage_note || "")}</div>`;
   html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
   $("vsResult").innerHTML = html;
+}
+
+// ---------- S&P 500 Peter Lynch classifier scan (จัดกลุ่มหุ้นตาม 6 ประเภท) ----------
+let lynchCategory = "";  // ประเภทที่เลือกอยู่ ("" = ดูทุกประเภท)
+const LYNCH_BADGE = {
+  "Fast Grower": { cls:"lynch-fast",      emoji:"🚀" },
+  "Stalwart":    { cls:"lynch-stalwart",  emoji:"🏛️" },
+  "Slow Grower": { cls:"lynch-slow",      emoji:"🐢" },
+  "Cyclical":    { cls:"lynch-cyclical",  emoji:"🔄" },
+  "Turnaround":  { cls:"lynch-turn",      emoji:"🩹" },
+  "Asset Play":  { cls:"lynch-asset",     emoji:"💰" },
+};
+
+function setLsCapPreset(minB, maxB) {
+  $("lsMinCap").value = minB == null ? "" : minB;
+  $("lsMaxCap").value = maxB == null ? "" : maxB;
+  runLynchScan();
+}
+
+function selectLynchCategory(key) {
+  lynchCategory = (lynchCategory === key) ? "" : key;  // คลิกซ้ำ = ยกเลิกตัวกรอง
+  runLynchScan();
+}
+
+function fillLynchSectors(sectors) {
+  const sel = $("lsSector");
+  if (!sel || sel.options.length > 1) return;  // เติมครั้งเดียว รักษาค่าที่ผู้ใช้เลือกไว้
+  for (const s of (sectors || [])) {
+    const o = document.createElement("option");
+    o.value = s; o.textContent = s;
+    sel.appendChild(o);
+  }
+}
+
+async function runLynchScan(refresh) {
+  const limit = parseInt($("lsLimit").value, 10) || 100;
+  const sector = $("lsSector").value;
+  const minCapB = parseFloat($("lsMinCap").value);
+  const maxCapB = parseFloat($("lsMaxCap").value);
+  $("lsStatus").innerHTML = refresh
+    ? `<div class="note">🔄 กำลังสแกนสดใหม่ทั้ง S&P 500 (500 บริษัท) — อาจใช้เวลาหลายนาที กรุณารอ...</div>`
+    : `<div class="note">กำลังโหลดผลจัดกลุ่ม... (ถ้าผลเก่ากว่า 24 ชม. จะสแกนสดใหม่ให้อัตโนมัติ อาจใช้เวลาหลายนาที)</div>`;
+  try {
+    const params = new URLSearchParams({ limit, auto:"true" });
+    if (refresh) params.set("refresh", "true");
+    if (lynchCategory) params.set("category", lynchCategory);
+    if (sector) params.set("sector", sector);
+    if (!isNaN(minCapB)) params.set("min_market_cap", String(minCapB * 1e9));
+    if (!isNaN(maxCapB)) params.set("max_market_cap", String(maxCapB * 1e9));
+    const res = await fetch(`${API}/api/lynch-scan/sp500?${params.toString()}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    renderLynchScan(await res.json());
+    $("lsStatus").innerHTML = "";
+  } catch (e) {
+    notifyError(errorMessage(e), "จัดกลุ่ม Peter Lynch ไม่สำเร็จ");
+    $("lsStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+async function publishLynchScan() {
+  $("lsStatus").innerHTML = `<div class="note">📤 กำลังสแกนสดใหม่ทั้ง S&P 500 แล้ว push ขึ้นเว็ป — อาจใช้เวลาหลายนาที กรุณารอ...</div>`;
+  try {
+    const res = await fetch(`${API}/api/lynch-scan/sp500/publish`, { method:"POST" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    const d = await res.json();
+    renderLynchScan(d);
+    $("lsStatus").innerHTML = d.pushed
+      ? `<div class="up">✅ สแกนใหม่แล้ว push ขึ้น GitHub+HF สำเร็จ</div>`
+      : `<div class="down">สแกนสำเร็จแต่ push ไม่สำเร็จ: ${escapeHtml(d.error || "ไม่ทราบสาเหตุ")}</div>`;
+  } catch (e) {
+    notifyError(errorMessage(e), "สแกน+push ไม่สำเร็จ");
+    $("lsStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function openSymbolInIV(symbol) {
+  $("ivSymbol").value = symbol;
+  showTab("iv");
+  $("tabIv")?.classList.add("active");
+  $("tabRevenuescan")?.classList.remove("active");
+  runIVAnalysis();
+}
+
+function lynchConfBadge(conf) {
+  const color = conf === "สูง" ? "#4ade80" : conf === "ต่ำ" ? "#7d8b99" : "#e2b93b";
+  return `<span style="color:${color}; font-size:12px;">●</span> <span style="font-size:12px;">${escapeHtml(conf || "-")}</span>`;
+}
+
+function lynchMetricCell(v, suffix) {
+  if (v == null) return `<span style="color:#5f6d7a;">—</span>`;
+  const s = (suffix === "%" && v >= 0) ? "+" : "";
+  return `${s}${v}${suffix || ""}`;
+}
+
+function renderLynchScan(d) {
+  const E = escapeHtml;
+  fillLynchSectors(d.sectors);
+  const cands = d.candidates || [];
+  const staleNote = d.rescanned
+    ? `<span class="up">✅ สแกนสดใหม่ให้อัตโนมัติแล้ว</span>`
+    : (d.stale ? `<span class="down">⚠️ ผลจัดกลุ่มนี้เก่ากว่า 24 ชม. — ${d.can_scan_live ? `กด "สแกนสดใหม่" เพื่ออัปเดต` : "(เว็ปเสิร์ฟผลที่แคชไว้เท่านั้น สแกนสดต้องรันในเครื่อง)"}</span>` : "");
+  const crit = d.criteria || {};
+  const capNote = (crit.min_market_cap != null || crit.max_market_cap != null)
+    ? ` · กรอง market cap: ${crit.min_market_cap != null ? fmtMarketCap(crit.min_market_cap) : "ไม่จำกัด"} – ${crit.max_market_cap != null ? fmtMarketCap(crit.max_market_cap) : "ไม่จำกัด"}`
+    : "";
+  const secNote = crit.sector ? ` · Sector: ${E(crit.sector)}` : "";
+  let html = `<div class="note">สแกนล่าสุด: <b>${E(d.as_of_label || "-")}</b> · จัดประเภทได้ ${d.success_count}/${d.universe_count} บริษัท · ในมุมมองนี้ ${d.classified_count} บริษัท${E(capNote)}${E(secNote)} ${staleNote}</div>`;
+
+  // การ์ด 6 ประเภท (คลิกเพื่อกรอง)
+  html += `<div class="lynch-cards">`;
+  for (const c of (d.categories || [])) {
+    const b = LYNCH_BADGE[c.key] || { cls:"", emoji:"" };
+    const active = lynchCategory === c.key ? " active" : "";
+    html += `<div class="lynch-card ${b.cls}${active}" onclick="selectLynchCategory('${E(c.key)}')" title="${E(c.desc)}">`
+      + `<div class="lynch-card-top"><span class="lynch-emoji">${b.emoji}</span><span class="lynch-count">${c.count}</span></div>`
+      + `<div class="lynch-card-label">${E(c.label_th)}</div>`
+      + `</div>`;
+  }
+  html += `</div>`;
+  html += `<div class="tiny" style="margin:6px 0 4px; color:#7d8b99;">${lynchCategory ? `กำลังกรอง: <b>${E((d.categories.find(x=>x.key===lynchCategory)||{}).label_th || lynchCategory)}</b> — คลิกการ์ดเดิมซ้ำเพื่อดูทุกประเภท` : "คลิกการ์ดประเภทเพื่อดูเฉพาะหุ้นในกลุ่มนั้น"}</div>`;
+
+  if (!cands.length) {
+    html += `<div class="note" style="margin-top:8px;">ไม่มีหุ้นในมุมมองนี้ — ลองล้างตัวกรอง Sector / market cap หรือเลือกประเภทอื่น</div>`;
+  } else {
+    const rows = cands.map(c => {
+      const b = LYNCH_BADGE[c.category] || { cls:"", emoji:"" };
+      const m = c.metrics || {};
+      const runner = c.runner_up_th ? `<div class="tiny" style="color:#5f6d7a;">อาจเป็น: ${E(c.runner_up_th)}</div>` : "";
+      return `<tr style="cursor:pointer;" onclick="openSymbolInIV('${E(c.symbol)}')" title="เปิดวิเคราะห์มูลค่า IV + โปรไฟล์ Peter Lynch ของ ${E(c.symbol)}">`
+        + `<td style="padding:5px 8px;"><b>${E(c.symbol)}</b><div class="tiny" style="color:#7d8b99;">${E(c.name || "")}</div></td>`
+        + `<td style="padding:5px 8px; color:#7d8b99; font-size:12px;">${E(c.gics_sector || "")}<div class="tiny" style="color:#5f6d7a;">${E(c.industry || "")}</div></td>`
+        + `<td style="padding:5px 8px;"><span class="lynch-badge ${b.cls}">${b.emoji} ${E(c.category_th)}</span>${runner}</td>`
+        + `<td style="padding:5px 8px;">${lynchConfBadge(c.confidence)}</td>`
+        + `<td style="padding:5px 8px; text-align:right;">${fmtMarketCap(c.market_cap)}</td>`
+        + `<td style="padding:5px 8px; text-align:right; color:#9fb0c0;">${lynchMetricCell(m.earnings_growth_pct, "%")}</td>`
+        + `<td style="padding:5px 8px; text-align:right; color:#9fb0c0;">${lynchMetricCell(m.dividend_yield_pct, "%")}</td>`
+        + `<td style="padding:5px 8px; text-align:right; color:#9fb0c0;">${lynchMetricCell(m.pe, "")}</td>`
+        + `<td style="padding:5px 8px; text-align:right; color:#9fb0c0;">${lynchMetricCell(m.peg, "")}</td>`
+        + `<td style="padding:5px 8px; text-align:right; color:#9fb0c0;">${lynchMetricCell(m.pb, "")}</td>`
+        + `<td style="padding:5px 8px; text-align:right; color:#9fb0c0;">${lynchMetricCell(m.roe_pct, "%")}</td>`
+        + `</tr>`;
+    }).join("");
+    html += `<table class="biz-rev" style="width:100%; margin-top:8px;">`
+      + `<thead><tr style="color:#9fb0c0; font-size:12px;">`
+      + `<th style="text-align:left; padding:4px 8px;">หุ้น</th><th style="text-align:left; padding:4px 8px;">Sector / อุตสาหกรรม</th>`
+      + `<th style="text-align:left; padding:4px 8px;">ประเภท Lynch</th><th style="text-align:left; padding:4px 8px;">ความมั่นใจ</th>`
+      + `<th style="text-align:right; padding:4px 8px;">Market cap</th>`
+      + `<th style="text-align:right; padding:4px 8px;" title="กำไรเติบโต (yoy)">EPS โต</th>`
+      + `<th style="text-align:right; padding:4px 8px;">ปันผล</th>`
+      + `<th style="text-align:right; padding:4px 8px;">P/E</th><th style="text-align:right; padding:4px 8px;">PEG</th>`
+      + `<th style="text-align:right; padding:4px 8px;">P/BV</th><th style="text-align:right; padding:4px 8px;">ROE</th>`
+      + `</tr></thead><tbody>${rows}</tbody></table>`
+      + `<div class="tiny" style="margin-top:6px; color:#7d8b99;">แสดง ${cands.length}/${d.candidate_count} บริษัท · คลิกแถวเพื่อเปิดวิเคราะห์มูลค่า IV + โปรไฟล์ Peter Lynch เต็มในแท็บ "มูลค่าIV" · <span style="color:#4ade80;">●</span> มั่นใจสูง · <span style="color:#e2b93b;">●</span> ปานกลาง · <span style="color:#7d8b99;">●</span> ต่ำ (ตัวเลขคาบเกี่ยวหลายกลุ่ม)</div>`;
+  }
+  html += `<div class="note" style="margin-top:10px;">${E(d.methodology || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.coverage_note || "")}</div>`;
+  html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
+  $("lsResult").innerHTML = html;
 }
 
 // ---------- S&P 500 EMA-proximity scanner (เลนส์สายเทคนิค) ----------
