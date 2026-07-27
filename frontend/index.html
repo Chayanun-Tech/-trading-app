@@ -518,6 +518,7 @@
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
       <button class="tab" id="tabBusiness" onclick="showTab('business')">ธุรกิจ</button>
       <button class="tab" id="tabMacro" onclick="showTab('macro')">มหภาค→ธุรกิจ</button>
+      <button class="tab" id="tabHistory" onclick="showTab('history')">📜 ประวัติศาสตร์ราคา</button>
       <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">VIพื้นฐาน</button>
       <button class="tab" id="tabIv" onclick="showTab('iv')">มูลค่าIV</button>
       <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">หุ้นเล็กเด้งไกล</button>
@@ -780,6 +781,40 @@
       </div>
       <div class="note" style="margin-top:6px;">วิเคราะห์หุ้นแบบ Ray Dalio — มองจากปัจจัยมหภาคโลก/ธีมโลก ไล่ลงมาที่ห่วงโซ่อุปทาน (suppliers/วัตถุดิบ การพึ่งพา) ฝั่งอุปสงค์ (ลูกค้า/ดีมานด์) จนถึงโครงสร้างรายได้-กำไรแยกตามสินค้า และปัจจัยที่กระทบกำไรมากที่สุด · ยึดข้อเท็จจริงจาก 10-K/56-1 ส่วนภาพมหภาคเป็นการวิเคราะห์ของ AI</div>
       <div id="macroResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้น เช่น NVDA แล้วกด "วิเคราะห์มหภาค→ธุรกิจ"</div></div>
+    </div>
+
+    <div id="historyPanel" class="panel-body hidden">
+      <style>
+        .his-stat{display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:#9fb0c0; margin:8px 0 2px;}
+        .his-stat b{color:#dfe6ee; font-variant-numeric:tabular-nums;}
+        .his-over{font-size:14px; line-height:1.6; color:#eef3f8; padding:11px 13px; border-left:3px solid #4a9eff; background:rgba(74,158,255,.07); border-radius:0 8px 8px 0; margin-top:10px;}
+        .his-ev{position:relative; margin:0 0 10px 0; padding:11px 13px 11px 16px; background:rgba(255,255,255,.025); border:1px solid rgba(36,49,64,.7); border-radius:9px; cursor:pointer; transition:background .12s;}
+        .his-ev:hover{background:rgba(255,255,255,.05);}
+        .his-ev.up{border-left:3px solid #2ea043;} .his-ev.down{border-left:3px solid #e5534b;}
+        .his-ev.lowconf{opacity:.82;}
+        .his-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;}
+        .his-when{font-size:12px; color:#9fb0c0; font-variant-numeric:tabular-nums;}
+        .his-chg{font-size:13px; font-weight:800; font-variant-numeric:tabular-nums; margin-left:auto;}
+        .his-chg.up{color:#5fd39a;} .his-chg.down{color:#ff8c8c;}
+        .his-title{font-size:14px; font-weight:700; color:#fff; margin:1px 0 4px;}
+        .his-cat{font-size:13px; line-height:1.6; color:#dfe6ee; margin:0;}
+        .his-mech{font-size:12px; line-height:1.55; color:#9fb0c0; margin:5px 0 0; white-space:pre-line;}
+        .his-tags{display:flex; gap:5px; flex-wrap:wrap; margin-top:7px;}
+        .his-tag{font-size:11px; font-weight:700; padding:1px 7px; border-radius:9px; white-space:nowrap;}
+        .his-tail{background:rgba(46,160,67,.18); color:#5fd39a;} .his-head2{background:rgba(229,83,75,.18); color:#ff8c8c;}
+        .his-scope{background:rgba(255,255,255,.07); color:#aebdcb;}
+        .his-cf-high{background:rgba(74,158,255,.16); color:#7fb4ff;} .his-cf-med{background:rgba(226,185,59,.16); color:#e2b93b;} .his-cf-low{background:rgba(150,160,170,.14); color:#9aa7b3;}
+      </style>
+      <div class="grid3">
+        <div class="field"><label>หุ้น (US / ไทย .BK)</label><input id="histSymbol" placeholder="เช่น NVDA, AAPL, PTT.BK" /></div>
+        <div class="field" style="align-self:end;"><button class="primary" onclick="runHistory()">📜 ไล่ประวัติศาสตร์ราคา</button></div>
+        <div class="field" style="align-self:end;"><button onclick="runHistory(true)" title="ให้ AI ไล่เหตุการณ์ใหม่ทับของเดิม">🔄 สร้างใหม่</button></div>
+      </div>
+      <div class="note" style="margin-top:6px;">ไล่กราฟราคาย้อนหลังของหุ้นตัวนี้ → หา <b>ช่วงที่ราคาขยับแรง</b> จากราคาจริง แล้วให้ AI เติมว่าแต่ละช่วงเกิดจาก <b>เหตุการณ์อะไร</b> (หนุน/กด) พร้อมกลไก · 🧠 จุดที่ราคาขยับคำนวณจากราคาจริง แต่ "สาเหตุ" เป็นการวิเคราะห์ของ AI อาจคลาดเคลื่อน (correlation ≠ causation) · คลิกการ์ดเพื่อซูมกราฟไปช่วงนั้น</div>
+      <div id="histChartWrap" style="display:none; margin-top:12px; border:1px solid var(--border); border-radius:8px; padding:6px; background:#0a1017;">
+        <div id="histChart" style="width:100%; height:280px;"></div>
+      </div>
+      <div id="historyResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้น เช่น NVDA แล้วกด "ไล่ประวัติศาสตร์ราคา" — รองรับหุ้น S&P 500 ครบทุกตัว (ครั้งแรกของแต่ละตัวอาจใช้เวลาสักครู่)</div></div>
     </div>
 
     <div id="radarPanel" class="panel-body hidden">
@@ -3104,13 +3139,14 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","macro","radar","analyst","revenue","revenuescan","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","history","radar","analyst","revenue","revenuescan","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
     if (btn) btn.classList.toggle("active", name === tab);
   });
   if (tab === "revenuescan") autoLoadActiveScanSub();
+  if (tab === "history" && $("histSymbol") && !$("histSymbol").value) $("histSymbol").value = currentSymbol || "";
 }
 
 function loading(msg) {
@@ -4732,6 +4768,92 @@ function renderRadar(d) {
   const when = d.generated_at ? new Date(d.generated_at * 1000).toLocaleString("th-TH") : "";
   html += `<div class="note" style="margin-top:14px;">โหมด: <b>${E(d.scope || "")}</b>${d.topic ? " · ธีม " + E(d.topic) : ""}${d.search_terms ? " · คำค้น(EN): <b>" + E(d.search_terms) + "</b>" : ""}${when ? " · วิเคราะห์เมื่อ " + E(when) : ""}<br>🧠 <b>นี่คือการวิเคราะห์/สมมติฐานของ AI จากสัญญาณต้นน้ำ ไม่ใช่คำทำนายที่แน่นอน</b> — เทรนด์อาจไม่เกิดหรือช้ากว่าคาด ใช้เป็นจุดตั้งต้นค้นคว้าต่อ ไม่ใช่คำแนะนำซื้อขาย</div>`;
   $("radarResult").innerHTML = html || `<div class="note">ไม่พบเทรนด์ที่ชัดเจนพอจากสัญญาณรอบนี้ ลองสแกนใหม่</div>`;
+}
+
+let histChart = null, histSeries = null;
+function ensureHistChart() {
+  if (histChart) return;
+  const base = chartBaseOptions();
+  const ts = { ...base.timeScale, timeVisible:false, secondsVisible:false, tickMarkFormatter:formatRmTick };
+  histChart = LightweightCharts.createChart($("histChart"), { ...base, timeScale:ts, width:$("histChart").clientWidth || 600, height:280 });
+  histSeries = histChart.addLineSeries({ color:"#4a9eff", lineWidth:2, priceLineVisible:false, lastValueVisible:true, title:"ราคา" });
+}
+
+async function runHistory(refresh) {
+  let sym = ($("histSymbol").value || currentSymbol || "").trim().toUpperCase();
+  if (!sym) { $("historyResult").innerHTML = `<div class="down">กรุณาพิมพ์สัญลักษณ์หุ้น เช่น NVDA หรือ PTT.BK</div>`; return; }
+  $("histSymbol").value = sym;
+  showTab("history");
+  $("historyResult").innerHTML = `<div class="note">กำลังดึงราคาย้อนหลัง หา "ช่วงที่ราคาขยับแรง" แล้วให้ AI ไล่เหตุการณ์ของ ${escapeHtml(sym)}... ${refresh ? "(สร้างใหม่)" : "(ครั้งแรกของหุ้นตัวนี้อาจใช้เวลาสักครู่)"}</div>`;
+  try {
+    const url = `${API}/api/stock-history?symbol=${encodeURIComponent(sym)}${refresh ? "&refresh=true" : ""}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: res.statusText }))).detail || res.statusText);
+    renderHistory(await res.json());
+  } catch (e) { notifyError(errorMessage(e), "ไล่ประวัติศาสตร์ราคาไม่สำเร็จ"); $("histChartWrap").style.display = "none"; $("historyResult").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`; }
+}
+
+function renderHistory(d) {
+  const E = escapeHtml;
+  const st = d.stats || {};
+  const events = (d.events || []);
+
+  // ── กราฟราคา + มาร์คเกอร์จุด swing ──
+  $("histChartWrap").style.display = "block";
+  ensureHistChart();
+  histChart.applyOptions({ width:$("histChart").clientWidth || 600 });
+  histSeries.setData((d.price_series || []).map(p => ({ time:p.time, value:p.value })));
+  const markers = events.map(e => ({
+    time:e.end_time,
+    position:e.direction === "up" ? "belowBar" : "aboveBar",
+    color:e.category === "tailwind" ? "#2ea043" : "#e5534b",
+    shape:e.direction === "up" ? "arrowUp" : "arrowDown",
+    text:(e.change_pct >= 0 ? "+" : "") + Math.round(e.change_pct) + "%",
+  })).sort((a, b) => a.time - b.time);
+  histSeries.setMarkers(markers);
+  histChart.timeScale().fitContent();
+
+  // ── ส่วนหัว: สรุป + สถิติ ──
+  const tot = st.total_change_pct;
+  let html = "";
+  if (d.overview) html += `<div class="his-over">🧭 ${E(d.overview)}</div>`;
+  html += `<div class="his-stat">`
+    + `<span>ช่วงข้อมูล: <b>${E(st.first_date || "-")}</b> → <b>${E(st.last_date || "-")}</b></span>`
+    + (tot != null ? `<span>ตั้งแต่ต้น: <b style="color:${tot >= 0 ? "#5fd39a" : "#ff8c8c"};">${tot >= 0 ? "+" : ""}${tot}%</b></span>` : "")
+    + (st.all_time_high != null ? `<span>จุดสูงสุด: <b>$${st.all_time_high}</b> <span class="tiny">(${E(st.ath_date || "")})</span></span>` : "")
+    + (st.all_time_low != null ? `<span>จุดต่ำสุด: <b>$${st.all_time_low}</b> <span class="tiny">(${E(st.atl_date || "")})</span></span>` : "")
+    + `</div>`;
+
+  // ── ไทม์ไลน์เหตุการณ์ (ใหม่สุดอยู่บน) ──
+  const confTag = c => c === "high" ? `<span class="his-tag his-cf-high">มั่นใจสูง</span>`
+    : c === "low" ? `<span class="his-tag his-cf-low">มั่นใจต่ำ · อนุมาน</span>`
+    : `<span class="his-tag his-cf-med">มั่นใจกลาง</span>`;
+  const scopeTag = s => s === "macro" ? `<span class="his-tag his-scope">มหภาค</span>`
+    : s === "industry" ? `<span class="his-tag his-scope">อุตสาหกรรม</span>`
+    : `<span class="his-tag his-scope">ตัวบริษัท</span>`;
+  const cards = events.slice().reverse().map(e => {
+    const up = e.direction === "up";
+    const catTag = e.category === "tailwind" ? `<span class="his-tag his-tail">ปัจจัยหนุน ▲</span>` : `<span class="his-tag his-head2">ปัจจัยกด ▼</span>`;
+    return `<div class="his-ev ${up ? "up" : "down"}${e.confidence === "low" ? " lowconf" : ""}" onclick="histZoom(${e.start_time},${e.end_time})" title="คลิกเพื่อซูมกราฟไปช่วงนี้">
+      <div class="his-head">
+        <span class="his-when">${E(e.start_date)} → ${E(e.end_date)}</span>
+        <span class="his-chg ${up ? "up" : "down"}">${e.change_pct >= 0 ? "+" : ""}${e.change_pct}%</span>
+      </div>
+      ${e.title ? `<div class="his-title">${E(e.title)}</div>` : ""}
+      ${e.catalyst ? `<div class="his-cat">${E(e.catalyst)}</div>` : ""}
+      ${e.mechanism ? `<div class="his-mech">⚙️ ${E(e.mechanism)}</div>` : ""}
+      <div class="his-tags">${catTag}${scopeTag(e.scope)}${confTag(e.confidence)}</div>
+    </div>`;
+  }).join("");
+  html += `<div style="margin-top:12px;">${cards}</div>`;
+  if (d.disclaimer) html += `<div class="note" style="margin-top:8px; color:#7d8b99;">⚠️ ${E(d.disclaimer)}</div>`;
+  $("historyResult").innerHTML = html;
+}
+
+function histZoom(startTime, endTime) {
+  if (!histChart) return;
+  const pad = 90 * 24 * 3600;  // เผื่อหน้า-หลังช่วงละ ~3 เดือน
+  try { histChart.timeScale().setVisibleRange({ from:startTime - pad, to:endTime + pad }); } catch (e) {}
 }
 
 async function runMacro(refresh) {

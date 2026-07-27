@@ -28,6 +28,7 @@ from app import ai_analyst
 from app import business as business_explainer
 from app import macro_business
 from app import trend_radar
+from app import stock_history
 from app import revenue_model
 from app import revenue_scanner
 from app import industry_peers
@@ -577,6 +578,21 @@ async def macro_analysis_route(symbol: str = Query(..., description="สัญ�
         raise HTTPException(404, str(exc))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"วิเคราะห์มหภาค→ธุรกิจไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/stock-history")
+async def stock_history_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น NVDA, PTT.BK"),
+                             refresh: bool = Query(False, description="True = ไล่เหตุการณ์ใหม่ทับ cache")):
+    """ไทม์ไลน์ประวัติศาสตร์ราคา: ตรวจจับ 'ช่วงที่ราคาขยับแรง' จากกราฟจริง แล้วให้ AI ไล่ว่า
+    แต่ละช่วงเกิดจากเหตุการณ์อะไร (หนุน/กด) พร้อมกลไกและระดับความมั่นใจ — history rhymes."""
+    if not is_equity_symbol(symbol):
+        raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น (ไม่รองรับคริปโต/forex/ดัชนี)")
+    try:
+        return await stock_history.get_stock_history(symbol, refresh=refresh)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ไล่ประวัติศาสตร์ราคาไม่สำเร็จ: {exc}")
 
 
 @app.get("/api/trend-radar")
