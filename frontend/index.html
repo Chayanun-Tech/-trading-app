@@ -3146,7 +3146,7 @@ function showTab(tab) {
     if (btn) btn.classList.toggle("active", name === tab);
   });
   if (tab === "revenuescan") autoLoadActiveScanSub();
-  if (tab === "history" && $("histSymbol") && !$("histSymbol").value) $("histSymbol").value = currentSymbol || "";
+  if (tab === "history") maybeAutoHistory();
 }
 
 function loading(msg) {
@@ -4770,7 +4770,20 @@ function renderRadar(d) {
   $("radarResult").innerHTML = html || `<div class="note">ไม่พบเทรนด์ที่ชัดเจนพอจากสัญญาณรอบนี้ ลองสแกนใหม่</div>`;
 }
 
-let histChart = null, histSeries = null;
+let histChart = null, histSeries = null, histLoadedSymbol = null, histLoading = false;
+
+// เปิดแท็บ 'ประวัติศาสตร์ราคา' แล้ววิเคราะห์หุ้นที่กำลังดูอยู่ให้อัตโนมัติ (เปิดหุ้น→เห็นประวัติเลย)
+function maybeAutoHistory() {
+  const sym = (($("histSymbol") && $("histSymbol").value) || currentSymbol || "").trim().toUpperCase();
+  if (!sym || histLoading) return;
+  if (histLoadedSymbol === sym) {            // วิเคราะห์ตัวนี้ไปแล้ว — แค่เลื่อนให้เห็น ไม่ยิงซ้ำ
+    const p = $("historyPanel"); if (p) p.scrollIntoView({ behavior:"smooth", block:"start" });
+    return;
+  }
+  $("histSymbol").value = sym;
+  runHistory();
+}
+
 function ensureHistChart() {
   if (histChart) return;
   const base = chartBaseOptions();
@@ -4783,7 +4796,10 @@ async function runHistory(refresh) {
   let sym = ($("histSymbol").value || currentSymbol || "").trim().toUpperCase();
   if (!sym) { $("historyResult").innerHTML = `<div class="down">กรุณาพิมพ์สัญลักษณ์หุ้น เช่น NVDA หรือ PTT.BK</div>`; return; }
   $("histSymbol").value = sym;
+  histLoadedSymbol = sym;   // กัน showTab เรียก maybeAutoHistory ยิงซ้ำระหว่างกำลังโหลด
+  histLoading = true;
   showTab("history");
+  $("historyPanel").scrollIntoView({ behavior:"smooth", block:"start" });
   $("historyResult").innerHTML = `<div class="note">กำลังดึงราคาย้อนหลัง หา "ช่วงที่ราคาขยับแรง" แล้วให้ AI ไล่เหตุการณ์ของ ${escapeHtml(sym)}... ${refresh ? "(สร้างใหม่)" : "(ครั้งแรกของหุ้นตัวนี้อาจใช้เวลาสักครู่)"}</div>`;
   try {
     const url = `${API}/api/stock-history?symbol=${encodeURIComponent(sym)}${refresh ? "&refresh=true" : ""}`;
@@ -4791,6 +4807,7 @@ async function runHistory(refresh) {
     if (!res.ok) throw new Error((await res.json().catch(() => ({ detail: res.statusText }))).detail || res.statusText);
     renderHistory(await res.json());
   } catch (e) { notifyError(errorMessage(e), "ไล่ประวัติศาสตร์ราคาไม่สำเร็จ"); $("histChartWrap").style.display = "none"; $("historyResult").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`; }
+  finally { histLoading = false; }
 }
 
 function renderHistory(d) {
