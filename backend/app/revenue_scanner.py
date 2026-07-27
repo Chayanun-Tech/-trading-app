@@ -20,6 +20,7 @@ from pathlib import Path
 
 from app import edgar
 from app.revenue_model import (
+    _EPS,
     _REVENUE_CONCEPTS,
     _annual_with_end,
     _fp_key,
@@ -48,6 +49,31 @@ def load_sp500() -> list[dict]:
                 "sector": (row.get("GICS Sector") or "").strip(),
             })
     return out
+
+
+def _latest_eps_yoy_pct(facts: dict) -> float | None:
+    """EPS (diluted) โตเทียบไตรมาสเดียวกันปีก่อน (%) — ดึง EPS รายไตรมาสจาก SEC แล้วจับคู่ (fp, fy)
+    กับ (fp, fy-1) เหมือนตรรกะ revenue YoY. คืน None เมื่อ:
+      • ฐาน EPS ปีก่อน ≤ 0 (คิด % จากฐานติดลบ/ศูนย์ ไม่มีความหมาย — เช่นพลิกจากขาดทุนเป็นกำไร)
+      • ไม่มี EPS ไตรมาสล่าสุดหรือคู่เทียบปีก่อน
+    ใช้ EPS ไตรมาสเดียว (ไม่ใช่ TTM) ให้สอดคล้องกับ latest_yoy_pct ของรายได้."""
+    eps_q = _quarterly_with_fp(facts, _EPS, "USD/shares", prefer_latest_value=True)
+    if not eps_q:
+        return None
+    by_key: dict[tuple[str, int], float] = {}
+    for d, meta in eps_q.items():
+        k = _fp_key(meta, d)
+        if k:
+            by_key[k] = meta["val"]
+    latest_d = max(eps_q)
+    k = _fp_key(eps_q[latest_d], latest_d)
+    if not k:
+        return None
+    prev = by_key.get((k[0], k[1] - 1))
+    cur = eps_q[latest_d]["val"]
+    if prev is None or prev <= 0 or cur is None:
+        return None
+    return round((cur - prev) / prev * 100, 1)
 
 
 async def _symbol_revenue_gap(symbol: str, name: str, sector: str, lookback_quarters: int) -> dict | None:
@@ -133,6 +159,7 @@ async def _symbol_revenue_gap(symbol: str, name: str, sector: str, lookback_quar
         "base_quarter": rev_base["period"][:7],
         "latest_quarter": latest["period"][:7],
         "latest_yoy_pct": round(latest["yoy_pct"] * 100, 1) if latest["yoy_pct"] is not None else None,
+        "latest_eps_yoy_pct": _latest_eps_yoy_pct(facts),
     }
 
 

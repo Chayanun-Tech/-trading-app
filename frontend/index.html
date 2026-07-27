@@ -3842,6 +3842,7 @@ function renderRmIndustry(p) {
         <td style="padding:3px 6px; text-align:right;">${peCell}</td>
         <td style="padding:3px 6px; text-align:right;">${fmtPct(x.upside_pct)}</td>
         <td style="padding:3px 6px; text-align:right;">${fmtPct(x.yoy_pct)}</td>
+        <td style="padding:3px 6px; text-align:right;">${fmtPct(x.eps_yoy_pct)}</td>
       </tr>`;
   }).join("");
   const table = `<div style="margin-top:8px; overflow-x:auto;">
@@ -3849,7 +3850,7 @@ function renderRmIndustry(p) {
       <table style="width:100%; border-collapse:collapse; font-size:12px;">
         <thead><tr style="color:#7d8b99;">
           <th style="padding:3px 6px; text-align:left;">หุ้น</th><th style="padding:3px 6px; text-align:right;">PE</th>
-          <th style="padding:3px 6px; text-align:right;">upside มูลค่า</th><th style="padding:3px 6px; text-align:right;">โตรายได้ YoY</th></tr></thead>
+          <th style="padding:3px 6px; text-align:right;">upside มูลค่า</th><th style="padding:3px 6px; text-align:right;">โตรายได้ YoY</th><th style="padding:3px 6px; text-align:right;">EPS โต YoY</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       ${peers.length > shown.length ? `<div class="tiny" style="color:#7d8b99; margin-top:2px;">แสดง ${shown.length}/${peers.length} ตัว</div>` : ""}

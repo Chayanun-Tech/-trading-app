@@ -103,6 +103,18 @@ def _revenue_yoy() -> dict[str, float]:
     return out
 
 
+def _eps_yoy() -> dict[str, float]:
+    """map symbol → EPS (diluted) โต YoY ล่าสุด (%) จากแคชสแกนรายได้."""
+    data = _load_json(_REVENUE_CACHE)
+    out: dict[str, float] = {}
+    for r in data.get("results", []):
+        sym = _to_sym(r.get("symbol") or "")
+        v = r.get("latest_eps_yoy_pct")
+        if sym and isinstance(v, (int, float)):
+            out[sym] = v
+    return out
+
+
 def _stat_block(values: list[float]) -> dict | None:
     clean = [v for v in values if isinstance(v, (int, float)) and v == v]
     if not clean:
@@ -115,6 +127,7 @@ def _build_universe() -> list[dict]:
     const = load_constituents()
     vrows = _value_rows()
     yoy = _revenue_yoy()
+    eyoy = _eps_yoy()
     universe: list[dict] = []
     for sym, meta in const.items():
         vr = vrows.get(sym) or {}
@@ -128,6 +141,7 @@ def _build_universe() -> list[dict]:
             "per_share": vr.get("per_share"),
             "upside_pct": vr.get("upside_pct"),
             "yoy_pct": yoy.get(sym),
+            "eps_yoy_pct": eyoy.get(sym),
         })
     return universe
 
@@ -141,6 +155,7 @@ def _group_stats(universe: list[dict], key: str, value: str) -> dict | None:
         return None
     ups = _stat_block([u["upside_pct"] for u in members if isinstance(u.get("upside_pct"), (int, float))])
     yoys = _stat_block([u["yoy_pct"] for u in members if isinstance(u.get("yoy_pct"), (int, float))])
+    eps_yoys = _stat_block([u["eps_yoy_pct"] for u in members if isinstance(u.get("eps_yoy_pct"), (int, float))])
     return {
         "level": key,
         "name": value,
@@ -149,6 +164,7 @@ def _group_stats(universe: list[dict], key: str, value: str) -> dict | None:
         "n": pe_stat["n"],
         "upside_median": ups["median"] if ups else None,
         "yoy_median": yoys["median"] if yoys else None,
+        "eps_yoy_median": eps_yoys["median"] if eps_yoys else None,
     }
 
 
@@ -225,6 +241,7 @@ def peers_for(symbol: str) -> dict:
             "pe": round(u["pe"], 1) if u.get("pe") is not None else None,
             "upside_pct": u.get("upside_pct"),
             "yoy_pct": round(u["yoy_pct"], 1) if isinstance(u.get("yoy_pct"), (int, float)) else None,
+            "eps_yoy_pct": round(u["eps_yoy_pct"], 1) if isinstance(u.get("eps_yoy_pct"), (int, float)) else None,
             "is_focus": u["symbol"] == sym,
         })
     # เรียง: มี PE ก่อน (จากถูกไปแพง) แล้วค่อยตัวไม่มี PE
