@@ -526,6 +526,7 @@
       <button class="tab" id="tabAnalyst" onclick="showTab('analyst')">🧠 ผู้ช่วย AI</button>
       <button class="tab" id="tabRevenue" onclick="showTab('revenue')">📈 โมเดลรายได้</button>
       <button class="tab" id="tabRevenuescan" onclick="showTab('revenuescan')">🔍 สแกน S&P 500</button>
+      <button class="tab" id="tabSp500hist" onclick="showTab('sp500hist')">🏆 ประวัติ S&P 500</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
     </div>
 
@@ -1156,6 +1157,63 @@
       </div>
     </div>
 
+    <div id="sp500histPanel" class="panel-body hidden">
+      <div style="display:flex; gap:6px; flex-wrap:wrap; padding:0 0 8px;">
+        <button class="tab active" id="histSubYearBtn" onclick="showHistSub('year')" title="อันดับหุ้น 1→N ของแต่ละปี + กราฟผลตอบแทน">📅 อันดับรายปี</button>
+        <button class="tab" id="histSubLongBtn" onclick="showHistSub('long')" title="หุ้นที่ยืนระยะติด Top X ได้นานที่สุด">🏅 ยืนระยะ (Top X)</button>
+        <button class="tab" id="histSubStockBtn" onclick="showHistSub('stock')" title="เส้นทางอันดับของหุ้นตัวเดียวทุกปี">📈 ไทม์ไลน์รายตัว</button>
+      </div>
+      <div id="histMetaNote" class="note"></div>
+
+      <!-- 📅 อันดับรายปี -->
+      <div id="histSubYearBox">
+        <div style="margin-top:4px;">
+          <b style="font-size:16px;">📅 อันดับผลตอบแทนรายปี (survivorship-aware)</b>
+          <div class="note">แต่ละปีจัดหุ้นที่อยู่ในดัชนีปีนั้นจริง (รวมตัวที่ต่อมาหลุดออก) เรียงผลตอบแทน total return มาก→น้อย · แบ่ง 3 กลุ่มเทียบดัชนี ^SP500TR: <span style="color:#3fb950;">🟢 เหนือตลาด</span> · <span style="color:#9fb0c0;">⚪ ใกล้ตลาด</span> · <span style="color:#f85149;">🔴 ต่ำกว่าตลาด</span></div>
+        </div>
+        <div class="grid3" style="margin-top:10px;">
+          <div class="field"><label>ปี</label><select id="hyYear" onchange="runHistYear()"></select></div>
+          <div class="field"><label>แถบ "ใกล้ตลาด" ±กี่ % จากดัชนี</label><input id="hyBand" type="number" value="10" step="1" min="0" onchange="runHistYear()" /></div>
+          <div class="field"><label>แสดงกี่อันดับ</label><select id="hyLimit" onchange="runHistYear()"><option value="50">50</option><option value="100" selected>100</option><option value="9999">ทั้งหมด</option></select></div>
+        </div>
+        <div id="hyResult" style="margin-top:12px;"><div class="note">กำลังโหลด...</div></div>
+      </div>
+
+      <!-- 🏅 ยืนระยะ -->
+      <div id="histSubLongBox" class="hidden">
+        <div style="margin-top:4px;">
+          <b style="font-size:16px;">🏅 หุ้นยืนระยะ — ติด Top X ได้กี่ปี</b>
+          <div class="note">เลือก Top X อันดับแรก และย้อนหลัง Y ปี → นับว่าหุ้นแต่ละตัวติด Top X กี่ปี, สตรีคติดต่อกันยาวสุด, และอยู่ในดัชนีกี่ปี — หาแชมป์ยืนระยะ</div>
+        </div>
+        <div class="grid3" style="margin-top:10px;">
+          <div class="field"><label>Top X อันดับแรกของแต่ละปี</label><input id="hlTop" type="number" value="50" step="10" min="1" max="500" onchange="runHistLongevity()" /></div>
+          <div class="field"><label>ย้อนหลังกี่ปี (Y)</label><input id="hlYears" type="number" value="20" step="1" min="1" max="40" onchange="runHistLongevity()" /></div>
+          <div class="field" style="align-self:end;">
+            <div class="quick" style="padding:0; border:0; gap:6px;">
+              <button onclick="setHlPreset(10,20)" title="Top 10 · 20 ปี">Top10·20y</button>
+              <button onclick="setHlPreset(50,20)" title="Top 50 · 20 ปี">Top50·20y</button>
+              <button onclick="setHlPreset(100,30)" title="Top 100 · 30 ปี">Top100·30y</button>
+            </div>
+          </div>
+        </div>
+        <div id="hlResult" style="margin-top:12px;"><div class="note">กำลังโหลด...</div></div>
+      </div>
+
+      <!-- 📈 ไทม์ไลน์รายตัว -->
+      <div id="histSubStockBox" class="hidden">
+        <div style="margin-top:4px;">
+          <b style="font-size:16px;">📈 ไทม์ไลน์รายตัว — เส้นทางรุ่ง→ร่วง</b>
+          <div class="note">อันดับ/ผลตอบแทน/กลุ่มของหุ้นตัวเดียวทุกปี เห็นว่าเคยติดหัวตารางแล้วร่วง หรือหลุดจากดัชนีตอนไหน (ลองหุ้นที่หลุดไปแล้ว เช่น GE, YHOO, NOK)</div>
+        </div>
+        <div class="grid3" style="margin-top:10px;">
+          <div class="field"><label>สัญลักษณ์หุ้น</label><input id="hsSymbol" placeholder="เช่น AAPL, GE, NVDA" onkeydown="if(event.key==='Enter')runHistStock()" /></div>
+          <div class="field" style="align-self:end;"><button class="primary" onclick="runHistStock()">📈 ดูไทม์ไลน์</button></div>
+          <div></div>
+        </div>
+        <div id="hsResult" style="margin-top:12px;"><div class="note">พิมพ์สัญลักษณ์หุ้นแล้วกดดูไทม์ไลน์</div></div>
+      </div>
+    </div>
+
     <div id="ivPanel" class="panel-body hidden">
       <div class="grid3">
         <div class="field"><label>หุ้น (US / ไทย .BK)</label><input id="ivSymbol" placeholder="เช่น AAPL, NVDA, KBANK.BK" /></div>
@@ -1493,6 +1551,11 @@
 .lynch-turn.active     { border-color:#f85149; }
 .lynch-asset    { background:rgba(255,215,0,.13);   color:#ffd700; border:1px solid rgba(255,215,0,.35); }
 .lynch-asset.active    { border-color:#ffd700; }
+
+/* S&P 500 ประวัติผลตอบแทน: แถบสี 3 กลุ่มในตาราง */
+.htier-above  { border-left:3px solid #3fb950; }
+.htier-market { border-left:3px solid #6b7684; }
+.htier-below  { border-left:3px solid #f85149; }
 </style>
 
 <!-- ===================================================================
@@ -1764,7 +1827,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "historyPanel", "radarPanel", "analystPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "revenuePanel", "revenuescanPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "historyPanel", "radarPanel", "analystPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "revenuePanel", "revenuescanPanel", "sp500histPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
@@ -3195,13 +3258,14 @@ function clearDrawings() {
 }
 
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","macro","history","radar","analyst","revenue","revenuescan","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","history","radar","analyst","revenue","revenuescan","sp500hist","iv","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
     if (btn) btn.classList.toggle("active", name === tab);
   });
   if (tab === "revenuescan") autoLoadActiveScanSub();
+  if (tab === "sp500hist") initSp500Hist();
   if (tab === "history") maybeAutoHistory();
 }
 
@@ -4665,6 +4729,195 @@ function renderLynchScan(d) {
   html += `<div class="note" style="margin-top:4px;">${E(d.coverage_note || "")}</div>`;
   html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
   $("lsResult").innerHTML = html;
+}
+
+// ---------- S&P 500 ประวัติผลตอบแทนรายปี (survivorship-aware) ----------
+let histMeta = null;
+const HIST_SUBS = {
+  year:  { box:"histSubYearBox",  btn:"histSubYearBtn",  load:() => runHistYear() },
+  long:  { box:"histSubLongBox",  btn:"histSubLongBtn",  load:() => runHistLongevity() },
+  stock: { box:"histSubStockBox", btn:"histSubStockBtn", load:() => { /* รอผู้ใช้กรอกหุ้น */ } },
+};
+const histAutoLoaded = {};
+
+async function initSp500Hist() {
+  if (histMeta) { showHistSub(activeHistSub()); return; }
+  try {
+    const res = await fetch(`${API}/api/sp500-history/meta`);
+    histMeta = await res.json();
+    if (!histMeta.available) {
+      $("histMetaNote").innerHTML = `<span class="down">ยังไม่มีชุดข้อมูลประวัติ — ต้อง build ก่อน (POST /api/sp500-history/build ในเครื่อง แล้ว push)</span>`;
+      return;
+    }
+    // เติม dropdown ปี (ใหม่→เก่า) + สรุปหัว
+    const sel = $("hyYear");
+    if (sel.options.length === 0) {
+      for (const y of histMeta.years) {
+        const o = document.createElement("option");
+        o.value = y.year; o.textContent = y.year;
+        sel.appendChild(o);
+      }
+    }
+    $("histMetaNote").innerHTML = `<span class="tiny" style="color:#7d8b99;">ชุดข้อมูล ${histMeta.year_min}–${histMeta.year_max} · เทียบดัชนี ${escapeHtml(histMeta.benchmark)} (total return) · สร้างเมื่อ ${escapeHtml(histMeta.as_of_label)} · แหล่ง: ${escapeHtml(histMeta.source)}</span>`;
+    showHistSub(activeHistSub());
+  } catch (e) {
+    $("histMetaNote").innerHTML = `<span class="down">${escapeHtml(errorMessage(e))}</span>`;
+  }
+}
+
+function activeHistSub() {
+  const open = Object.entries(HIST_SUBS).find(([, c]) => $(c.box) && !$(c.box).classList.contains("hidden"));
+  return open ? open[0] : "year";
+}
+function showHistSub(which) {
+  if (!HIST_SUBS[which]) which = "year";
+  for (const [k, c] of Object.entries(HIST_SUBS)) {
+    $(c.box)?.classList.toggle("hidden", k !== which);
+    $(c.btn)?.classList.toggle("active", k === which);
+  }
+  if (histMeta?.available && !histAutoLoaded[which]) { histAutoLoaded[which] = true; HIST_SUBS[which].load(); }
+}
+
+function histTierClass(t) { return t === "above" ? "htier-above" : t === "below" ? "htier-below" : "htier-market"; }
+function histTierLabel(t) { return t === "above" ? "🟢 เหนือตลาด" : t === "below" ? "🔴 ต่ำกว่าตลาด" : t === "market" ? "⚪ ใกล้ตลาด" : "—"; }
+function fmtPct(v) { return v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(1) + "%"; }
+
+// วาดกราฟผลตอบแทนเรียงมาก→น้อย (แกน x = อันดับ, y = ผลตอบแทน%) เป็น SVG ในตัว (exponential-like curve)
+function svgReturnCurve(returns, indexRet) {
+  const n = returns.length;
+  if (!n) return "";
+  const W = 1000, H = 260, padL = 44, padR = 12, padT = 12, padB = 24;
+  let hi = Math.max(...returns, indexRet ?? 0), lo = Math.min(...returns, indexRet ?? 0);
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const x = i => padL + (W - padL - padR) * (n === 1 ? 0 : i / (n - 1));
+  const y = v => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo));
+  const pts = returns.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const zeroY = (lo <= 0 && hi >= 0) ? y(0) : null;
+  const idxY = (indexRet != null) ? y(indexRet) : null;
+  const area = `${padL},${y(lo)} ${pts} ${x(n - 1)},${y(lo)}`;
+  const gridLabels = [hi, (hi + lo) / 2, lo].map(v =>
+    `<text x="4" y="${(y(v) + 4).toFixed(1)}" fill="#7d8b99" font-size="12">${v.toFixed(0)}%</text>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%; height:220px; background:#0a1017; border:1px solid var(--border); border-radius:8px;">
+    <polygon points="${area}" fill="rgba(47,129,247,.12)" />
+    ${zeroY != null ? `<line x1="${padL}" y1="${zeroY.toFixed(1)}" x2="${W - padR}" y2="${zeroY.toFixed(1)}" stroke="#3a4a5a" stroke-width="1" stroke-dasharray="4 4"/>` : ""}
+    ${idxY != null ? `<line x1="${padL}" y1="${idxY.toFixed(1)}" x2="${W - padR}" y2="${idxY.toFixed(1)}" stroke="#e2b93b" stroke-width="1.5" stroke-dasharray="6 3"/><text x="${W - padR - 4}" y="${(idxY - 5).toFixed(1)}" fill="#e2b93b" font-size="12" text-anchor="end">ดัชนี ${fmtPct(indexRet)}</text>` : ""}
+    <polyline points="${pts}" fill="none" stroke="#2f81f7" stroke-width="2"/>
+    ${gridLabels}
+    <text x="${padL}" y="${H - 6}" fill="#7d8b99" font-size="12">อันดับ 1</text>
+    <text x="${W - padR}" y="${H - 6}" fill="#7d8b99" font-size="12" text-anchor="end">อันดับ ${n}</text>
+  </svg>`;
+}
+
+async function runHistYear() {
+  const year = $("hyYear").value;
+  const band = parseFloat($("hyBand").value); const limit = parseInt($("hyLimit").value, 10) || 100;
+  if (!year) return;
+  $("hyResult").innerHTML = `<div class="note">กำลังโหลดอันดับปี ${escapeHtml(year)}...</div>`;
+  try {
+    const res = await fetch(`${API}/api/sp500-history/year?year=${year}&band=${isNaN(band) ? 10 : band}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    renderHistYear(await res.json(), limit);
+  } catch (e) {
+    notifyError(errorMessage(e), "โหลดอันดับรายปีไม่สำเร็จ");
+    $("hyResult").innerHTML = `<div class="down">${escapeHtml(errorMessage(e))}</div>`;
+  }
+}
+
+function renderHistYear(d, limit) {
+  const E = escapeHtml;
+  if (!d.found) { $("hyResult").innerHTML = `<div class="note">ไม่มีข้อมูลปีนี้</div>`; return; }
+  const tc = d.tier_counts || {};
+  let html = `<div class="note">ปี <b>${d.year}</b> · ดัชนี ${d.benchmark} <b>${fmtPct(d.index_return)}</b> · ครอบคลุม ${d.covered}/${d.members} บริษัท (${d.coverage_pct}%) · `
+    + `<span style="color:#3fb950;">เหนือตลาด ${tc.above || 0}</span> · <span style="color:#9fb0c0;">ใกล้ ${tc.market || 0}</span> · <span style="color:#f85149;">ต่ำกว่า ${tc.below || 0}</span></div>`;
+  html += `<div style="margin-top:10px;">${svgReturnCurve(d.curve || [], d.index_return)}</div>`;
+  html += `<div class="tiny" style="color:#7d8b99; margin:4px 0 8px;">กราฟ: ผลตอบแทนเรียงจากอันดับ 1 (ซ้าย) ไปอันดับสุดท้าย (ขวา) — เส้นเหลืองประ = ผลตอบแทนดัชนี</div>`;
+  const rows = (d.rows || []).slice(0, limit).map(r =>
+    `<tr class="${histTierClass(r.tier)}" ${r.name ? "" : `title="ticker นี้ไม่ได้อยู่ในดัชนีปัจจุบัน (อาจหลุด/ถูกซื้อกิจการ)"`}>`
+    + `<td style="padding:4px 8px; text-align:right; color:#7d8b99;">${r.rank}</td>`
+    + `<td style="padding:4px 8px;"><b>${E(r.symbol)}</b>${r.name ? `<span class="tiny" style="color:#7d8b99;"> ${E(r.name)}</span>` : ""}</td>`
+    + `<td style="padding:4px 8px; text-align:right; font-weight:600; color:${r.ret >= 0 ? "#3fb950" : "#f85149"};">${fmtPct(r.ret)}</td>`
+    + `<td style="padding:4px 8px; font-size:12px;">${histTierLabel(r.tier)}</td></tr>`).join("");
+  html += `<table class="biz-rev" style="width:100%; margin-top:6px;"><thead><tr style="color:#9fb0c0; font-size:12px;">`
+    + `<th style="text-align:right; padding:4px 8px;">#</th><th style="text-align:left; padding:4px 8px;">หุ้น</th>`
+    + `<th style="text-align:right; padding:4px 8px;">ผลตอบแทน</th><th style="text-align:left; padding:4px 8px;">กลุ่ม</th></tr></thead>`
+    + `<tbody>${rows}</tbody></table>`;
+  if ((d.rows || []).length > limit) html += `<div class="tiny" style="margin-top:6px; color:#7d8b99;">แสดง ${limit}/${d.rows.length} — เลือก "ทั้งหมด" เพื่อดูครบ</div>`;
+  $("hyResult").innerHTML = html;
+}
+
+function setHlPreset(top, years) { $("hlTop").value = top; $("hlYears").value = years; runHistLongevity(); }
+
+async function runHistLongevity() {
+  const top = parseInt($("hlTop").value, 10) || 50; const years = parseInt($("hlYears").value, 10) || 20;
+  $("hlResult").innerHTML = `<div class="note">กำลังคำนวณ...</div>`;
+  try {
+    const res = await fetch(`${API}/api/sp500-history/longevity?top=${top}&years=${years}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    renderHistLongevity(await res.json());
+  } catch (e) {
+    notifyError(errorMessage(e), "คำนวณยืนระยะไม่สำเร็จ");
+    $("hlResult").innerHTML = `<div class="down">${escapeHtml(errorMessage(e))}</div>`;
+  }
+}
+
+function renderHistLongevity(d) {
+  const E = escapeHtml;
+  const rank = d.ranking || [];
+  const win = d.window ? `${d.window[0]}–${d.window[1]}` : "-";
+  let html = `<div class="note">ติด Top ${d.top} อันดับแรก · ช่วง ${win} (${d.years_back} ปี) · เจอ ${rank.length} หุ้นที่เคยติด Top ${d.top} อย่างน้อย 1 ปี · เรียงตามจำนวนปีที่ติด</div>`;
+  if (!rank.length) { html += `<div class="note" style="margin-top:8px;">ไม่มีข้อมูล</div>`; $("hlResult").innerHTML = html; return; }
+  const rows = rank.slice(0, 100).map((r, i) =>
+    `<tr onclick="openHistStock('${E(r.symbol)}')" style="cursor:pointer;" title="ดูไทม์ไลน์ ${E(r.symbol)}">`
+    + `<td style="padding:4px 8px; text-align:right; color:#7d8b99;">${i + 1}</td>`
+    + `<td style="padding:4px 8px;"><b>${E(r.symbol)}</b>${r.name ? `<span class="tiny" style="color:#7d8b99;"> ${E(r.name)}</span>` : ""}${r.still_member ? "" : ` <span class="tiny" style="color:#e2b93b;" title="หลุดจากดัชนีแล้ว">↓หลุดแล้ว</span>`}</td>`
+    + `<td style="padding:4px 8px; text-align:right; font-weight:700; color:#3fb950;">${r.top_years} ปี</td>`
+    + `<td style="padding:4px 8px; text-align:right;">${r.streak} ปี</td>`
+    + `<td style="padding:4px 8px; text-align:right; color:#9fb0c0;">${r.years_in_index}</td>`
+    + `<td style="padding:4px 8px; text-align:right; color:#9fb0c0;">#${r.best_rank ?? "—"}</td></tr>`).join("");
+  html += `<table class="biz-rev" style="width:100%; margin-top:8px;"><thead><tr style="color:#9fb0c0; font-size:12px;">`
+    + `<th style="text-align:right; padding:4px 8px;">#</th><th style="text-align:left; padding:4px 8px;">หุ้น</th>`
+    + `<th style="text-align:right; padding:4px 8px;" title="จำนวนปีที่ติด Top X">ติด Top ${d.top}</th>`
+    + `<th style="text-align:right; padding:4px 8px;" title="ติดต่อกันยาวสุด">สตรีค</th>`
+    + `<th style="text-align:right; padding:4px 8px;" title="จำนวนปีที่อยู่ในดัชนี">ปีในดัชนี</th>`
+    + `<th style="text-align:right; padding:4px 8px;" title="อันดับดีสุดที่เคยทำได้">อันดับดีสุด</th></tr></thead><tbody>${rows}</tbody></table>`
+    + `<div class="tiny" style="margin-top:6px; color:#7d8b99;">คลิกแถวเพื่อดูไทม์ไลน์รายตัว · "ปีในดัชนี" นับจากสมาชิกจริง (รวมปีที่ข้อมูลราคาไม่ครบ)</div>`;
+  $("hlResult").innerHTML = html;
+}
+
+function openHistStock(sym) { showHistSub("stock"); $("hsSymbol").value = sym; runHistStock(); }
+
+async function runHistStock() {
+  const sym = ($("hsSymbol").value || "").trim();
+  if (!sym) return;
+  $("hsResult").innerHTML = `<div class="note">กำลังโหลดไทม์ไลน์ ${escapeHtml(sym)}...</div>`;
+  try {
+    const res = await fetch(`${API}/api/sp500-history/stock?symbol=${encodeURIComponent(sym)}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    renderHistStock(await res.json());
+  } catch (e) {
+    notifyError(errorMessage(e), "โหลดไทม์ไลน์ไม่สำเร็จ");
+    $("hsResult").innerHTML = `<div class="down">${escapeHtml(errorMessage(e))}</div>`;
+  }
+}
+
+function renderHistStock(d) {
+  const E = escapeHtml;
+  if (!d.found) { $("hsResult").innerHTML = `<div class="note">ไม่พบ ${E(d.symbol)} ในชุดข้อมูลประวัติ (อาจไม่เคยอยู่ S&P 500 ช่วง ${histMeta?.year_min}–${histMeta?.year_max} หรือ Yahoo ไม่มีราคาย้อนหลัง)</div>`; return; }
+  const yrsIn = d.timeline.filter(t => t.in_index).length;
+  const bestYear = d.timeline.filter(t => t.rank).sort((a, b) => a.rank - b.rank)[0];
+  let html = `<div class="note"><b>${E(d.symbol)}</b>${d.name ? " · " + E(d.name) : ""} · อยู่ในดัชนี ${yrsIn} ปี${bestYear ? ` · อันดับดีสุด #${bestYear.rank} (ปี ${bestYear.year})` : ""}</div>`;
+  const rows = d.timeline.slice().reverse().map(t =>
+    `<tr class="${t.rank ? histTierClass(t.tier) : ""}">`
+    + `<td style="padding:4px 8px;"><b>${t.year}</b></td>`
+    + `<td style="padding:4px 8px; text-align:right; color:#7d8b99;">${t.rank ? "#" + t.rank + (t.of ? " / " + t.of : "") : (t.in_index ? "อยู่ในดัชนี (ไม่มีราคา)" : "—")}</td>`
+    + `<td style="padding:4px 8px; text-align:right; font-weight:600; color:${t.ret == null ? "#7d8b99" : t.ret >= 0 ? "#3fb950" : "#f85149"};">${t.ret == null ? "—" : fmtPct(t.ret)}</td>`
+    + `<td style="padding:4px 8px; text-align:right; color:#7d8b99;">${t.index_return == null ? "—" : fmtPct(t.index_return)}</td>`
+    + `<td style="padding:4px 8px; font-size:12px;">${t.rank ? histTierLabel(t.tier) : (t.in_index ? "" : "หลุดดัชนี")}</td></tr>`).join("");
+  html += `<table class="biz-rev" style="width:100%; margin-top:8px;"><thead><tr style="color:#9fb0c0; font-size:12px;">`
+    + `<th style="text-align:left; padding:4px 8px;">ปี</th><th style="text-align:right; padding:4px 8px;">อันดับ</th>`
+    + `<th style="text-align:right; padding:4px 8px;">ผลตอบแทน</th><th style="text-align:right; padding:4px 8px;">ดัชนี</th>`
+    + `<th style="text-align:left; padding:4px 8px;">กลุ่ม</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $("hsResult").innerHTML = html;
 }
 
 // ---------- S&P 500 EMA-proximity scanner (เลนส์สายเทคนิค) ----------

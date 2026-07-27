@@ -35,6 +35,7 @@ from app import industry_peers
 from app import value_scanner
 from app import ema_scanner
 from app import lynch_scanner
+from app import sp500_history
 from app import confluence
 from app.engine import build_report
 from app.financials import build_financials
@@ -813,6 +814,56 @@ async def lynch_scan_sp500_publish_route():
         f"Update S&P 500 Peter Lynch classification scan ({result['success_count']}/{result['universe_count']} companies)",
     )
     return {**result, **publish}
+
+
+@app.get("/api/sp500-history/meta")
+async def sp500_history_meta_route():
+    """รายการปีที่มี + coverage ต่อปีของประวัติผลตอบแทน S&P 500 (survivorship-aware)."""
+    return sp500_history.meta()
+
+
+@app.get("/api/sp500-history/year")
+async def sp500_history_year_route(
+    year: int = Query(..., description="ปีที่ต้องการดูอันดับ (เช่น 2020)"),
+    band: float = Query(sp500_history.DEFAULT_BAND_PCT, ge=0, le=100,
+                        description="เหนือ/ต่ำกว่าตลาดเมื่อผลตอบแทนต่างจากดัชนีเกิน ±band (percentage points)"),
+):
+    """อันดับหุ้น 1..N ของปีนั้น + tier (เหนือ/ใกล้/ต่ำกว่าตลาด) + จุดกราฟผลตอบแทนเรียงมาก→น้อย."""
+    return sp500_history.year_ranking(year, band=band)
+
+
+@app.get("/api/sp500-history/longevity")
+async def sp500_history_longevity_route(
+    top: int = Query(50, ge=1, le=500, description="นับหุ้นที่ติด Top X อันดับแรกของแต่ละปี"),
+    years: int = Query(20, ge=1, le=40, description="ย้อนหลังกี่ปีล่าสุด"),
+    band: float = Query(sp500_history.DEFAULT_BAND_PCT, ge=0, le=100),
+):
+    """หุ้นที่ยืนระยะติด Top X ได้กี่ปีในช่วง Y ปีล่าสุด (เรียงหาแชมป์ยืนระยะ)."""
+    return sp500_history.longevity(top=top, years_back=years, band=band)
+
+
+@app.get("/api/sp500-history/stock")
+async def sp500_history_stock_route(
+    symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น AAPL"),
+    band: float = Query(sp500_history.DEFAULT_BAND_PCT, ge=0, le=100),
+):
+    """ไทม์ไลน์อันดับ/ผลตอบแทน/tier ของหุ้นตัวเดียวทุกปี (เห็นเส้นทางรุ่ง→ร่วง)."""
+    return sp500_history.stock_timeline(symbol, band=band)
+
+
+@app.post("/api/sp500-history/build")
+async def sp500_history_build_route():
+    """build dataset ใหม่ (ยิง Yahoo ~1,200 ตัว หลายนาที) แล้ว commit+push ขึ้น GitHub/HF อัตโนมัติ
+    ใช้ได้เฉพาะตอนรันในเครื่อง; บน HF container จะคืน pushed=false"""
+    try:
+        result = await sp500_history.build_dataset()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"build ประวัติ S&P 500 ไม่สำเร็จ: {exc}")
+    publish = _git_publish_file(
+        "backend/app/data_sp500_history.json",
+        f"Update S&P 500 yearly-return history ({len(result.get('years', {}))} years, universe {result.get('universe_size')})",
+    )
+    return {"years": len(result.get("years", {})), "universe_size": result.get("universe_size"), **publish}
 
 
 @app.get("/api/ema-scan/sp500")
