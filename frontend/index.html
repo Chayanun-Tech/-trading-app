@@ -3990,8 +3990,9 @@ function renderRmIndustry(p) {
   const fmtPct = v => v == null ? "—" : `<span style="color:${v >= 0 ? "#4caf7d" : "#e0785f"};">${v >= 0 ? "+" : ""}${v}%</span>`;
   const rows = shown.map(x => {
     const hl = x.is_focus ? ' style="background:rgba(127,168,208,0.14); cursor:pointer;"' : ' style="cursor:pointer;"';
+    const peDash = x.pe_note ? `<span style="color:#7d8b99; cursor:help; border-bottom:1px dotted #55636f;" title="${escapeHtml(x.pe_note)}">—</span>` : "—";
     const peCell = (x.pe != null && x.pe > ind.pe_median) ? `<span style="color:#e0785f;">${fmtPe(x.pe)}</span>`
-                 : (x.pe != null ? `<span style="color:#4caf7d;">${fmtPe(x.pe)}</span>` : "—");
+                 : (x.pe != null ? `<span style="color:#4caf7d;">${fmtPe(x.pe)}</span>` : peDash);
     return `<tr${hl} onclick="openSymbolInRevenueModel('${escapeHtml(x.symbol)}')" title="เปิดโมเดลรายได้ของ ${escapeHtml(x.symbol)}">
         <td style="padding:3px 6px;"><b>${escapeHtml(x.symbol)}</b>${x.is_focus ? ' <span class="tiny" style="color:#7fa8d0;">(หุ้นนี้)</span>' : ""}
           <div class="tiny" style="color:#7d8b99;">${escapeHtml((x.name || "").slice(0, 22))}</div></td>

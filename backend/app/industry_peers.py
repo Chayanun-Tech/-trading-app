@@ -74,6 +74,22 @@ def _pe_of(row: dict) -> float | None:
     return pe
 
 
+def _pe_note(u: dict) -> str | None:
+    """เหตุผลว่าทำไมหุ้นตัวนี้ไม่มีค่า PE ให้แสดง (คืน None ถ้ามี PE อยู่แล้ว) — ให้ frontend เอาไป
+    ทำ tooltip บนช่อง "—" กันเข้าใจผิดว่าข้อมูลหาย ทั้งที่จริงคือ 'คิด P/E ไม่ได้'."""
+    if u.get("pe") is not None:
+        return None
+    basis = str(u.get("basis") or "")
+    if basis and not basis.startswith("P/E"):
+        # กลุ่มธนาคาร/ประกัน/REIT ประเมินด้วยตัวคูณอื่น (P/B, P/FFO) — P/E ไม่มีความหมายกับกลุ่มนี้
+        return f"กลุ่มนี้ประเมินด้วย {basis} ไม่ใช่ P/E จึงไม่มีค่า PE ให้เทียบ"
+    ps = u.get("per_share")
+    if isinstance(ps, (int, float)) and ps <= 0:
+        return "กำไรต่อหุ้น (EPS) ปีล่าสุดติดลบ/ศูนย์ — คิด P/E ไม่ได้"
+    # ไม่มีในแคชสแกนมูลค่าเลย = ประเมินราคายุติธรรมด้วยตัวคูณไม่ได้ (มักเป็นหุ้นขาดทุน/ข้อมูลงบไม่พอ)
+    return "ยังประเมิน P/E ไม่ได้ (หุ้นขาดทุนหรือข้อมูลงบไม่พอ)"
+
+
 def _value_rows() -> dict[str, dict]:
     """map symbol → แถวจากแคชสแกนมูลค่า (มี per_share, price, basis, upside_pct)."""
     data = _load_json(_VALUE_CACHE)
@@ -139,6 +155,7 @@ def _build_universe() -> list[dict]:
             "pe": _pe_of(vr),
             "price": vr.get("price"),
             "per_share": vr.get("per_share"),
+            "basis": vr.get("basis"),
             "upside_pct": vr.get("upside_pct"),
             "yoy_pct": yoy.get(sym),
             "eps_yoy_pct": eyoy.get(sym),
@@ -239,6 +256,7 @@ def peers_for(symbol: str) -> dict:
             "symbol": u["symbol"],
             "name": u["name"],
             "pe": round(u["pe"], 1) if u.get("pe") is not None else None,
+            "pe_note": _pe_note(u),
             "upside_pct": u.get("upside_pct"),
             "yoy_pct": round(u["yoy_pct"], 1) if isinstance(u.get("yoy_pct"), (int, float)) else None,
             "eps_yoy_pct": round(u["eps_yoy_pct"], 1) if isinstance(u.get("eps_yoy_pct"), (int, float)) else None,
