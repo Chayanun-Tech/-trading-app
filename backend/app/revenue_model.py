@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 from app import edgar
 from app import sector_profile
 from app import sector_metrics
-from app.financials import _entries, _days, _INCOME, _CASHFLOW, _EPS, _SHARES
+from app.financials import (_entries, _days, _INCOME, _CASHFLOW, _EPS, _SHARES,
+                             _is_annual_form, _annual_fp_ok, pick_reporting_unit)
 from app.fundamentals import is_equity_symbol
 
 # แท็ก us-gaap สำหรับ heuristic จำแนก sector (ชั้น 2) — ธนาคารดูรายได้ดอกเบี้ย, REIT ดูค่าเสื่อม
@@ -62,14 +63,14 @@ def _latest_instant(facts: dict, concepts: list[str], unit: str) -> float | None
     return best[1] if best else None
 
 
-def _financials_snapshot(facts: dict) -> dict:
+def _financials_snapshot(facts: dict, unit: str = "USD") -> dict:
     """งบย่อสำหรับ heuristic จำแนก sector (ชั้น 2). ใช้ยอด 'ทั้งปี' (10-K) ล่าสุด ไม่ใช่ TTM
     ที่สังเคราะห์รายไตรมาส — เพราะการจำแนก sector ต้องการความ 'เสถียร/ถูก' มากกว่าความ 'สด'
     และยอดสังเคราะห์รายไตรมาส (Q4 = ทั้งปี − 3 ไตรมาส, capex แบบสะสม YTD) มี noise พอที่จะดัน
     อัตราส่วน capex/รายได้ ให้เพี้ยนจนจำแนกผิดได้ (เช่นบริษัทซอฟต์แวร์ที่ลงทุน datacenter หนัก
     ถูกจับเป็น 'ลงทุนหนัก' ทั้งที่ P/E, FCF ยังใช้ได้ปกติ). ทุก field คืน None ได้ (heuristic รองรับ)."""
     def latest_annual(concepts: list[str]) -> float | None:
-        ann = _annual_with_end(facts, concepts, "USD")
+        ann = _annual_with_end(facts, concepts, unit)
         return ann[max(ann)]["val"] if ann else None
 
     return {
@@ -77,8 +78,9 @@ def _financials_snapshot(facts: dict) -> dict:
         "net_income": latest_annual(_NET_INCOME_CONCEPTS),
         "ocf": latest_annual(_OCF_CONCEPTS),
         "capex": latest_annual(_CAPEX_CONCEPTS),
-        "total_assets": _latest_instant(facts, ["Assets"], "USD"),
-        "total_equity": _latest_instant(facts, ["StockholdersEquity"], "USD"),
+        "total_assets": _latest_instant(facts, ["Assets", "Assets"], unit),
+        "total_equity": _latest_instant(facts, ["StockholdersEquity",
+                                                "EquityAttributableToOwnersOfParent", "Equity"], unit),
         "interest_income": latest_annual(_INTEREST_INCOME_CONCEPTS),
         "depreciation": latest_annual(_DEPRECIATION_CONCEPTS),
     }
@@ -466,7 +468,8 @@ def _annual_with_end(facts: dict, concepts: list[str], unit: str, prefer_latest_
     prefer_latest_value: เหมือน _quarterly_with_fp — ใช้ EPS ที่ปรับปรุงหลัง split แล้ว."""
     out: dict[int, dict] = {}
     for e in _entries(facts, concepts, unit):
-        if "start" not in e or not str(e.get("form", "")).startswith("10-K") or e.get("fp") != "FY":
+        form = str(e.get("form", ""))
+        if "start" not in e or not _is_annual_form(form) or not _annual_fp_ok(form, e.get("fp")):
             continue
         d = _days(e["start"], e["end"])
         if d is None or d < 300 or d > 400:
@@ -724,6 +727,229 @@ def _growth_stats(ttm_revenue: list[tuple[str, float]], ttm_eps: list[tuple[str,
     }
 
 
+async def _price_bars(symbol: str, granularity: str) -> list[dict]:
+    """ราคาย้อนหลัง (USD) จาก provider ปัจจุบัน แล้ว resample ตามความละเอียด — ดึงไม่ได้ก็คืน []
+    (ยังโชว์กล่องการเติบโตได้แม้ไม่มีกราฟราคา/P/E) เหมือนที่ get_revenue_model ทำ."""
+    from app.main import provider  # lazy import กันวน circular import (ตามแบบ trend_radar.py)
+    get_history = getattr(provider, "get_history", None)
+    try:
+        candles = await get_history(symbol, "1d", max_bars=8000) if get_history \
+            else await provider.get_candles(symbol, "1d", 1000)
+    except Exception:  # noqa: BLE001
+        candles = []
+    return _resample(candles, granularity) if candles else []
+
+
+def _annual_rows_from_sec(facts: dict, money_unit: str, eps_unit: str) -> list[dict]:
+    """แถวงบ 'รายปี' ต่อ 1 ปีงบจาก 20-F/10-K (รายได้/กำไร/OCF/CapEx/EPS) — สกุลเงินตามที่บริษัทยื่น."""
+    ann_rev = _annual_with_end(facts, _REVENUE_CONCEPTS, money_unit)
+    ann_ni = _annual_with_end(facts, _NET_INCOME_CONCEPTS, money_unit)
+    ann_ocf = _annual_with_end(facts, _OCF_CONCEPTS, money_unit)
+    ann_capex = _annual_with_end(facts, _CAPEX_CONCEPTS, money_unit)
+    ann_eps = _annual_with_end(facts, _EPS, eps_unit, prefer_latest_value=True)
+    rows = []
+    for fy in sorted(ann_rev):
+        ocf = ann_ocf.get(fy, {}).get("val")
+        capex = ann_capex.get(fy, {}).get("val")
+        rows.append({
+            "fy": fy, "end": ann_rev[fy]["end"], "revenue": ann_rev[fy]["val"],
+            "net_income": ann_ni.get(fy, {}).get("val"), "ocf": ocf, "capex": capex,
+            "fcf": (ocf - capex) if ocf is not None and capex is not None else None,
+            "eps": ann_eps.get(fy, {}).get("val"),
+        })
+    return rows
+
+
+async def _fetch_yahoo_annual(symbol: str) -> list[dict]:
+    """งบรายปีจาก Yahoo fundamentals-timeseries (~4 ปีล่าสุด, สกุลเงินที่บริษัทยื่น) — ใช้เป็น fallback
+    เมื่อ SEC ไม่มีงบของ ADR ตัวนั้นเลย. คืน rows เรียงตามปีเหมือน _annual_rows_from_sec."""
+    import time as _t
+
+    import httpx
+    from app.fundamentals import _YA_UA, _yahoo_crumb
+    types = "annualTotalRevenue,annualNetIncome,annualDilutedEPS,annualBasicEPS,annualOperatingCashFlow"
+    cookie, crumb = await _yahoo_crumb()
+    url = (f"https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{symbol}"
+           f"?symbol={symbol}&type={types}&period1=0&period2={int(_t.time())}&crumb={crumb}")
+    async with httpx.AsyncClient(headers=_YA_UA, timeout=20, follow_redirects=True) as c:
+        r = await c.get(url, headers={"Cookie": cookie})
+        r.raise_for_status()
+        result = r.json().get("timeseries", {}).get("result", []) or []
+    field = {"annualTotalRevenue": "revenue", "annualNetIncome": "net_income",
+             "annualDilutedEPS": "eps", "annualBasicEPS": "eps_basic",
+             "annualOperatingCashFlow": "ocf"}
+    by_end: dict[str, dict] = {}
+    for item in result:
+        typ = (item.get("meta", {}).get("type") or [None])[0]
+        key = field.get(typ)
+        if not key:
+            continue
+        for v in item.get(typ) or []:
+            if not v:
+                continue
+            end = v.get("asOfDate")
+            raw = (v.get("reportedValue") or {}).get("raw")
+            if end and raw is not None:
+                by_end.setdefault(end, {})[key] = raw
+    rows = []
+    for end in sorted(by_end):
+        m = by_end[end]
+        rev = m.get("revenue")
+        if rev is None:
+            continue
+        rows.append({
+            "fy": int(end[:4]), "end": end, "revenue": rev,
+            "net_income": m.get("net_income"), "ocf": m.get("ocf"), "capex": None,
+            "fcf": None, "eps": m.get("eps") if m.get("eps") is not None else m.get("eps_basic"),
+        })
+    return rows
+
+
+async def _build_annual_model(symbol: str, granularity: str, include_ai: bool, *,
+                              facts: dict | None, rows: list[dict], money_unit: str,
+                              source: str) -> dict:
+    """สร้างโมเดล 'รายปี' สำหรับหุ้น ADR/foreign issuer ที่ไม่มีงบรายไตรมาสใน SEC — โครงสร้าง JSON
+    เข้ากันได้กับ get_revenue_model (frontend ใช้ต่อได้ทันที) แต่ quarters เป็นราย 'ปีงบ' และ P/E
+    แปลงเป็นระดับ ADR (USD) โดยประมาณด้วยการ calibrate EPS ท้องถิ่นกับ EPS ที่ Yahoo รายงาน."""
+    by_fy = {r["fy"]: r for r in rows}
+
+    def yoy(cur, prev):
+        return (cur - prev) / abs(prev) if (cur is not None and prev) else None
+
+    quarters_full = []
+    for r in sorted(rows, key=lambda x: x["fy"]):
+        p = by_fy.get(r["fy"] - 1) or {}
+        quarters_full.append({
+            "period": r["end"], "label": f"FY{r['fy'] % 100:02d}", "fy": r["fy"],
+            "revenue": r["revenue"], "yoy_pct": yoy(r["revenue"], p.get("revenue")),
+            "net_income": r["net_income"], "profit_yoy_pct": yoy(r["net_income"], p.get("net_income")),
+            "ocf": r["ocf"], "ocf_yoy_pct": yoy(r["ocf"], p.get("ocf")), "fcf": r["fcf"],
+        })
+    quarters = [q for q in quarters_full if q["yoy_pct"] is not None]
+    if len(quarters) < 2:
+        raise ValueError("ข้อมูลงบรายปีไม่พอคำนวณการเติบโต (ต้องมีอย่างน้อย 2 ปีติดกัน)")
+
+    bars = await _price_bars(symbol, granularity)
+    price = bars[-1]["close"] if bars else None
+    bars_per_q = _BARS_PER_QUARTER[granularity]
+    is_adr = money_unit != "USD"
+
+    # ── P/E ระดับ ADR (USD) โดยประมาณ: calibrate EPS ท้องถิ่นล่าสุดกับ EPS (USD) ที่ Yahoo รายงาน ──
+    eps_rows = [r for r in rows if isinstance(r.get("eps"), (int, float))]
+    yahoo_eps_usd = None
+    try:
+        from app import fundamentals
+        snap = await fundamentals.fetch_yahoo_fundamentals(symbol)
+        yahoo_eps_usd = snap.get("eps")
+    except Exception:  # noqa: BLE001 — Yahoo ล่ม/บล็อก ก็ยังโชว์กราฟการเติบโตได้ (ไม่มี P/E)
+        yahoo_eps_usd = None
+
+    pe_series: list[dict] = []
+    pe_reference = None
+    pe_band = None
+    eps_usd_series: list[tuple[str, float]] = []
+    eps_approx = False
+    # ตัวคูณแปลง EPS (สกุลท้องถิ่น/ต่อหุ้นสามัญ) → EPS ระดับ ADR สกุล USD:
+    #   k = EPS(USD ที่ Yahoo รายงานระดับ ADR) ÷ EPS(ท้องถิ่น ปีล่าสุด)  — รวม FX + อัตราส่วน ADR ในตัวเดียว
+    # ถ้าหุ้นรายงาน USD อยู่แล้ว k≈1 (ไม่กระทบ). ถ้าเป็น ADR แต่ดึง Yahoo ไม่ได้ → งด P/E ไปเลย เพราะ
+    # เอาราคา USD ไปหารด้วย EPS สกุลท้องถิ่นจะได้ค่า P/E มั่ว (เช่น TWD) — ยอมไม่มี P/E ดีกว่าโชว์ผิด
+    latest_local_eps = eps_rows[-1]["eps"] if eps_rows else None
+    k = None
+    if eps_rows and price and latest_local_eps and latest_local_eps > 0:
+        if yahoo_eps_usd and yahoo_eps_usd > 0:
+            k = yahoo_eps_usd / latest_local_eps
+            eps_approx = abs(k - 1.0) > 1e-6      # ต่างจาก 1 = มีการแปลง FX/ADR → ติดป้าย 'ประมาณการ'
+        elif not is_adr:
+            k = 1.0                               # รายงาน USD อยู่แล้ว และไม่มี Yahoo ให้เทียบ
+    if k is not None:
+        eps_usd_series = [(r["end"], r["eps"] * k) for r in eps_rows
+                          if isinstance(r.get("eps"), (int, float))]
+        for w in bars:
+            wd = datetime.fromtimestamp(w["time"], tz=timezone.utc).date().isoformat()
+            eps_usd = next((v for d, v in reversed(eps_usd_series) if d <= wd and v > 0), None)
+            if eps_usd:
+                pe_series.append({"time": w["time"], "pe": round(w["close"] / eps_usd, 2)})
+        recent_pe = [p["pe"] for p in pe_series[-(bars_per_q * 8):]]
+        pe_band = sector_profile.median_band(recent_pe) if recent_pe else None
+        if pe_band:
+            pe_reference = {"median": round(pe_band["median"], 1),
+                            "low": round(pe_band["p25"], 1), "high": round(pe_band["p75"], 1),
+                            "label": f"{round(pe_band['median'])}x P/E (median, ~ช่วงหลัง"
+                                     + (" · ADR USD ประมาณการ)" if eps_approx else ")")}
+
+    # ── กล่องประเมินมูลค่าตาม sector (ใช้ SIC — เชื่อถือได้แม้งบเป็นสกุลต่างชาติ) ──
+    sic = None
+    if facts is not None:
+        try:
+            sic = (await edgar.get_submissions(symbol)).get("sic") or None
+        except Exception:  # noqa: BLE001
+            sic = None
+    fin_snapshot = _financials_snapshot(facts, money_unit) if facts is not None else {}
+    sector_info = sector_profile.classify_sector(sic, fin_snapshot)
+    profile_key = sector_info["profile"]
+    profile = sector_profile.get_profile(profile_key)
+    warnings = list(profile.get("warnings", []))
+
+    # ราคายุติธรรม = EPS(USD ระดับ ADR) ปีล่าสุด × ตัวคูณ P/E median — ตรงไปตรงมา เหมาะกับ ADR ที่ไม่มี
+    # เมตริกเฉพาะกลุ่มครบ (ธนาคาร/REIT ต่างชาติจะได้ P/E เป็นแนวทางกว้าง ๆ ติดป้ายว่าโดยประมาณ)
+    fair_value = None
+    if pe_band and eps_usd_series and price:
+        fair_value = _fair_from_band(eps_usd_series[-1][1], pe_band,
+                                     "P/E median (รายปี" + (" · ADR USD" if eps_approx else "") + ")", price)
+
+    ann_rev_series = [(r["end"], r["revenue"]) for r in rows if r.get("revenue") is not None]
+    growth_stats = _growth_stats(ann_rev_series, eps_usd_series, price)
+
+    cur = money_unit if money_unit != "USD" else "USD"
+    adr_note = (f"หุ้นต่างชาติ (ADR/foreign issuer) ยื่นงบเป็นราย 'ปี' (แบบ 20-F) ในสกุล {cur} — "
+                f"จึงแสดงการเติบโตรายปีแทนรายไตรมาส (บริษัทกลุ่มนี้ไม่ยื่นงบรายไตรมาสต่อ SEC). "
+                f"อัตราเติบโต YoY เป็นสัดส่วนจึงแม่นแม้ตัวเลขเป็นสกุล {cur}"
+                + ("; P/E เป็นระดับ ADR (USD) โดยประมาณ (สมมติ FX/อัตราส่วน ADR คงที่)" if eps_approx else "")) \
+        if is_adr else \
+        "หุ้นนี้มีงบรายปีแต่ไม่พอสร้างมุมมองรายไตรมาส — แสดงการเติบโตรายปีแทน"
+
+    verdict = await _generate_verdict(symbol, (facts or {}).get("entityName"), profile, profile_key,
+                                      [], fair_value, warnings) if include_ai else None
+
+    window = max(len(quarters) * bars_per_q, 60)
+    return {
+        "symbol": symbol,
+        "entity_name": (facts or {}).get("entityName"),
+        "granularity": granularity,
+        "period_type": "annual",
+        "is_adr": is_adr,
+        "reporting_currency": money_unit,
+        "adr_note": adr_note,
+        "data_source": source,
+        "quarters": quarters,
+        "price_candles": bars[-window:],
+        "pe_series": pe_series[-window:],
+        "pe_reference": pe_reference,
+        "fcf_annual": [],
+        "fcf_quarterly": [],
+        "pfcf_series": [],
+        "pfcf_reference": None,
+        "sic": sic,
+        "sector": sector_info["sector"],
+        "sector_label": profile["label"],
+        "sector_source": sector_info["source"],
+        "profile": {
+            "key": profile_key,
+            "label": profile["label"],
+            "primary": profile.get("primary"),
+            "disabled": profile.get("disabled", []),
+            "extra_metrics": profile.get("extra_metrics", []),
+        },
+        "warnings": warnings,
+        "extra_metrics": [],
+        "fair_value": fair_value,
+        "growth_stats": growth_stats,
+        "verdict": verdict,
+        "has_preliminary": False,
+        "disclaimer": adr_note + " — เพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำการลงทุน",
+    }
+
+
 async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: int = 40,
                             granularity: str = "weekly", include_ai: bool = False) -> dict:
     symbol = (symbol or "").strip().upper()
@@ -737,8 +963,17 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
     try:
         facts = await edgar.get_company_facts(symbol, force_refresh=refresh)
     except ValueError:
-        raise ValueError("โมเดลนี้ใช้งบรายไตรมาสจาก SEC EDGAR — รองรับเฉพาะหุ้นสหรัฐที่ยื่น SEC เท่านั้น "
-                          "(หุ้นไทย/ต่างประเทศยังไม่รองรับ)")
+        # ไม่มีงบใน SEC เลย (ADR บางตัว/หุ้นต่างชาติที่ไม่ยื่น SEC) — ลองสร้างโมเดลรายปีจาก Yahoo ก่อนยอมแพ้
+        try:
+            rows = await _fetch_yahoo_annual(symbol)
+        except Exception:  # noqa: BLE001
+            rows = []
+        if len(rows) >= 3:
+            money_unit = "USD"  # Yahoo timeseries ไม่บอกสกุลตรง ๆ — ถือว่าเป็นสกุลที่บริษัทยื่น (ป้ายเป็นกลาง)
+            return await _build_annual_model(symbol, granularity, include_ai,
+                                             facts=None, rows=rows, money_unit=money_unit, source="yahoo")
+        raise ValueError("โมเดลนี้ใช้งบจาก SEC EDGAR — ไม่พบงบของหุ้นตัวนี้ทั้งใน SEC และ Yahoo "
+                          "(อาจไม่ใช่หุ้นจดทะเบียน/ADR ที่มีข้อมูลสาธารณะ)")
 
     raw_revenue_meta = _synthesize_missing_quarter(
         _quarterly_with_fp(facts, _REVENUE_CONCEPTS, "USD"),
@@ -773,7 +1008,15 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
 
     dates = sorted(raw_revenue_meta.keys())
     if len(dates) < 5:
-        raise ValueError("ข้อมูลรายได้รายไตรมาสจาก SEC ไม่พอสำหรับคำนวณ YoY (ต้องการอย่างน้อย 5 ไตรมาส)")
+        # หุ้น ADR/foreign issuer (เช่น TSM, ASML, Toyota) ยื่น 20-F รายปีในสกุลท้องถิ่น (ifrs-full/us-gaap)
+        # ไม่ยื่นงบรายไตรมาสต่อ SEC — ตรวจหน่วยสกุลเงินจริงแล้วสร้าง "โมเดลรายปี" แทนการ error
+        money_unit = pick_reporting_unit(facts, _REVENUE_CONCEPTS)
+        eps_unit = pick_reporting_unit(facts, _EPS, per_share=True)
+        rows = _annual_rows_from_sec(facts, money_unit, eps_unit)
+        if len([r for r in rows if r.get("revenue") is not None]) >= 3:
+            return await _build_annual_model(symbol, granularity, include_ai,
+                                             facts=facts, rows=rows, money_unit=money_unit, source="sec")
+        raise ValueError("ข้อมูลรายได้จาก SEC ไม่พอสำหรับสร้างโมเดล (ต้องมีรายไตรมาส ≥5 หรือรายปี ≥3)")
 
     # จับคู่ YoY ด้วยไตรมาสบัญชีจริง (fp, fy-1) ไม่ใช่นับถอยหลัง 4 ตำแหน่งในลิสต์
     rev_by_key = _yoy_lookup(raw_revenue_meta)

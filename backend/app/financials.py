@@ -10,14 +10,19 @@ from __future__ import annotations
 
 from datetime import date
 
-# (key, label, [us-gaap concepts ตามลำดับ fallback])
+# (key, label, [concepts ตามลำดับ fallback]) — us-gaap ก่อน แล้วต่อด้วย ifrs-full สำหรับหุ้นต่างชาติ
+# (ADR) ที่ยื่น 20-F ด้วย taxonomy IFRS (เช่น TSM=TWD, ASML=EUR). _entries รวมทั้งสอง taxonomy ให้.
 _INCOME = [
     ("revenue", "รายได้ (Revenue)", ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
-                            "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax"]),
-    ("cost_of_revenue", "ต้นทุนขาย (Cost of Revenue)", ["CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfGoodsSold"]),
+                            "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax",
+                            "RevenueFromContractsWithCustomers", "Revenue"]),
+    ("cost_of_revenue", "ต้นทุนขาย (Cost of Revenue)", ["CostOfGoodsAndServicesSold", "CostOfRevenue",
+                            "CostOfGoodsSold", "CostOfSales"]),
     ("gross_profit", "กำไรขั้นต้น (Gross Profit)", ["GrossProfit"]),
-    ("operating_income", "กำไรจากการดำเนินงาน (Operating Income)", ["OperatingIncomeLoss"]),
-    ("net_income", "กำไรสุทธิ (Net Income)", ["NetIncomeLoss", "ProfitLoss"]),
+    ("operating_income", "กำไรจากการดำเนินงาน (Operating Income)", ["OperatingIncomeLoss",
+                            "ProfitLossFromOperatingActivities"]),
+    ("net_income", "กำไรสุทธิ (Net Income)", ["NetIncomeLoss", "ProfitLoss",
+                            "ProfitLossAttributableToOwnersOfParent"]),
     ("rnd", "ค่าวิจัยและพัฒนา (R&D)", ["ResearchAndDevelopmentExpense"]),
     ("sga", "ค่าใช้จ่ายขาย & บริหาร (SG&A)", ["SellingGeneralAndAdministrativeExpense"]),
     ("interest_expense", "ดอกเบี้ยจ่าย (Interest Expense)", ["InterestExpense", "InterestExpenseNonoperating"]),
@@ -34,24 +39,34 @@ _BALANCE = [
     ("current_liabilities", "หนี้สินหมุนเวียน (Current Liabilities)", ["LiabilitiesCurrent"]),
     ("short_term_debt", "หนี้ระยะสั้น (Short-term Debt)", ["DebtCurrent", "LongTermDebtCurrent", "ShortTermBorrowings"]),
     ("long_term_debt", "หนี้ระยะยาว (Long-term Debt)", ["LongTermDebtNoncurrent", "LongTermDebt"]),
-    ("total_equity", "ส่วนของผู้ถือหุ้น (Shareholders' Equity)", ["StockholdersEquity"]),
+    ("total_equity", "ส่วนของผู้ถือหุ้น (Shareholders' Equity)", ["StockholdersEquity",
+                            "EquityAttributableToOwnersOfParent", "Equity"]),
     ("retained_earnings", "กำไรสะสม (Retained Earnings)", ["RetainedEarningsAccumulatedDeficit"]),
     ("goodwill", "ค่าความนิยม (Goodwill)", ["Goodwill"]),
 ]
 _CASHFLOW = [
     ("operating_cash_flow", "เงินสดจากการดำเนินงาน (Operating Cash Flow)", ["NetCashProvidedByUsedInOperatingActivities",
-                                                      "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"]),
+                                                      "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+                                                      "CashFlowsFromUsedInOperatingActivities"]),
     ("capex", "ลงทุนในสินทรัพย์ (CapEx)", ["PaymentsToAcquirePropertyPlantAndEquipment",
-                                            "PaymentsToAcquireProductiveAssets"]),
+                                            "PaymentsToAcquireProductiveAssets",
+                                            "PurchaseOfPropertyPlantAndEquipment"]),
     ("investing_cash_flow", "เงินสดจากการลงทุน (Investing Cash Flow)", ["NetCashProvidedByUsedInInvestingActivities"]),
     ("financing_cash_flow", "เงินสดจากการจัดหาเงิน (Financing Cash Flow)", ["NetCashProvidedByUsedInFinancingActivities"]),
     ("dividends_paid", "เงินปันผลจ่าย (Dividends Paid)", ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends"]),
     ("buybacks", "ซื้อหุ้นคืน (Buybacks)", ["PaymentsForRepurchaseOfCommonStock"]),
 ]
-_EPS = ["EarningsPerShareDiluted", "EarningsPerShareBasic"]
+_EPS = ["EarningsPerShareDiluted", "EarningsPerShareBasic",
+        "DilutedEarningsLossPerShare", "BasicEarningsLossPerShare"]
 _SHARES = ["WeightedAverageNumberOfDilutedSharesOutstanding",
            "WeightedAverageNumberOfSharesOutstandingBasic",
-           "WeightedAverageNumberOfShareOutstandingBasicAndDiluted"]
+           "WeightedAverageNumberOfShareOutstandingBasicAndDiluted",
+           "WeightedAverageShares", "WeightedAverageSharesOutstanding"]
+
+# taxonomy ที่รองรับ: us-gaap (หุ้น US) + ifrs-full (ADR ต่างชาติที่ยื่น 20-F ด้วย IFRS)
+_TAXONOMIES = ("us-gaap", "ifrs-full")
+# ฟอร์มงบ "รายปี": 10-K (US), 20-F (foreign private issuer), 40-F (Canada MJDS)
+_ANNUAL_FORMS = ("10-K", "20-F", "40-F")
 
 
 def _days(start: str, end: str) -> int | None:
@@ -69,24 +84,62 @@ def _entries(facts: dict, concepts: list[str], unit: str) -> list[dict]:
     บริษัทมักเปลี่ยนแท็ก us-gaap ตามปี (เช่น Apple ใช้ SalesRevenueNet ก่อนปี 2019
     แล้วเปลี่ยนเป็น RevenueFromContractWithCustomer...). ถ้าเอาแค่แท็กแรกจะขาดปีเก่า ๆ
     จึง merge ทุกแท็ก โดยตัวเลือกแก้ทับ (dedup by fy/end) ให้แท็กลำดับต้นชนะเมื่อชนกัน.
+
+    รองรับทั้ง taxonomy us-gaap และ ifrs-full (หุ้น ADR ต่างชาติที่ยื่น 20-F ด้วย IFRS) — หุ้น US
+    ไม่มี node ifrs-full จึงได้ผลเหมือนเดิมทุกประการ. concept ลำดับต้นชนะ, us-gaap ชนะ ifrs-full
+    เมื่อ concept เดียวกัน (จึงวน concepts เป็นวงนอก, taxonomy เป็นวงใน).
     """
-    g = facts.get("facts", {}).get("us-gaap", {})
+    all_facts = facts.get("facts", {})
     merged: list[dict] = []
     for c in concepts:
-        node = g.get(c)
-        if node:
-            arr = node.get("units", {}).get(unit)
-            if arr:
-                merged.extend(arr)
+        for taxo in _TAXONOMIES:
+            node = all_facts.get(taxo, {}).get(c)
+            if node:
+                arr = node.get("units", {}).get(unit)
+                if arr:
+                    merged.extend(arr)
     return merged
+
+
+def pick_reporting_unit(facts: dict, concepts: list[str], per_share: bool = False) -> str:
+    """เดาหน่วยสกุลเงินหลักที่บริษัทใช้ยื่นงบสำหรับ concept กลุ่มนี้ (หุ้น US = USD เสมอ; ADR ต่างชาติ
+    อาจเป็น TWD/EUR/JPY/CNY). เลือกหน่วยที่มีจำนวน fact มากที่สุด. per_share=True เลือกหน่วยแบบ
+    'สกุล/หุ้น' (เช่น TWD/shares) สำหรับ EPS. คืน 'USD'/'USD/shares' เมื่อหาไม่เจอ."""
+    all_facts = facts.get("facts", {})
+    counts: dict[str, int] = {}
+    for c in concepts:
+        for taxo in _TAXONOMIES:
+            node = all_facts.get(taxo, {}).get(c)
+            if not node:
+                continue
+            for unit, arr in node.get("units", {}).items():
+                if ("/" in unit) != per_share:
+                    continue
+                counts[unit] = counts.get(unit, 0) + len(arr or [])
+    if not counts:
+        return "USD/shares" if per_share else "USD"
+    return max(counts, key=counts.get)
+
+
+def _is_annual_form(form: str) -> bool:
+    return form.startswith(_ANNUAL_FORMS)
+
+
+def _annual_fp_ok(form: str, fp) -> bool:
+    """10-K (US) ยึด fp='FY' เป๊ะเหมือนเดิม (ไม่เปลี่ยนพฤติกรรมหุ้น US). ฟอร์มต่างชาติ (20-F/40-F)
+    ยอมรับ fp='FY' หรือ None เพราะบางฉบับไม่ติดแท็ก fp — อาศัยตัวกรอง duration 300–400 วันคุมอีกชั้น."""
+    if form.startswith("10-K"):
+        return fp == "FY"
+    return fp in ("FY", None)
 
 
 def _annual_duration(entries: list[dict]) -> dict:
     out: dict[int, tuple[str, float]] = {}
     for e in entries:
-        if "start" not in e or str(e.get("form", "")).startswith("10-K") is False:
+        form = str(e.get("form", ""))
+        if "start" not in e or not _is_annual_form(form):
             continue
-        if e.get("fp") != "FY":
+        if not _annual_fp_ok(form, e.get("fp")):
             continue
         d = _days(e["start"], e["end"])
         if d is None or d < 300 or d > 400:
@@ -102,9 +155,10 @@ def _annual_duration(entries: list[dict]) -> dict:
 def _annual_instant(entries: list[dict]) -> dict:
     out: dict[int, tuple[str, float]] = {}
     for e in entries:
-        if "start" in e or not str(e.get("form", "")).startswith("10-K"):
+        form = str(e.get("form", ""))
+        if "start" in e or not _is_annual_form(form):
             continue
-        if e.get("fp") != "FY":
+        if not _annual_fp_ok(form, e.get("fp")):
             continue
         fy = e.get("fy")
         if fy is None:
