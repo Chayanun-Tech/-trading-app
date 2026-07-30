@@ -1860,7 +1860,7 @@ function dockDetailPanels() {
   const dock = $("detailDock");
   const tabs = document.querySelector(".tabs");
   if (!dock || !tabs || tabs.parentElement === dock) return;
-  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "historyPanel", "radarPanel", "analystPanel", "fundamentalsPanel", "ivPanel", "multibaggerPanel", "revenuePanel", "revenuescanPanel", "sp500histPanel", "autoPanel"];
+  const panelIds = ["reportPanel", "indicatorsPanel", "imagePanel", "strategyPanel", "businessPanel", "macroPanel", "historyPanel", "fundamentalsPanel", "buffettPanel", "revenuePanel", "ivPanel", "analystPanel", "thesisPanel", "multibaggerPanel", "radarPanel", "revenuescanPanel", "sp500histPanel", "autoPanel"];
   dock.appendChild(tabs);
   panelIds.forEach(id => {
     const panel = $(id);
