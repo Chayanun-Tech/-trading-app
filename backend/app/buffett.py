@@ -545,6 +545,13 @@ _AI_SYSTEMS = {
         "munger_case:[str (เหตุผลฝ่ายระวัง 2-4 ข้อ)], key_swing_factor(ปัจจัยชี้ขาด), "
         "verdict:'น่าลงทุน'|'รอจังหวะ/ราคา'|'ผ่าน', reasoning(1-2 ประโยคไทย)}. อ้างตัวเลขจริง ไม่ให้คำแนะนำเด็ดขาด วิเคราะห์เชิงการศึกษา."
     ),
+    "candor": (
+        "คุณคือนักวิเคราะห์ที่ประเมิน 'ความตรงไปตรงมาของผู้บริหาร' แบบที่ Buffett ให้ความสำคัญ — อ่านส่วน MD&A "
+        "(บทวิเคราะห์ของฝ่ายบริหาร) จากรายงานประจำปี. ดูว่าผู้บริหารพูดถึงปัญหา/ความผิดพลาดอย่างตรงไปตรงมาไหม, "
+        "ภาษาการจัดสรรทุนเป็นอย่างไร, มีการโทษปัจจัยภายนอกเกินจริง/โม้เกินไปหรือไม่. ตอบ JSON เท่านั้น: "
+        "{candor:'high'|'medium'|'low', capital_allocation_tone(สรุปท่าทีการใช้เงินทุน), "
+        "positives:[str], concerns:[str (สัญญาณภาษาที่ควรระวัง)], summary(1-2 ประโยคไทย)}. อ้างข้อความจริง ห้ามแต่ง."
+    ),
 }
 
 
@@ -583,14 +590,18 @@ async def ai_analysis(symbol: str, mode: str, sc: dict) -> dict:
 
     summary = _summarize_for_ai(sc)
     ctx_txt = ""
-    if mode in ("moat", "premortem"):
+    if mode in ("moat", "premortem", "candor"):
         try:
             ctx = await edgar.get_10k_context(symbol) or {}
-            biz = (ctx.get("business") or "")[:4000]
-            risk = (ctx.get("risk_factors") or "")[:3000]
-            ctx_txt = f"\n\n[คำอธิบายธุรกิจจาก 10-K/20-F]\n{biz}"
-            if mode == "premortem":
-                ctx_txt += f"\n\n[ปัจจัยเสี่ยง]\n{risk}"
+            if mode == "candor":
+                mda = (ctx.get("mda") or "")[:7000]
+                ctx_txt = f"\n\n[MD&A — บทวิเคราะห์ของฝ่ายบริหารจากรายงานประจำปี]\n{mda}" if mda \
+                    else "\n\n[ไม่พบส่วน MD&A ในเอกสาร — ประเมินจากตัวเลขเท่าที่มี]"
+            else:
+                biz = (ctx.get("business") or "")[:4000]
+                ctx_txt = f"\n\n[คำอธิบายธุรกิจจาก 10-K/20-F]\n{biz}"
+                if mode == "premortem":
+                    ctx_txt += f"\n\n[ปัจจัยเสี่ยง]\n{(ctx.get('risk_factors') or '')[:3000]}"
         except Exception:  # noqa: BLE001
             ctx_txt = ""
     try:

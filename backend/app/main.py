@@ -34,6 +34,8 @@ from app import revenue_scanner
 from app import industry_peers
 from app import buffett
 from app import thesis_journal
+from app import insider
+from app import superinvestors
 from app import value_scanner
 from app import ema_scanner
 from app import lynch_scanner
@@ -769,6 +771,27 @@ async def buffett_ai_route(symbol: str = Query(..., description="สัญลั
         raise HTTPException(404, str(exc))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"AI วิเคราะห์ Buffett ไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/insider")
+async def insider_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น US เช่น OXY"),
+                        months: int = Query(12, description="ย้อนหลังกี่เดือน")):
+    """การซื้อ-ขายหุ้นของผู้บริหาร (SEC Form 4) — ซื้อ open-market = สัญญาณเชื่อมั่น."""
+    try:
+        return await insider.get_insider_activity(symbol, months=months)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูล insider ไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/superinvestors")
+async def superinvestors_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น US เช่น AAPL")):
+    """เซียน VI ระดับตำนาน (Buffett/Ackman/Klarman/Li Lu ฯลฯ) ถือหุ้นตัวนี้ไหม (จาก 13F ล่าสุด)."""
+    try:
+        return await superinvestors.holders_of(symbol)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูล 13F ไม่สำเร็จ: {exc}")
 
 
 @app.get("/api/thesis/list")

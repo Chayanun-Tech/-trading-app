@@ -3419,7 +3419,14 @@ function renderBuffett(d) {
       <button onclick="loadBuffettAI('debate')" title="Buffett ปะทะ Munger ถกหุ้นตัวนี้">⚖️ Buffett×Munger</button>
       <button onclick="saveThesisFromBuffett()" title="บันทึกเป็นวิทยานิพนธ์ในแท็บ 📓" style="margin-left:auto;">💾 บันทึกเป็นวิทยานิพนธ์</button>
     </div>
+    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:center;">
+      <span class="tiny" style="color:#7d8b99;">🏛️ ข้อมูลลึกจาก SEC:</span>
+      <button onclick="loadInsiderData()" title="ผู้บริหารซื้อ-ขายหุ้นตัวเอง (Form 4)">👤 ผู้บริหารซื้อ-ขาย</button>
+      <button onclick="loadSuperinvestors()" title="เซียน VI ระดับตำนานถือหุ้นนี้ไหม (13F)">🏆 เซียน VI ถือไหม</button>
+      <button onclick="loadBuffettAI('candor')" title="ผู้บริหารพูดตรงไหม (วิเคราะห์ MD&A ด้วย AI)">🎙️ ผู้บริหารพูดตรงไหม</button>
+    </div>
     <div id="buffettAI" style="margin-top:8px;"></div>
+    <div id="buffettExtra" style="margin-top:8px;"></div>
     <div class="tiny" style="margin-top:8px; color:#5f6d7a;">${escapeHtml(d.disclaimer||"")}</div>`;
 }
 
@@ -3463,8 +3470,53 @@ function renderBuffettAI(mode, d) {
       </div>
       <div class="tiny" style="margin-top:6px;">🎯 ปัจจัยชี้ขาด: ${escapeHtml(d.key_swing_factor||"")}</div>
       <div style="margin-top:4px;">สรุป: <b style="color:${vc};">${escapeHtml(d.verdict||"")}</b> — <span class="tiny">${escapeHtml(d.reasoning||"")}</span></div>`);
+  } else if (mode === "candor") {
+    const cc = d.candor==="high"?"#4caf7d":d.candor==="low"?"#e0785f":"#e2b93b";
+    html = box("🎙️ ผู้บริหารพูดตรงไหม (จาก MD&A)", "#7fa8d0",
+      `<div class="tiny">ความตรงไปตรงมา: <b style="color:${cc};">${escapeHtml(d.candor||"—")}</b></div>
+      <div class="tiny" style="color:#a9c4dd; margin:4px 0;">ท่าทีการจัดสรรทุน: ${escapeHtml(d.capital_allocation_tone||"")}</div>
+      ${d.positives&&d.positives.length?`<div class="tiny" style="color:#7fddb0;"><b>จุดบวก:</b><ul style="margin:2px 0; padding-left:16px;">${li(d.positives)}</ul></div>`:""}
+      ${d.concerns&&d.concerns.length?`<div class="tiny" style="color:#c9b26a;"><b>ภาษาที่ควรระวัง:</b><ul style="margin:2px 0; padding-left:16px;">${li(d.concerns)}</ul></div>`:""}
+      <div class="tiny" style="margin-top:4px;">${escapeHtml(d.summary||"")}</div>
+      <div class="tiny" style="margin-top:4px; color:#5f6d7a;">💡 นี่คือการวิเคราะห์คำพูดผู้บริหารจากรายงานประจำปี (MD&A) — transcript การประชุมจริงเสียบ API key เพิ่มได้ทีหลัง</div>`);
   }
   $("buffettAI").innerHTML = html;
+}
+
+async function loadInsiderData() {
+  const el = $("buffettExtra");
+  const sym = buffettData && buffettData.symbol; if (!sym) return;
+  el.innerHTML = `<div class="note">⏳ กำลังดึง Form 4 (ผู้บริหารซื้อ-ขาย) ของ ${escapeHtml(sym)}...</div>`;
+  try {
+    const d = await (await fetch(`${API}/api/insider?symbol=${encodeURIComponent(sym)}`)).json();
+    const rows = (d.recent||[]).slice(0,10).map(r => `<tr><td style="padding:2px 6px;">${escapeHtml(r.date||"")}</td>
+        <td style="padding:2px 6px;">${escapeHtml((r.owner||"").slice(0,22))}<div class="tiny" style="color:#7d8b99;">${escapeHtml((r.role||"").slice(0,20))}</div></td>
+        <td style="padding:2px 6px; color:${r.type&&r.type.startsWith('ซื้อ')?'#4caf7d':'#e0785f'};">${escapeHtml(r.type||"")}</td>
+        <td style="padding:2px 6px; text-align:right;">${(r.shares||0).toLocaleString()}</td>
+        <td style="padding:2px 6px; text-align:right;">${r.price?'$'+r.price:'—'}</td></tr>`).join("");
+    el.innerHTML = `<div style="border:1px solid #33404d; border-radius:10px; padding:10px 12px; background:rgba(255,255,255,0.02);">
+      <div><b>👤 ผู้บริหารซื้อ-ขาย (Form 4, ${d.months} เดือน)</b> — <span style="font-weight:700;">${escapeHtml(d.signal||"")}</span></div>
+      <div class="tiny" style="color:#a9c4dd; margin:4px 0;">ซื้อ open-market ${(d.buy_shares||0).toLocaleString()} หุ้น (${d.num_buyers} คน) · ขาย ${(d.sell_shares||0).toLocaleString()} หุ้น (${d.num_sellers} คน)</div>
+      ${rows?`<div style="overflow-x:auto;"><table style="width:100%; font-size:12px; border-collapse:collapse;"><thead><tr style="color:#7d8b99;"><th style="text-align:left; padding:2px 6px;">วันที่</th><th style="text-align:left; padding:2px 6px;">ผู้บริหาร</th><th style="text-align:left; padding:2px 6px;">รายการ</th><th style="text-align:right; padding:2px 6px;">หุ้น</th><th style="text-align:right; padding:2px 6px;">ราคา</th></tr></thead><tbody>${rows}</tbody></table></div>`:`<div class="tiny" style="color:#7d8b99;">ไม่มีรายการ open-market</div>`}
+      <div class="tiny" style="margin-top:4px; color:#5f6d7a;">${escapeHtml(d.note||"")}</div></div>`;
+  } catch (e) { el.innerHTML = `<div class="note" style="color:#e0785f;">❌ ${escapeHtml(e.message||String(e))}</div>`; }
+}
+
+async function loadSuperinvestors() {
+  const el = $("buffettExtra");
+  const sym = buffettData && buffettData.symbol; if (!sym) return;
+  el.innerHTML = `<div class="note">⏳ กำลังตรวจ 13F ของเซียน VI สำหรับ ${escapeHtml(sym)}...</div>`;
+  try {
+    const d = await (await fetch(`${API}/api/superinvestors?symbol=${encodeURIComponent(sym)}`)).json();
+    const rows = (d.holders||[]).map(h => `<div style="display:flex; justify-content:space-between; gap:8px; padding:3px 0; border-bottom:1px solid #1a2430;">
+        <span>🏆 ${escapeHtml(h.investor||"")}</span>
+        <span class="tiny" style="color:#a9c4dd; white-space:nowrap;">$${((h.value||0)/1e9).toFixed(2)}B${h.shares?` · ${(h.shares/1e6).toFixed(1)}M หุ้น`:""} <span style="color:#7d8b99;">(${escapeHtml(h.as_of||"")})</span></span>
+      </div>`).join("");
+    el.innerHTML = `<div style="border:1px solid #33404d; border-radius:10px; padding:10px 12px; background:rgba(255,255,255,0.02);">
+      <div><b>🏛️ เซียน VI ถือหุ้นนี้</b> — ${escapeHtml(d.signal||"")} <span class="tiny" style="color:#7d8b99;">(ตรวจ ${d.num_tracked} คน)</span></div>
+      <div style="margin-top:6px;">${rows || `<div class="tiny" style="color:#7d8b99;">ไม่มีเซียนที่ติดตามถือหุ้นนี้ในไตรมาสล่าสุด</div>`}</div>
+      <div class="tiny" style="margin-top:4px; color:#5f6d7a;">${escapeHtml(d.note||"")}</div></div>`;
+  } catch (e) { el.innerHTML = `<div class="note" style="color:#e0785f;">❌ ${escapeHtml(e.message||String(e))}</div>`; }
 }
 
 function saveThesisFromBuffett() {
@@ -3561,6 +3613,14 @@ function showTab(tab) {
   if (tab === "sp500hist") initSp500Hist();
   if (tab === "history") maybeAutoHistory();
   if (tab === "thesis") loadTheses();
+  // เปิดแท็บ Buffett แล้วให้คะแนนหุ้นที่กำลังดูอยู่ทันที (ไม่ต้องพิมพ์ซ้ำ) — เหมือนแท็บวิเคราะห์อื่น ๆ
+  if (tab === "buffett") {
+    const s = (typeof currentSymbol === "string" && currentSymbol) ? currentSymbol.toUpperCase() : "";
+    if (s && (!buffettData || buffettData.symbol !== s)) {
+      if ($("buffettSymbol")) $("buffettSymbol").value = s;
+      loadBuffett(s);
+    }
+  }
 }
 
 function loading(msg) {
