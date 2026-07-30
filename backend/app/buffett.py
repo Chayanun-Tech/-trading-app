@@ -521,3 +521,80 @@ def scorecard(facts: dict, *, price: float | None = None, shares: float | None =
         "disclaimer": "คะแนนคำนวณจากงบ SEC จริง (auditable) เพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน — "
                       "ตัวเลขเชิงประมาณ (WACC/maintenance capex/reverse DCF) อิงสมมติฐานที่ระบุไว้",
     }
+
+
+# ── ชั้น AI: จำแนกคูเมือง / Pre-mortem (Munger Invert) / Buffett×Munger Debate ──────
+_AI_SYSTEMS = {
+    "moat": (
+        "คุณคือนักวิเคราะห์ VI จำแนก 'คูเมืองเศรษฐกิจ' (economic moat) ตามกรอบ Morningstar 5 แหล่ง: "
+        "intangibles (แบรนด์/สิทธิบัตร/ใบอนุญาต), switching_costs (ต้นทุนย้ายค่าย), network_effect, "
+        "cost_advantage (ต้นทุนต่ำโครงสร้าง), efficient_scale. วิเคราะห์จากคำอธิบายธุรกิจ + ตัวเลข ROIC ที่ให้. "
+        "ตอบ JSON เท่านั้น: {sources:[{source, strength:'strong'|'moderate'|'weak'|'none', evidence(อ้างข้อเท็จจริง)}], "
+        "durability:'high'|'medium'|'low', width:'wide'|'narrow'|'none', summary(1-2 ประโยคไทย)}. "
+        "ยึดหลักฐาน ห้ามแต่ง ถ้าไม่มีหลักฐานให้ strength='none'."
+    ),
+    "premortem": (
+        "คุณคือ Charlie Munger ใช้หลัก 'Invert, always invert'. สมมติว่าอีก 5-10 ปีการลงทุนนี้ล้มเหลว/มูลค่าลดฮวบ "
+        "แล้วไล่ย้อนว่าเกิดจากอะไรได้บ้าง (จากความเสี่ยง+ตัวเลขที่ให้). ตอบ JSON เท่านั้น: "
+        "{failure_modes:[{scenario, likelihood:'high'|'medium'|'low', early_warning(สัญญาณเตือนล่วงหน้าที่ควรจับตา)}], "
+        "red_flags:[str], summary(1-2 ประโยคไทย)}. เน้นเหตุที่เป็นจริงเชิงธุรกิจ/การเงิน ห้ามแต่ง."
+    ),
+    "debate": (
+        "จำลองบทสนทนาตัดสินใจลงทุนระหว่าง Warren Buffett (ฝ่ายเห็นโอกาส) กับ Charlie Munger (ฝ่ายระวังความเสี่ยง) "
+        "จากคะแนน/ตัวเลขที่ให้. ตอบ JSON เท่านั้น: {buffett_case:[str (เหตุผลฝ่ายซื้อ 2-4 ข้อ)], "
+        "munger_case:[str (เหตุผลฝ่ายระวัง 2-4 ข้อ)], key_swing_factor(ปัจจัยชี้ขาด), "
+        "verdict:'น่าลงทุน'|'รอจังหวะ/ราคา'|'ผ่าน', reasoning(1-2 ประโยคไทย)}. อ้างตัวเลขจริง ไม่ให้คำแนะนำเด็ดขาด วิเคราะห์เชิงการศึกษา."
+    ),
+}
+
+
+def _summarize_for_ai(sc: dict) -> str:
+    P = sc.get("pillars", {})
+    mo = (P.get("moat") or {}).get("detail") or {}
+    q = (P.get("quality") or {}).get("detail") or {}
+    v = (P.get("value") or {}).get("detail") or {}
+    pio = (q.get("piotroski") or {})
+    alt = (q.get("altman") or {})
+    ben = (q.get("beneish") or {})
+    iv = (v.get("intrinsic") or {})
+    rd = (v.get("reverse_dcf") or {})
+    return (
+        f"บริษัท: {sc.get('entity_name')} | คะแนนรวม {sc.get('total_score')}/100 ({sc.get('verdict')})\n"
+        f"คูเมือง {P.get('moat',{}).get('score')}/25: {mo.get('metric','ROIC')} ล่าสุด "
+        f"{mo.get('roic_latest')}, ยืน>15% {mo.get('years_roic_above_15')} ปี, ROIC-WACC {mo.get('roic_minus_wacc')}, "
+        f"ความนิ่งมาร์จิน {mo.get('gross_margin_stability')}, width={mo.get('width')}\n"
+        f"คุณภาพ {P.get('quality',{}).get('score')}/25: Piotroski {pio.get('score')}/9, "
+        f"Altman {alt.get('z')} ({alt.get('zone')}), Beneish {ben.get('m')} ({ben.get('verdict')})\n"
+        f"มูลค่า {P.get('value',{}).get('score')}/25: owner earnings, margin of safety {iv.get('margin_of_safety')}, "
+        f"ตลาดคาดโต {rd.get('implied_growth')}, รายได้เคยโต {v.get('revenue_cagr')}\n"
+        f"การจัดสรรทุน {P.get('capital_allocation',{}).get('score')}/25"
+    )
+
+
+async def ai_analysis(symbol: str, mode: str, sc: dict) -> dict:
+    """ต่อยอด scorecard ด้วย AI: จำแนกคูเมือง / pre-mortem / debate. ต้องตั้งค่า LLM ก่อน.
+    reuse ai_analyst._run_llm (มี fallback provider) + edgar.get_10k_context (บริบทธุรกิจ/ความเสี่ยง)."""
+    if mode not in _AI_SYSTEMS:
+        raise ValueError("mode ต้องเป็น moat, premortem หรือ debate")
+    from app.config import get_settings
+    if not get_settings().llm_enabled():
+        return {"error": "ยังไม่ได้ตั้งค่า AI (LLM) — เปิดใช้ได้ที่การตั้งค่า/คีย์ Gemini"}
+    from app import ai_analyst, edgar
+
+    summary = _summarize_for_ai(sc)
+    ctx_txt = ""
+    if mode in ("moat", "premortem"):
+        try:
+            ctx = await edgar.get_10k_context(symbol) or {}
+            biz = (ctx.get("business") or "")[:4000]
+            risk = (ctx.get("risk_factors") or "")[:3000]
+            ctx_txt = f"\n\n[คำอธิบายธุรกิจจาก 10-K/20-F]\n{biz}"
+            if mode == "premortem":
+                ctx_txt += f"\n\n[ปัจจัยเสี่ยง]\n{risk}"
+        except Exception:  # noqa: BLE001
+            ctx_txt = ""
+    try:
+        result = await ai_analyst._run_llm(_AI_SYSTEMS[mode], summary + ctx_txt)
+        return result if isinstance(result, dict) else {"error": "AI ตอบไม่เป็นรูปแบบที่ใช้ได้"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"AI วิเคราะห์ไม่สำเร็จ: {exc}"}

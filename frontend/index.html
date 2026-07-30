@@ -525,6 +525,7 @@
       <button class="tab" id="tabRevenue" onclick="showTab('revenue')" title="การเติบโต + P/E + เทียบอุตสาหกรรม">6️⃣ 📈 โมเดลรายได้</button>
       <button class="tab" id="tabIv" onclick="showTab('iv')" title="ประเมินมูลค่า (DCF/Graham)">7️⃣ 💰 มูลค่าIV</button>
       <button class="tab" id="tabAnalyst" onclick="showTab('analyst')" title="ให้ AI สรุป/ถกแย้ง แล้วตัดสินใจ">8️⃣ 🤝 ผู้ช่วย AI</button>
+      <button class="tab" id="tabThesis" onclick="showTab('thesis')" title="บันทึกวิทยานิพนธ์การลงทุน + เตือนเมื่อราคาเข้าเขตซื้อ">9️⃣ 📓 บันทึกการลงทุน</button>
       <span class="tab-sep" title="เครื่องมือค้นหา/สแกนหุ้นทั้งตลาด">▸ ค้นหา</span>
       <button class="tab" id="tabRevenuescan" onclick="showTab('revenuescan')">🔍 สแกน S&P 500</button>
       <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">🚀 หุ้นเล็กเด้งไกล</button>
@@ -909,6 +910,25 @@
       </div>
       <div class="note" style="margin-top:6px;">ให้คะแนนแบบ Warren Buffett จาก <b>งบ SEC จริง (ตรวจย้อนได้)</b> 4 เสา: <b>คูเมือง</b> (Moat/ROIC ยืนระยะ) · <b>คุณภาพ&ความปลอดภัย</b> (Piotroski F / Altman Z / Beneish M จับแต่งบัญชี) · <b>มูลค่า</b> (Owner Earnings / Reverse DCF — "ตลาดคิดว่าจะโตกี่ %") · <b>การจัดสรรทุน</b> — เลื่อนเมาส์บนแต่ละคะแนนเพื่อดูคำอธิบาย · เพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="buffettResult" style="margin-top:12px;"><div class="note">ใส่สัญลักษณ์หุ้น US แล้วกด "ให้คะแนน Buffett"</div></div>
+    </div>
+
+    <div id="thesisPanel" class="panel-body hidden">
+      <div style="border:1px solid #33404d; border-radius:10px; padding:10px 12px; background:rgba(255,255,255,0.02);">
+        <div style="font-weight:700; margin-bottom:6px;">📓 บันทึกวิทยานิพนธ์การลงทุน</div>
+        <div class="tiny" style="color:#7d8b99; margin-bottom:8px;">Buffett/Munger: จดเหตุผลที่ซื้อไว้ แล้ว "ขายเมื่อเหตุผลเปลี่ยน ไม่ใช่เมื่อราคาตก" — ตั้งราคาเป้าหมาย แล้วระบบจะเตือนเมื่อราคาลงมาถึงเขตซื้อ</div>
+        <div class="grid3" style="gap:8px;">
+          <div class="field"><label>หุ้น</label><input id="thSymbol" placeholder="AAPL" /></div>
+          <div class="field"><label>ชื่อบริษัท</label><input id="thEntity" placeholder="Apple Inc." /></div>
+          <div class="field"><label>ราคาเป้าหมาย (เขตซื้อ) $</label><input id="thTarget" type="number" step="0.01" placeholder="180" /></div>
+          <div class="field"><label>ความเชื่อมั่น (1–5)</label><input id="thConviction" type="number" min="1" max="5" step="1" placeholder="4" /></div>
+          <div class="field"><label>Buffett Score</label><input id="thScore" type="number" placeholder="75" /></div>
+          <div class="field"><label>คูเมือง (สรุป)</label><input id="thMoat" placeholder="แบรนด์+ecosystem" /></div>
+        </div>
+        <div class="field" style="margin-top:6px;"><label>เหตุผลลงทุน / วิทยานิพนธ์</label><textarea id="thNote" rows="2" placeholder="ทำไมถึงเป็นธุรกิจดี ราคานี้น่าสนใจเพราะอะไร ความเสี่ยงที่รับได้..."></textarea></div>
+        <button onclick="addThesis()" style="margin-top:6px;">💾 บันทึกวิทยานิพนธ์</button>
+        <span id="thMsg" class="tiny" style="margin-left:8px;"></span>
+      </div>
+      <div id="thesisList" style="margin-top:12px;"><div class="note">ยังไม่มีวิทยานิพนธ์ที่บันทึกไว้</div></div>
     </div>
 
     <div id="revenuePanel" class="panel-body hidden">
@@ -3314,8 +3334,10 @@ function bPillarCard(title, icon, p, tip, bodyHtml) {
     </div>`;
 }
 
+let buffettData = null;
 function renderBuffett(d) {
   const el = $("buffettResult");
+  buffettData = d;
   const P = d.pillars || {};
   const tot = d.total_score, totCol = tot>=75?"#4caf7d":tot>=55?"#e2b93b":tot>=40?"#e08a6a":"#e0785f";
   const kv = (label, val, tip) => `<div title="${escapeHtml(tip||"")}" style="${tip?'cursor:help;':''}"><span class="tiny" style="color:#7d8b99;${tip?'border-bottom:1px dotted #55636f;':''}">${escapeHtml(label)}</span><br><b>${val}</b></div>`;
@@ -3390,11 +3412,146 @@ function renderBuffett(d) {
       ${bPillarCard("การจัดสรรทุน", "🎯", P.capital_allocation, "ผู้บริหารใช้เงินสดเป็น — ลงทุน/ซื้อคืน/ปันผล ไม่ทำผู้ถือหุ้นเจือจาง", cBody)}
     </div>
     ${compHtml}
+    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; align-items:center;">
+      <span class="tiny" style="color:#7d8b99;">🤖 ต่อยอดด้วย AI:</span>
+      <button onclick="loadBuffettAI('moat')" title="ให้ AI จำแนก 5 แหล่งคูเมืองจาก 10-K">🏰 วิเคราะห์คูเมือง</button>
+      <button onclick="loadBuffettAI('premortem')" title="Munger Invert — บริษัทนี้จะพังได้อย่างไร">🔻 Pre-mortem</button>
+      <button onclick="loadBuffettAI('debate')" title="Buffett ปะทะ Munger ถกหุ้นตัวนี้">⚖️ Buffett×Munger</button>
+      <button onclick="saveThesisFromBuffett()" title="บันทึกเป็นวิทยานิพนธ์ในแท็บ 📓" style="margin-left:auto;">💾 บันทึกเป็นวิทยานิพนธ์</button>
+    </div>
+    <div id="buffettAI" style="margin-top:8px;"></div>
     <div class="tiny" style="margin-top:8px; color:#5f6d7a;">${escapeHtml(d.disclaimer||"")}</div>`;
 }
 
+async function loadBuffettAI(mode) {
+  const el = $("buffettAI");
+  const sym = buffettData && buffettData.symbol;
+  if (!sym) return;
+  const label = {moat:"วิเคราะห์คูเมือง", premortem:"Pre-mortem (Munger Invert)", debate:"Buffett×Munger Debate"}[mode];
+  el.innerHTML = `<div class="note">⏳ AI กำลัง${escapeHtml(label)} ${escapeHtml(sym)}... (อาจใช้เวลาสักครู่)</div>`;
+  try {
+    const res = await fetch(`${API}/api/buffett/ai?symbol=${encodeURIComponent(sym)}&mode=${mode}`);
+    const d = await res.json();
+    if (!res.ok || d.error) throw new Error(d.error || d.detail || res.statusText);
+    renderBuffettAI(mode, d);
+  } catch (e) {
+    el.innerHTML = `<div class="note" style="color:#e0785f;">❌ ${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function renderBuffettAI(mode, d) {
+  const li = arr => (arr||[]).map(x => `<li class="tiny" style="margin:2px 0;">${escapeHtml(typeof x==="string"?x:JSON.stringify(x))}</li>`).join("");
+  const box = (title, col, body) => `<div style="border:1px solid ${col}55; border-radius:10px; padding:10px 12px; margin-top:8px; background:${col}11;">
+      <div style="font-weight:700; color:${col}; margin-bottom:4px;">${title}</div>${body}</div>`;
+  let html = "";
+  if (mode === "moat") {
+    const srcCol = s => s==="strong"?"#4caf7d":s==="moderate"?"#e2b93b":s==="weak"?"#e08a6a":"#7d8b99";
+    const srcTh = {intangibles:"แบรนด์/สิทธิบัตร", switching_costs:"ต้นทุนย้ายค่าย", network_effect:"เครือข่าย", cost_advantage:"ต้นทุนต่ำ", efficient_scale:"สเกลคุ้มตัว"};
+    const rows = (d.sources||[]).map(s => `<div style="margin:4px 0;"><b style="color:${srcCol(s.strength)};">${escapeHtml(srcTh[s.source]||s.source)} — ${escapeHtml(s.strength||"")}</b><div class="tiny" style="color:#a9c4dd;">${escapeHtml(s.evidence||"")}</div></div>`).join("");
+    html = box("🏰 คูเมืองเศรษฐกิจ (AI จาก 10-K)", "#7fa8d0",
+      `<div class="tiny" style="color:#a9c4dd; margin-bottom:6px;">ความกว้าง: <b>${escapeHtml(d.width||"—")}</b> · ความทน: <b>${escapeHtml(d.durability||"—")}</b></div>${rows}<div class="tiny" style="margin-top:6px;">${escapeHtml(d.summary||"")}</div>`);
+  } else if (mode === "premortem") {
+    const fm = (d.failure_modes||[]).map(f => `<div style="margin:4px 0;"><b class="tiny" style="color:${f.likelihood==='high'?'#e0785f':f.likelihood==='medium'?'#e2b93b':'#7d8b99'};">⚠️ ${escapeHtml(f.scenario||"")} (${escapeHtml(f.likelihood||"")})</b><div class="tiny" style="color:#a9c4dd;">สัญญาณเตือน: ${escapeHtml(f.early_warning||"")}</div></div>`).join("");
+    html = box("🔻 Pre-mortem — บริษัทนี้จะพังได้อย่างไร (Munger Invert)", "#e08a6a",
+      `${fm}${d.red_flags&&d.red_flags.length?`<div class="tiny" style="margin-top:6px; color:#c9b26a;"><b>ธงแดง:</b><ul style="margin:2px 0; padding-left:16px;">${li(d.red_flags)}</ul></div>`:""}<div class="tiny" style="margin-top:6px;">${escapeHtml(d.summary||"")}</div>`);
+  } else if (mode === "debate") {
+    const vc = d.verdict==="น่าลงทุน"?"#4caf7d":d.verdict==="ผ่าน"?"#e0785f":"#e2b93b";
+    html = box("⚖️ Buffett × Munger Debate", "#a9c4dd",
+      `<div class="grid2" style="gap:8px;">
+        <div><div class="tiny" style="color:#4caf7d;"><b>🟢 Buffett (ฝ่ายซื้อ)</b></div><ul style="margin:2px 0; padding-left:16px;">${li(d.buffett_case)}</ul></div>
+        <div><div class="tiny" style="color:#e08a6a;"><b>🟠 Munger (ฝ่ายระวัง)</b></div><ul style="margin:2px 0; padding-left:16px;">${li(d.munger_case)}</ul></div>
+      </div>
+      <div class="tiny" style="margin-top:6px;">🎯 ปัจจัยชี้ขาด: ${escapeHtml(d.key_swing_factor||"")}</div>
+      <div style="margin-top:4px;">สรุป: <b style="color:${vc};">${escapeHtml(d.verdict||"")}</b> — <span class="tiny">${escapeHtml(d.reasoning||"")}</span></div>`);
+  }
+  $("buffettAI").innerHTML = html;
+}
+
+function saveThesisFromBuffett() {
+  const d = buffettData;
+  if (!d) return;
+  showTab("thesis");
+  const set = (id, v) => { const e = $(id); if (e) e.value = v; };
+  set("thSymbol", d.symbol || "");
+  set("thEntity", d.entity_name || "");
+  set("thScore", d.total_score != null ? d.total_score : "");
+  if (d.price) set("thTarget", "");
+  const mo = (d.pillars && d.pillars.moat && d.pillars.moat.detail) || {};
+  set("thMoat", `${mo.width || ""} (${mo.metric||"ROIC"} ${mo.roic_latest!=null?(mo.roic_latest*100).toFixed(0)+"%":""})`);
+  const note = $("thNote"); if (note && !note.value) note.value = d.verdict || "";
+  const conv = $("thConviction"); if (conv && !conv.value) conv.value = d.total_score>=75?"4":d.total_score>=55?"3":"2";
+}
+
+async function addThesis() {
+  const msg = $("thMsg");
+  const payload = {
+    symbol: ($("thSymbol").value||"").trim().toUpperCase(),
+    entity_name: $("thEntity").value||"",
+    target_price: parseFloat($("thTarget").value)||null,
+    conviction: parseFloat($("thConviction").value)||null,
+    buffett_score: parseFloat($("thScore").value)||null,
+    moat_summary: $("thMoat").value||"",
+    reasons: $("thNote").value||"",
+  };
+  if (!payload.symbol) { msg.innerHTML = `<span style="color:#e0785f;">ใส่สัญลักษณ์หุ้นก่อน</span>`; return; }
+  msg.innerHTML = `<span style="color:#e2b93b;">กำลังบันทึก...</span>`;
+  try {
+    const res = await fetch(`${API}/api/thesis`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+    if (!res.ok) throw new Error((await res.json().catch(()=>({}))).detail || res.statusText);
+    msg.innerHTML = `<span style="color:#4caf7d;">✅ บันทึกแล้ว</span>`;
+    ["thSymbol","thEntity","thTarget","thConviction","thScore","thMoat","thNote"].forEach(id=>{const e=$(id); if(e)e.value="";});
+    loadTheses();
+  } catch (e) { msg.innerHTML = `<span style="color:#e0785f;">❌ ${escapeHtml(e.message||String(e))}</span>`; }
+}
+
+async function deleteThesis(id) {
+  if (!confirm("ลบวิทยานิพนธ์นี้?")) return;
+  try { await fetch(`${API}/api/thesis/${id}`, {method:"DELETE"}); loadTheses(); } catch(e){}
+}
+
+async function loadTheses() {
+  const el = $("thesisList");
+  if (!el) return;
+  el.innerHTML = `<div class="note">⏳ กำลังโหลด...</div>`;
+  try {
+    const res = await fetch(`${API}/api/thesis/list`);
+    const d = await res.json();
+    renderTheses(d.theses||[]);
+  } catch (e) { el.innerHTML = `<div class="note" style="color:#e0785f;">โหลดไม่สำเร็จ</div>`; }
+}
+
+function renderTheses(items) {
+  const el = $("thesisList");
+  if (!items.length) { el.innerHTML = `<div class="note">ยังไม่มีวิทยานิพนธ์ — บันทึกจากฟอร์มด้านบน หรือกด "💾 บันทึกเป็นวิทยานิพนธ์" ในแท็บ 5️⃣ Buffett Scorecard</div>`; return; }
+  el.innerHTML = `<div class="tiny" style="color:#7d8b99; margin-bottom:6px;">📓 วิทยานิพนธ์ ${items.length} รายการ · 🟢 = ราคาเข้าเขตซื้อแล้ว</div>` +
+    items.map(t => {
+      const buy = t.in_buy_zone;
+      const disc = t.discount_to_target_pct;
+      const col = buy ? "#4caf7d" : "#33404d";
+      return `<div style="border:1px solid ${col}; border-left:4px solid ${buy?'#4caf7d':'#7fa8d0'}; border-radius:8px; padding:8px 10px; margin-bottom:8px; background:${buy?'rgba(76,175,125,.06)':'rgba(255,255,255,.02)'};">
+        <div style="display:flex; justify-content:space-between; gap:8px; align-items:baseline;">
+          <div><b>${escapeHtml(t.symbol||"")}</b> <span class="tiny" style="color:#7d8b99;">${escapeHtml((t.entity_name||"").slice(0,32))}</span>
+            ${t.buffett_score!=null?` <span class="tiny" style="color:${t.buffett_score>=75?'#4caf7d':t.buffett_score>=55?'#e2b93b':'#e0785f'};">Buffett ${t.buffett_score}/100</span>`:""}</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            ${buy?`<span class="tiny" style="color:#4caf7d; font-weight:700;">🟢 เข้าเขตซื้อ</span>`:""}
+            <button onclick="deleteThesis('${t.id}')" class="tiny" style="padding:2px 6px;" title="ลบ">🗑️</button>
+          </div>
+        </div>
+        <div class="tiny" style="color:#a9c4dd; margin-top:2px;">
+          ${t.current_price!=null?`ราคาปัจจุบัน <b>$${t.current_price}</b>`:""}
+          ${t.target_price!=null?` · เป้าซื้อ $${t.target_price}`:""}
+          ${disc!=null?` · <span style="color:${disc>=0?'#4caf7d':'#e0785f'}">${disc>=0?'ต่ำกว่าเป้า':'สูงกว่าเป้า'} ${Math.abs(disc)}%</span>`:""}
+          ${t.suggested_weight_pct!=null?` · น้ำหนักแนะนำ ${t.suggested_weight_pct}%`:""}
+          ${t.conviction!=null?` · ความเชื่อมั่น ${t.conviction}/5`:""}
+        </div>
+        ${t.moat_summary?`<div class="tiny" style="color:#7d8b99; margin-top:2px;">🏰 ${escapeHtml(t.moat_summary)}</div>`:""}
+        ${t.reasons?`<div class="tiny" style="margin-top:2px;">${escapeHtml(t.reasons)}</div>`:""}
+      </div>`;
+    }).join("");
+}
+
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","macro","history","radar","analyst","revenue","revenuescan","sp500hist","iv","buffett","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","history","radar","analyst","revenue","revenuescan","sp500hist","iv","buffett","thesis","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -3403,6 +3560,7 @@ function showTab(tab) {
   if (tab === "revenuescan") autoLoadActiveScanSub();
   if (tab === "sp500hist") initSp500Hist();
   if (tab === "history") maybeAutoHistory();
+  if (tab === "thesis") loadTheses();
 }
 
 function loading(msg) {

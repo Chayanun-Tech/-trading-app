@@ -9,7 +9,7 @@ from pathlib import Path
 import base64
 import httpx
 
-from fastapi import (FastAPI, File, Form, HTTPException, Query, Request, UploadFile,
+from fastapi import (Body, FastAPI, File, Form, HTTPException, Query, Request, UploadFile,
                      WebSocket, WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -33,6 +33,7 @@ from app import revenue_model
 from app import revenue_scanner
 from app import industry_peers
 from app import buffett
+from app import thesis_journal
 from app import value_scanner
 from app import ema_scanner
 from app import lynch_scanner
@@ -723,30 +724,86 @@ async def _focus_forward_pe(symbol: str) -> float | None:
         return None
 
 
+async def _build_buffett_scorecard(symbol: str) -> dict:
+    """ดึงงบ SEC + SIC + ราคา/หุ้น แล้วคำนวณ Buffett Scorecard — ใช้ร่วมทั้ง route คะแนนและ AI."""
+    sym = (symbol or "").strip().upper()
+    facts = await edgar.get_company_facts(sym)
+    sic = None
+    try:
+        sic = (await edgar.get_submissions(sym)).get("sic")
+    except Exception:  # noqa: BLE001
+        pass
+    price = await _equity_price_safe(sym)
+    shares = market_cap = None
+    try:
+        snap = await fetch_yahoo_fundamentals(sym)
+        shares, market_cap = snap.get("shares"), snap.get("market_cap")
+    except Exception:  # noqa: BLE001
+        pass
+    sc = buffett.scorecard(facts, price=price, shares=shares, market_cap=market_cap, sic=sic)
+    sc["symbol"] = sym
+    return sc
+
+
 @app.get("/api/buffett/scorecard")
 async def buffett_scorecard_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น US เช่น AAPL")):
     """Buffett Scorecard — ให้คะแนนคุณภาพ/ความปลอดภัย/มูลค่า/การจัดสรรทุน จากงบ SEC จริง
     (Piotroski/Altman/Beneish, Owner Earnings, Reverse DCF, ROIC-Moat, Capital Allocation)."""
     try:
-        sym = (symbol or "").strip().upper()
-        facts = await edgar.get_company_facts(sym)
-        sic = None
-        try:
-            sic = (await edgar.get_submissions(sym)).get("sic")
-        except Exception:  # noqa: BLE001
-            pass
-        price = await _equity_price_safe(sym)
-        shares = market_cap = None
-        try:
-            snap = await fetch_yahoo_fundamentals(sym)
-            shares, market_cap = snap.get("shares"), snap.get("market_cap")
-        except Exception:  # noqa: BLE001
-            pass
-        return buffett.scorecard(facts, price=price, shares=shares, market_cap=market_cap, sic=sic)
+        return await _build_buffett_scorecard(symbol)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"สร้าง Buffett Scorecard ไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/buffett/ai")
+async def buffett_ai_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น US เช่น AAPL"),
+                           mode: str = Query("moat", description="moat | premortem | debate")):
+    """ต่อยอด Buffett Scorecard ด้วย AI: จำแนก 5 แหล่งคูเมือง / Pre-mortem (Munger Invert) /
+    Buffett×Munger Debate — อ่านบริบทธุรกิจจาก 10-K/20-F + ตัวเลขคะแนน."""
+    try:
+        sc = await _build_buffett_scorecard(symbol)
+        return await buffett.ai_analysis(sc["symbol"], mode, sc)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"AI วิเคราะห์ Buffett ไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/thesis/list")
+async def thesis_list_route():
+    """รายการวิทยานิพนธ์การลงทุนที่บันทึกไว้ + สถานะสด (ราคาปัจจุบัน/เข้าเขตซื้อ/น้ำหนักแนะนำ)."""
+    items = thesis_journal.list_theses()
+    out = []
+    for e in items:
+        price = await _equity_price_safe(e.get("symbol", "")) if e.get("symbol") else None
+        out.append(thesis_journal.annotate_live(e, price))
+    return {"theses": out, "count": len(out)}
+
+
+@app.post("/api/thesis")
+async def thesis_add_route(payload: dict = Body(...)):
+    """บันทึกวิทยานิพนธ์ใหม่ (moat/เหตุผล/ราคาเป้าหมาย/margin of safety/ความเชื่อมั่น)."""
+    try:
+        return thesis_journal.add_thesis(payload)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/thesis/{thesis_id}")
+async def thesis_update_route(thesis_id: str, payload: dict = Body(...)):
+    try:
+        return thesis_journal.update_thesis(thesis_id, payload)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.delete("/api/thesis/{thesis_id}")
+async def thesis_delete_route(thesis_id: str):
+    if not thesis_journal.delete_thesis(thesis_id):
+        raise HTTPException(404, "ไม่พบวิทยานิพนธ์ที่ระบุ")
+    return {"deleted": thesis_id}
 
 
 @app.get("/api/industry/peers")
