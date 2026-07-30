@@ -26,6 +26,80 @@ _REVENUE_CACHE = _HERE / "data_sp500_revenue_scan.json"
 MIN_PEERS = 4          # กลุ่มต้องมีหุ้นคำนวณ PE ได้อย่างน้อยเท่านี้ ถึงจะเชื่อ median ของ sub-industry
 PE_CAP = 200.0         # ตัด PE สุดโต่ง (>200) และ ≤0 ทิ้งก่อนหา median — กัน outlier ลาก
 
+# ── จับหุ้น "ภายนอก S&P 500" (ADR ต่างชาติ) เข้ากลุ่ม GICS ของ universe ─────────────────
+# Yahoo ใช้ชื่อ sector ต่างจาก GICS เล็กน้อย — แม็ปเป็นชื่อ GICS Sector ที่ใช้ในไฟล์ constituents
+_YAHOO_SECTOR_TO_GICS = {
+    "technology": "Information Technology",
+    "healthcare": "Health Care",
+    "financial services": "Financials",
+    "consumer cyclical": "Consumer Discretionary",
+    "consumer defensive": "Consumer Staples",
+    "communication services": "Communication Services",
+    "energy": "Energy",
+    "industrials": "Industrials",
+    "basic materials": "Materials",
+    "real estate": "Real Estate",
+    "utilities": "Utilities",
+}
+# คำที่ไม่ช่วยแยกกลุ่ม (ตัดทิ้งก่อนจับคู่ token) + synonym ให้ตรงคำศัพท์ GICS
+_MATCH_STOPWORDS = {"and", "the", "of", "for", "general", "specialty", "diversified",
+                    "other", "nec", "services", "products", "misc", "miscellaneous"}
+_MATCH_SYNONYMS = {"auto": "automobile", "autos": "automobile", "drug": "pharmaceutical",
+                   "drugs": "pharmaceutical", "pharma": "pharmaceutical", "biotech": "biotechnology",
+                   "chip": "semiconductor", "chips": "semiconductor", "telecom": "telecommunication"}
+
+
+def _norm_tokens(s: str) -> set[str]:
+    """แตกชื่ออุตสาหกรรมเป็นชุด token ที่เทียบข้าม taxonomy ได้: lowercase, ตัดอักขระไม่ใช่ตัวอักษร,
+    ตัด 's' ท้ายคำ (semiconductors→semiconductor), ตัด stopword, แทน synonym."""
+    import re
+    out: set[str] = set()
+    for raw in re.split(r"[^a-z0-9]+", (s or "").lower()):
+        if not raw:
+            continue
+        t = raw[:-1] if len(raw) > 3 and raw.endswith("s") else raw
+        t = _MATCH_SYNONYMS.get(raw, _MATCH_SYNONYMS.get(t, t))
+        if t and t not in _MATCH_STOPWORDS:
+            out.add(t)
+    return out
+
+
+def _best_sub_industry(industry_name: str, sub_industries: set[str]) -> str | None:
+    """หา GICS Sub-Industry ที่ตรงกับชื่ออุตสาหกรรมของ Yahoo/SEC มากที่สุด ด้วย token overlap.
+    คืนเฉพาะเมื่อ 'ชนะเดี่ยว' ที่อันดับ 1 (ไม่เสมอ score+jaccard) — กันจับผิดตอนกำกวม เช่น
+    'Internet Retail' ที่ก้ำกึ่งหลายกลุ่ม จะคืน None แล้วปล่อยให้ตกไปเทียบระดับ sector แทน."""
+    qt = _norm_tokens(industry_name)
+    if not qt:
+        return None
+    scored = []
+    for sub in sub_industries:
+        st = _norm_tokens(sub)
+        overlap = len(qt & st)
+        if overlap:
+            jac = overlap / len(qt | st)
+            scored.append((overlap, round(jac, 4), sub))
+    if not scored:
+        return None
+    scored.sort(reverse=True)
+    if len(scored) >= 2 and scored[0][:2] == scored[1][:2]:
+        return None  # เสมอที่อันดับ 1 = กำกวม
+    return scored[0][2]
+
+
+def classify_external(universe: list[dict], sector: str | None, industry: str | None,
+                      sic_desc: str | None = None) -> dict:
+    """จัดหุ้นภายนอก S&P 500 (ADR) เข้ากลุ่ม GICS ของ universe: คืน {sub, sector, matched_on}
+    เป็น 'เมล็ด' ให้ peers_for ป้อนตรรกะเลือกกลุ่ม (sub-industry ก่อน ไม่พอ fallback sector) เดิม."""
+    sub_set = {u["sub_industry"] for u in universe if u.get("sub_industry")}
+    sub = _best_sub_industry(industry, sub_set) if industry else None
+    matched_on = f"Yahoo industry '{industry}'" if sub else None
+    if not sub and sic_desc:  # industry ไม่ช่วย ลองใช้คำอธิบาย SIC ของ SEC เสริม
+        sub = _best_sub_industry(sic_desc, sub_set)
+        if sub:
+            matched_on = f"SEC SIC '{sic_desc}'"
+    gics_sector = _YAHOO_SECTOR_TO_GICS.get((sector or "").strip().lower())
+    return {"sub": sub, "sector": gics_sector, "matched_on": matched_on}
+
 
 def _to_sym(s: str) -> str:
     # SEC/Yahoo ใช้ขีด (-) แทนจุดในหุ้นหลาย class เช่น BRK.B → BRK-B (ให้ตรงกับที่แคชสแกนเก็บ)
@@ -216,8 +290,27 @@ def attach_industry_pe(candidates: list[dict]) -> list[dict]:
     return out
 
 
-def peers_for(symbol: str) -> dict:
-    """เลนส์เทียบอุตสาหกรรมของหุ้นตัวเดียว. คืน dict เสมอ (degrade เอง ถ้าข้อมูลเพื่อนไม่พอ)."""
+def _select_group(universe: list[dict], sub: str | None, sector: str | None) -> dict | None:
+    """เลือกกลุ่มเทียบ: sub-industry ก่อน (n≥MIN_PEERS) ไม่พอ fallback sector — ตรรกะเดิม แชร์ทั้ง
+    หุ้น S&P 500 และหุ้นภายนอกที่จับกลุ่มมาแล้ว."""
+    industry = _group_stats(universe, "sub_industry", sub) if sub else None
+    if not industry or industry["n"] < MIN_PEERS:
+        sector_stat = _group_stats(universe, "sector", sector) if sector else None
+        if sector_stat and (not industry or sector_stat["n"] > industry["n"]):
+            industry = sector_stat
+    return industry
+
+
+def peers_for(symbol: str, *, ext_sector: str | None = None, ext_industry: str | None = None,
+              ext_sic_desc: str | None = None, ext_name: str | None = None,
+              ext_pe: float | None = None, ext_eps: float | None = None,
+              ext_price: float | None = None, ext_yoy_pct: float | None = None,
+              ext_eps_yoy_pct: float | None = None) -> dict:
+    """เลนส์เทียบอุตสาหกรรมของหุ้นตัวเดียว. คืน dict เสมอ (degrade เอง ถ้าข้อมูลเพื่อนไม่พอ).
+
+    หุ้นใน S&P 500: จัดกลุ่มจาก GICS ในไฟล์ constituents (ไม่ยิงเน็ต).
+    หุ้นภายนอก (ADR ต่างชาติ): route จะส่ง ext_* (sector/industry จาก Yahoo, sicDescription จาก SEC,
+    pe/eps/price ของหุ้นนั้น) มาให้ → จับเข้ากลุ่ม GICS ของ universe แล้ว reuse ตรรกะเดิมทั้งชุด."""
     sym = _to_sym(symbol)
     if not sym:
         raise ValueError("กรุณาระบุสัญลักษณ์หุ้น")
@@ -229,22 +322,24 @@ def peers_for(symbol: str) -> dict:
     as_of = _value_cache_as_of()
     scan_live = can_scan_live()
 
-    # หุ้นนอก S&P 500 (ไม่มีในรายชื่อ) — คืนโครงว่างให้ frontend ขึ้น "ข้อมูลเพื่อนไม่พอ" ไม่ error
-    if not meta:
-        return {"symbol": sym, "name": None, "gics_sector": None, "gics_sub_industry": None,
-                "industry": None, "peers": [], "justified": None, "as_of": as_of,
-                "can_scan_live": scan_live,
-                "note": "หุ้นนี้ไม่อยู่ในรายชื่อ S&P 500 — ยังไม่มีข้อมูลอุตสาหกรรมให้เทียบ"}
+    is_external = False
+    matched_on = None
+    if meta:
+        sector, sub, name = meta["sector"], meta["sub_industry"], meta["name"]
+    else:
+        # หุ้นภายนอก S&P 500 — จับเข้ากลุ่ม GICS จาก sector/industry ที่ route ส่งมา (ADR ต่างชาติ)
+        cls = classify_external(universe, ext_sector, ext_industry, ext_sic_desc)
+        sub, sector, matched_on = cls["sub"], cls["sector"], cls["matched_on"]
+        name = ext_name or sym
+        is_external = True
+        if not sub and not sector:
+            return {"symbol": sym, "name": ext_name, "gics_sector": None, "gics_sub_industry": None,
+                    "industry": None, "peers": [], "justified": None, "as_of": as_of,
+                    "can_scan_live": scan_live, "is_external": True,
+                    "note": ("หุ้นนี้ไม่อยู่ใน S&P 500 และจับกลุ่มอุตสาหกรรมอัตโนมัติไม่ได้ "
+                             "(ไม่มีข้อมูล sector/industry) — ยังไม่มีคู่เทียบให้")}
 
-    sector = meta["sector"]
-    sub = meta["sub_industry"]
-
-    # จัดกลุ่ม: sub-industry ก่อน (n≥MIN_PEERS) ไม่พอ fallback sector
-    industry = _group_stats(universe, "sub_industry", sub) if sub else None
-    if not industry or industry["n"] < MIN_PEERS:
-        sector_stat = _group_stats(universe, "sector", sector) if sector else None
-        if sector_stat and (not industry or sector_stat["n"] > industry["n"]):
-            industry = sector_stat
+    industry = _select_group(universe, sub, sector)
 
     # รายชื่อเพื่อนในกลุ่มที่เลือก (คู่แข่ง) — เรียงตาม PE จากน้อยไปมาก
     group_key = industry["level"] if industry else "sub_industry"
@@ -262,32 +357,56 @@ def peers_for(symbol: str) -> dict:
             "eps_yoy_pct": round(u["eps_yoy_pct"], 1) if isinstance(u.get("eps_yoy_pct"), (int, float)) else None,
             "is_focus": u["symbol"] == sym,
         })
-    # เรียง: มี PE ก่อน (จากถูกไปแพง) แล้วค่อยตัวไม่มี PE
-    peers_out.sort(key=lambda p: (p["pe"] is None, p["pe"] if p["pe"] is not None else 0))
 
     # ข้อ 3: ราคาที่ควรเป็นตาม PE อุตสาหกรรม = EPS จริง × PE median กลุ่ม.
     # เงื่อนไข: หุ้นตัวนี้ต้องถูกประเมินด้วย P/E เอง (focus.pe คำนวณได้) — per_share ถึงจะเป็น EPS จริง.
     # กลุ่มธนาคาร/REIT ที่ประเมินด้วย P/B, P/FFO จะไม่โชว์การ์ดนี้ (การคูณ PE กับ BVPS/FFO ไร้ความหมาย)
-    focus = next((u for u in universe if u["symbol"] == sym), None)
     justified = None
-    if focus and industry and focus.get("pe") is not None and isinstance(focus.get("per_share"), (int, float)):
-        eps = focus["per_share"]
-        price = focus.get("price")
-        ind_pe = industry["pe_median"]
-        implied = round(eps * ind_pe, 2)
-        upside = round((implied / price - 1) * 100, 1) if isinstance(price, (int, float)) and price > 0 else None
-        justified = {
-            "eps": round(eps, 2),
-            "current_pe": round(focus["pe"], 1),
-            "industry_pe": ind_pe,
-            "implied_price": implied,
-            "current_price": round(price, 2) if isinstance(price, (int, float)) else None,
-            "upside_pct": upside,
-        }
+    if is_external:
+        # ADR ไม่อยู่ใน universe — เพิ่มเป็นแถว focus เอง (PE/EPS/ราคาจาก Yahoo ระดับ ADR สกุล USD)
+        focus_pe = round(ext_pe, 1) if isinstance(ext_pe, (int, float)) and ext_pe > 0 else None
+        peers_out.append({
+            "symbol": sym, "name": name, "pe": focus_pe,
+            "pe_note": None if focus_pe is not None else "ยังคำนวณ P/E ของหุ้นนี้ไม่ได้",
+            "upside_pct": None,
+            "yoy_pct": round(ext_yoy_pct, 1) if isinstance(ext_yoy_pct, (int, float)) else None,
+            "eps_yoy_pct": round(ext_eps_yoy_pct, 1) if isinstance(ext_eps_yoy_pct, (int, float)) else None,
+            "is_focus": True,
+        })
+        if industry and isinstance(ext_eps, (int, float)) and ext_eps > 0 and focus_pe is not None:
+            ind_pe = industry["pe_median"]
+            implied = round(ext_eps * ind_pe, 2)
+            price = ext_price
+            upside = round((implied / price - 1) * 100, 1) if isinstance(price, (int, float)) and price > 0 else None
+            justified = {
+                "eps": round(ext_eps, 2), "current_pe": focus_pe, "industry_pe": ind_pe,
+                "implied_price": implied,
+                "current_price": round(price, 2) if isinstance(price, (int, float)) else None,
+                "upside_pct": upside,
+            }
+    else:
+        focus = next((u for u in universe if u["symbol"] == sym), None)
+        if focus and industry and focus.get("pe") is not None and isinstance(focus.get("per_share"), (int, float)):
+            eps = focus["per_share"]
+            price = focus.get("price")
+            ind_pe = industry["pe_median"]
+            implied = round(eps * ind_pe, 2)
+            upside = round((implied / price - 1) * 100, 1) if isinstance(price, (int, float)) and price > 0 else None
+            justified = {
+                "eps": round(eps, 2),
+                "current_pe": round(focus["pe"], 1),
+                "industry_pe": ind_pe,
+                "implied_price": implied,
+                "current_price": round(price, 2) if isinstance(price, (int, float)) else None,
+                "upside_pct": upside,
+            }
 
-    return {
+    # เรียง: มี PE ก่อน (จากถูกไปแพง) แล้วค่อยตัวไม่มี PE
+    peers_out.sort(key=lambda p: (p["pe"] is None, p["pe"] if p["pe"] is not None else 0))
+
+    out = {
         "symbol": sym,
-        "name": meta["name"],
+        "name": name,
         "gics_sector": sector or None,
         "gics_sub_industry": sub or None,
         "industry": industry,
@@ -296,3 +415,13 @@ def peers_for(symbol: str) -> dict:
         "as_of": as_of,
         "can_scan_live": scan_live,
     }
+    if is_external:
+        out["is_external"] = True
+        if industry:
+            lvl = "อุตสาหกรรมย่อย" if industry["level"] == "sub_industry" else "กลุ่มเซกเตอร์"
+            src = f"จับกลุ่มจาก {matched_on} → {lvl} \"{industry['name']}\"" if matched_on \
+                else f"จับกลุ่มระดับ {lvl} \"{industry['name']}\" จาก sector"
+            out["match_note"] = f"{src} — ADR ต่างชาติ (ไม่ใช่สมาชิก S&P 500 ทางการ) จับคู่โดยประมาณ"
+        else:
+            out["match_note"] = "ADR ต่างชาติ — ยังจับกลุ่มเทียบไม่ได้"
+    return out

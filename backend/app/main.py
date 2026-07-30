@@ -681,13 +681,48 @@ async def revenue_model_route(symbol: str = Query(..., description="สัญล
         raise HTTPException(502, f"สร้างโมเดลรายได้ไม่สำเร็จ: {exc}")
 
 
+async def _external_peer_context(symbol: str) -> dict:
+    """หา sector/industry/pe/eps/ราคา ของหุ้น 'ภายนอก S&P 500' (ADR ต่างชาติ) เพื่อจับเข้ากลุ่ม
+    GICS ให้ตัวเทียบอุตสาหกรรม — Yahoo (sector/industry/pe/eps) + SEC (sicDescription) + ราคาจาก provider.
+    ทุกส่วน best-effort: ดึงไม่ได้ก็คืน None ไป (peers_for จะ degrade เอง)."""
+    snap: dict = {}
+    try:
+        snap = await get_fundamentals(symbol) or {}
+    except Exception:  # noqa: BLE001
+        snap = {}
+    sic_desc = None
+    try:
+        sic_desc = (await edgar.get_submissions(symbol)).get("sicDescription")
+    except Exception:  # noqa: BLE001
+        pass
+    price = await _equity_price_safe(symbol)
+    pe, eps = snap.get("pe"), snap.get("eps")
+    if price is None and isinstance(pe, (int, float)) and isinstance(eps, (int, float)):
+        price = pe * eps  # fallback: ราคา ≈ P/E × EPS (ถ้า provider ให้ราคาไม่ได้)
+
+    def _pct(v):
+        return v * 100 if isinstance(v, (int, float)) else None
+
+    return {
+        "ext_sector": snap.get("sector"), "ext_industry": snap.get("industry"),
+        "ext_sic_desc": sic_desc, "ext_name": snap.get("long_name"),
+        "ext_pe": pe, "ext_eps": eps, "ext_price": price,
+        "ext_yoy_pct": _pct(snap.get("revenue_growth")),
+        "ext_eps_yoy_pct": _pct(snap.get("earnings_growth")),
+    }
+
+
 @app.get("/api/industry/peers")
-async def industry_peers_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น NVDA (S&P 500)")):
+async def industry_peers_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น NVDA (S&P 500) หรือ ADR เช่น TSM")):
     """เลนส์ 'เทียบอุตสาหกรรม': PE เฉลี่ยของกลุ่ม (GICS Sub-Industry → fallback Sector) +
     ตารางคู่แข่งในอุตสาหกรรมเดียวกัน + ราคาที่ควรเป็นตาม PE กลุ่ม (EPS จริง × PE median).
-    อ่านจากไฟล์แคชสแกน — ตอบเร็ว ไม่ยิงเน็ต. หุ้นนอก S&P 500 คืนโครงว่าง (ไม่ error)."""
+    หุ้น S&P 500 อ่านจากแคชสแกน — เร็ว ไม่ยิงเน็ต. หุ้น ADR ต่างชาตินอกลิสต์ = ดึง sector/industry
+    จาก Yahoo/SEC มาจับเข้ากลุ่ม GICS ของ S&P 500 แล้วเทียบให้ (จับคู่โดยประมาณ)."""
     try:
-        return industry_peers.peers_for(symbol)
+        ext = {}
+        if industry_peers._to_sym(symbol) not in industry_peers.load_constituents():
+            ext = await _external_peer_context(symbol)
+        return industry_peers.peers_for(symbol, **ext)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
     except Exception as exc:  # noqa: BLE001

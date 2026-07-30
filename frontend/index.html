@@ -4021,10 +4021,14 @@ function renderRmIndustry(p) {
       ${peers.length > shown.length ? `<div class="tiny" style="color:#7d8b99; margin-top:2px;">แสดง ${shown.length}/${peers.length} ตัว</div>` : ""}
     </div>`;
 
+  // หมายเหตุจับกลุ่มโดยประมาณ สำหรับหุ้น ADR ต่างชาติ (ไม่ใช่สมาชิก S&P 500)
+  const matchNote = (p.is_external && p.match_note)
+    ? `<div class="tiny" style="margin-top:2px; color:#a9c4dd;">🌏 ${escapeHtml(p.match_note)}</div>`
+    : "";
   el.innerHTML = `<div style="border:1px solid #33404d; border-radius:8px; padding:8px 10px; background:rgba(90,140,90,0.06);">
       <div><b>🏭 เทียบอุตสาหกรรม:</b> ${escapeHtml(ind.name || "-")}
         <span class="tiny" style="color:#7d8b99;">(${levelTxt})</span></div>
-      ${statusRow}${chip1}${card3}${table}
+      ${matchNote}${statusRow}${chip1}${card3}${table}
     </div>`;
 }
 
