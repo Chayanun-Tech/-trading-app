@@ -243,6 +243,7 @@
   .tabs { display:flex; gap:6px; padding:8px 10px; overflow-x:auto; scrollbar-width:thin; background:#0b1118; }
   .tab { flex:0 0 auto; }
   .tab.active { background:var(--accent); border-color:var(--accent); }
+  .tab-sep { flex:0 0 auto; align-self:center; color:#5f6d7a; font-size:11px; padding:0 2px; white-space:nowrap; user-select:none; }
   .detail-dock .tabs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); overflow:visible; }
   .detail-dock .tab { min-width:0; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .panel-body { padding:12px; max-height:42vh; overflow:auto; border-top:1px solid var(--border); background:#0a1017; }
@@ -513,20 +514,23 @@
     <div class="summary" id="summary"></div>
 
     <div class="tabs">
-      <button class="tab" onclick="openDashboard()" style="background:var(--accent);border-color:var(--accent);color:#fff;">DASH BOARD</button>
+      <button class="tab" onclick="openDashboard()" style="background:var(--accent);border-color:var(--accent);color:#fff;">🏠 DASH BOARD</button>
       <button class="tab active" id="tabReport" onclick="showTab('report')">Report</button>
-      <button class="tab" id="tabIndicators" onclick="showTab('indicators')">Indicators</button>
-      <button class="tab" id="tabBusiness" onclick="showTab('business')">ธุรกิจ</button>
-      <button class="tab" id="tabMacro" onclick="showTab('macro')">มหภาค→ธุรกิจ</button>
-      <button class="tab" id="tabHistory" onclick="showTab('history')">📜 ประวัติศาสตร์ราคา</button>
-      <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')">VIพื้นฐาน</button>
-      <button class="tab" id="tabIv" onclick="showTab('iv')">มูลค่าIV</button>
-      <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">หุ้นเล็กเด้งไกล</button>
-      <button class="tab" id="tabRadar" onclick="showTab('radar')">เรดาร์เทรนด์โลก</button>
-      <button class="tab" id="tabAnalyst" onclick="showTab('analyst')">🧠 ผู้ช่วย AI</button>
-      <button class="tab" id="tabRevenue" onclick="showTab('revenue')">📈 โมเดลรายได้</button>
+      <span class="tab-sep" title="ไล่ศึกษาหุ้น 1 ตัวตามลำดับ 1→8 เหมือนกระบวนการคิดของ Buffett">▸ ศึกษาเป็นขั้นตอน</span>
+      <button class="tab" id="tabBusiness" onclick="showTab('business')" title="เข้าใจธุรกิจก่อน (Circle of Competence)">1️⃣ ธุรกิจ</button>
+      <button class="tab" id="tabMacro" onclick="showTab('macro')" title="บริบทมหภาค/อุตสาหกรรม">2️⃣ มหภาค→ธุรกิจ</button>
+      <button class="tab" id="tabHistory" onclick="showTab('history')" title="บริบทราคา/เหตุการณ์สำคัญ">3️⃣ 📜 ประวัติราคา</button>
+      <button class="tab" id="tabFundamentals" onclick="showTab('fundamentals')" title="งบ/อัตราส่วนพื้นฐาน">4️⃣ VIพื้นฐาน</button>
+      <button class="tab" id="tabBuffett" onclick="showTab('buffett')" title="ให้คะแนน Moat/คุณภาพ/มูลค่า/การจัดสรรทุน จากงบ SEC">5️⃣ 🧠 Buffett Scorecard</button>
+      <button class="tab" id="tabRevenue" onclick="showTab('revenue')" title="การเติบโต + P/E + เทียบอุตสาหกรรม">6️⃣ 📈 โมเดลรายได้</button>
+      <button class="tab" id="tabIv" onclick="showTab('iv')" title="ประเมินมูลค่า (DCF/Graham)">7️⃣ 💰 มูลค่าIV</button>
+      <button class="tab" id="tabAnalyst" onclick="showTab('analyst')" title="ให้ AI สรุป/ถกแย้ง แล้วตัดสินใจ">8️⃣ 🤝 ผู้ช่วย AI</button>
+      <span class="tab-sep" title="เครื่องมือค้นหา/สแกนหุ้นทั้งตลาด">▸ ค้นหา</span>
       <button class="tab" id="tabRevenuescan" onclick="showTab('revenuescan')">🔍 สแกน S&P 500</button>
+      <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">🚀 หุ้นเล็กเด้งไกล</button>
+      <button class="tab" id="tabRadar" onclick="showTab('radar')">🛰️ เรดาร์เทรนด์โลก</button>
       <button class="tab" id="tabSp500hist" onclick="showTab('sp500hist')">🏆 ประวัติ S&P 500</button>
+      <button class="tab" id="tabIndicators" onclick="showTab('indicators')">📉 Indicators</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
     </div>
 
@@ -896,6 +900,15 @@
       </div>
       <div class="note" style="margin-top:6px;" id="anHint">ดึงข้อมูลจริงออนไลน์เอง (งบ SEC/56-1 · พื้นฐาน · ข่าว · มูลค่า IV) แล้วให้ AI วิเคราะห์ — คุณไม่ต้องหา/วางข้อมูลเอง · 🧠 เป็นเครื่องมือช่วยคิด ไม่ใช่คำแนะนำการลงทุน</div>
       <div id="analystResult" style="margin-top:12px;"><div class="note">เลือกโหมด ใส่สัญลักษณ์หุ้น แล้วกด "วิเคราะห์"</div></div>
+    </div>
+
+    <div id="buffettPanel" class="panel-body hidden">
+      <div class="grid3">
+        <div class="field"><label>หุ้น US (ยื่นงบ SEC)</label><input id="buffettSymbol" placeholder="เช่น AAPL, KO, MSFT" onkeydown="if(event.key==='Enter')loadBuffett()" /></div>
+        <div class="field" style="align-self:end;"><button onclick="loadBuffett()" style="width:100%;">🧠 ให้คะแนน Buffett</button></div>
+      </div>
+      <div class="note" style="margin-top:6px;">ให้คะแนนแบบ Warren Buffett จาก <b>งบ SEC จริง (ตรวจย้อนได้)</b> 4 เสา: <b>คูเมือง</b> (Moat/ROIC ยืนระยะ) · <b>คุณภาพ&ความปลอดภัย</b> (Piotroski F / Altman Z / Beneish M จับแต่งบัญชี) · <b>มูลค่า</b> (Owner Earnings / Reverse DCF — "ตลาดคิดว่าจะโตกี่ %") · <b>การจัดสรรทุน</b> — เลื่อนเมาส์บนแต่ละคะแนนเพื่อดูคำอธิบาย · เพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน</div>
+      <div id="buffettResult" style="margin-top:12px;"><div class="note">ใส่สัญลักษณ์หุ้น US แล้วกด "ให้คะแนน Buffett"</div></div>
     </div>
 
     <div id="revenuePanel" class="panel-body hidden">
@@ -3257,8 +3270,131 @@ function clearDrawings() {
   fibStart = null;
 }
 
+// ═══════════ Buffett Scorecard (แท็บ 5️⃣) ═══════════
+function bMoney(v) {
+  if (typeof v !== "number") return "—";
+  const a = Math.abs(v);
+  if (a >= 1e12) return (v/1e12).toFixed(2) + "T";
+  if (a >= 1e9) return (v/1e9).toFixed(2) + "B";
+  if (a >= 1e6) return (v/1e6).toFixed(1) + "M";
+  return v.toFixed(0);
+}
+function bPct(v, nd=1) { return typeof v === "number" ? (v*100).toFixed(nd) + "%" : "—"; }
+function bScoreColor(s, max) { const r = s/max; return r>=0.72?"#4caf7d":r>=0.48?"#e2b93b":r>=0.24?"#e08a6a":"#e0785f"; }
+
+async function loadBuffett(sym) {
+  const el = $("buffettResult");
+  const symbol = (sym || ($("buffettSymbol") && $("buffettSymbol").value) || "").trim().toUpperCase();
+  if (!symbol) { el.innerHTML = `<div class="note">ใส่สัญลักษณ์หุ้น US ก่อน</div>`; return; }
+  if ($("buffettSymbol")) $("buffettSymbol").value = symbol;
+  el.innerHTML = `<div class="note">⏳ กำลังคำนวณคะแนน Buffett ของ ${escapeHtml(symbol)} จากงบ SEC...</div>`;
+  try {
+    const res = await fetch(`${API}/api/buffett/scorecard?symbol=${encodeURIComponent(symbol)}`);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({detail:res.statusText}));
+      throw new Error(d.detail || res.statusText);
+    }
+    renderBuffett(await res.json());
+  } catch (e) {
+    el.innerHTML = `<div class="note" style="color:#e0785f;">❌ ${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function bPillarCard(title, icon, p, tip, bodyHtml) {
+  const col = bScoreColor(p.score, p.max);
+  const pct = Math.max(0, Math.min(100, p.score/p.max*100));
+  return `<div style="border:1px solid #33404d; border-radius:10px; padding:10px 12px; background:rgba(255,255,255,0.02);">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;">
+        <div title="${escapeHtml(tip)}" style="cursor:help; border-bottom:1px dotted #55636f;"><b>${icon} ${escapeHtml(title)}</b></div>
+        <div style="font-weight:700; color:${col};">${p.score}<span class="tiny" style="color:#7d8b99;">/${p.max}</span></div>
+      </div>
+      <div style="height:6px; background:#1a2430; border-radius:4px; margin:6px 0; overflow:hidden;"><div style="height:100%; width:${pct}%; background:${col};"></div></div>
+      <div class="tiny" style="color:#a9c4dd; margin-bottom:6px;">${escapeHtml(p.note || "")}</div>
+      ${bodyHtml || ""}
+    </div>`;
+}
+
+function renderBuffett(d) {
+  const el = $("buffettResult");
+  const P = d.pillars || {};
+  const tot = d.total_score, totCol = tot>=75?"#4caf7d":tot>=55?"#e2b93b":tot>=40?"#e08a6a":"#e0785f";
+  const kv = (label, val, tip) => `<div title="${escapeHtml(tip||"")}" style="${tip?'cursor:help;':''}"><span class="tiny" style="color:#7d8b99;${tip?'border-bottom:1px dotted #55636f;':''}">${escapeHtml(label)}</span><br><b>${val}</b></div>`;
+
+  // ── Moat ──
+  const mo = P.moat.detail || {};
+  const metric = mo.metric || "ROIC";
+  const moatBody = mo.roic_latest != null ? `<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;">
+      ${kv(`${metric} ล่าสุด`, bPct(mo.roic_latest), "ผลตอบแทนต่อทุนที่ลงไป — Buffett: >15% ยืนหลายปี = คูเมืองจริง")}
+      ${kv(`ปีที่ ${metric}>15%`, (mo.years_roic_above_15||0)+" ปี", "ยิ่งยืนนานยิ่งพิสูจน์ว่าคูเมืองทน")}
+      ${kv(`${metric}−WACC`, mo.roic_minus_wacc!=null?bPct(mo.roic_minus_wacc):"—", "ผลตอบแทนเหนือต้นทุนเงินทุน (>0 = สร้างมูลค่า)")}
+      ${kv("WACC (ประมาณ)", mo.wacc!=null?bPct(mo.wacc):"—", "ต้นทุนเงินทุนถัวเฉลี่ย (CAPM ประมาณ)")}
+      ${kv("ความนิ่งมาร์จิน", mo.gross_margin_stability!=null?(mo.gross_margin_stability*100).toFixed(0)+"/100":"—", "มาร์จินขั้นต้นนิ่ง = พลังตั้งราคา (pricing power)")}
+      ${kv("ความกว้างคูเมือง", `<span style="color:${mo.width&&mo.width.startsWith('กว้าง')?'#4caf7d':mo.width&&mo.width.startsWith('แคบ')?'#e2b93b':'#e0785f'}">${escapeHtml(mo.width||'—')}</span>`, "wide=แข็งมาก narrow=พอมี")}
+    </div>` : `<div class="tiny" style="color:#7d8b99;">คำนวณ ROIC ไม่ได้</div>`;
+
+  // ── Quality ──
+  const q = P.quality.detail || {};
+  const pio = q.piotroski, alt = q.altman, ben = q.beneish;
+  let qBody = "";
+  if (pio) qBody += `<div class="tiny" style="color:#7d8b99; margin-bottom:2px;" title="9 เกณฑ์ความแข็งแรงพื้นฐานที่กำลังดีขึ้น (Piotroski)">Piotroski F-Score: <b style="color:${pio.score>=7?'#4caf7d':pio.score>=4?'#e2b93b':'#e0785f'}">${pio.score}/9</b> (${escapeHtml(pio.rating)})</div>
+      <div style="display:flex; flex-wrap:wrap; gap:3px; margin-bottom:6px;">${(pio.checks||[]).map(c=>`<span title="${escapeHtml(c.label)}" style="cursor:help; font-size:11px; padding:1px 5px; border-radius:4px; background:${c.pass?'rgba(76,175,125,.18)':'rgba(224,120,95,.14)'}; color:${c.pass?'#7fddb0':'#e0a08a'};">${c.pass?'✓':'✕'}</span>`).join("")}</div>`;
+  if (alt) qBody += `<div class="tiny" title="ความเสี่ยงล้มละลาย 2 ปี (Altman Z)" style="cursor:help;">Altman Z: <b style="color:${alt.zone==='ปลอดภัย'?'#4caf7d':alt.zone.includes('เทา')?'#e2b93b':'#e0785f'}">${alt.z}</b> — ${escapeHtml(alt.zone)}</div>`;
+  else if (d.is_financial) qBody += `<div class="tiny" style="color:#7d8b99;">Altman Z: ไม่ใช้กับกลุ่มการเงิน</div>`;
+  if (ben) qBody += `<div class="tiny" title="โอกาสแต่งบัญชี/ปั้นกำไร (Beneish M) + Accruals" style="cursor:help;">Beneish M: <b style="color:${ben.manipulation_flag?'#e0785f':'#4caf7d'}">${ben.m}</b> — ${escapeHtml(ben.verdict)}${ben.accruals_ratio!=null?` · Accruals ${bPct(ben.accruals_ratio)}`:""}</div>`;
+
+  // ── Value ──
+  const v = P.value.detail || {};
+  const oe = v.owner_earnings, rd = v.reverse_dcf, iv = v.intrinsic;
+  let vBody = "";
+  if (oe) vBody += `<div class="tiny">${kv("Owner Earnings (กำไรเจ้าของ)", bMoney(oe.owner_earnings), "OCF − capex บำรุงรักษา (นิยาม Buffett)").replace('<div','<span').replace('</div>','</span>')}</div>`;
+  if (oe) vBody += `<div class="tiny" style="color:#7d8b99;">FCF: ${bMoney(oe.fcf)} · maintenance capex ~${bMoney(oe.maintenance_capex)}</div>`;
+  if (rd) vBody += `<div class="tiny" title="อัตราโต owner earnings ที่ราคาปัจจุบันสะท้อนอยู่" style="cursor:help; margin-top:2px;">📉 ตลาดกำลังคิดว่าจะโต <b>${bPct(rd.implied_growth)}</b>/ปี${v.revenue_cagr!=null?` <span style="color:#7d8b99;">(รายได้เคยโตจริง ${bPct(v.revenue_cagr)})</span>`:""}</div>`;
+  if (iv) { const mos = iv.margin_of_safety;
+    vBody += `<div class="tiny" title="ส่วนเผื่อความปลอดภัย = (มูลค่าประเมิน − ราคา)/มูลค่า" style="cursor:help; margin-top:2px;">มูลค่าประเมิน (owner earnings @โต ${bPct(iv.assumed_growth)}): <b>$${iv.fair_value_per_share!=null?iv.fair_value_per_share:'—'}/หุ้น</b> · Margin of Safety <b style="color:${mos>=0.15?'#4caf7d':mos>=0?'#e2b93b':'#e0785f'}">${mos!=null?(mos>=0?'+':'')+(mos*100).toFixed(0)+'%':'—'}</b>${mos!=null&&mos<-0.3?' <span style="color:#e0785f;">(ราคาสูงกว่ามูลค่าประเมินมาก)</span>':''}</div>`; }
+
+  // ── Capital allocation ──
+  const c = P.capital_allocation.detail || {};
+  let cBody = "";
+  if (c.reinvest_pct != null) cBody += `<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;">
+      ${kv("ลงทุนต่อ", bPct(c.reinvest_pct,0), "สัดส่วนเงินสดที่นำไปลงทุน (capex)")}
+      ${kv("ซื้อหุ้นคืน", bPct(c.buyback_pct,0), "สัดส่วนที่ซื้อหุ้นคืน (ลด dilution)")}
+      ${kv("ปันผล", bPct(c.dividend_pct,0), "สัดส่วนที่จ่ายปันผล")}
+    </div><div class="tiny" style="margin-top:4px; color:${c.shareholder_friendly?'#4caf7d':'#e0785f'};">${c.shareholder_friendly?'✓ เป็นมิตรผู้ถือหุ้น (จำนวนหุ้นไม่เพิ่ม/ลดลง)':'⚠️ มีการเพิ่มทุน (dilution)'}${c.share_change_pct!=null?` · หุ้น 5 ปี ${(c.share_change_pct>=0?'+':'')}${(c.share_change_pct*100).toFixed(1)}%`:''}${c.dividend_payout!=null?` · payout ${bPct(c.dividend_payout,0)}`:''}</div>`;
+
+  // ── Compounding ──
+  const comp = d.compounding;
+  let compHtml = "";
+  if (comp && comp.scenarios) {
+    compHtml = `<div style="border:1px solid #33404d; border-radius:10px; padding:10px 12px; margin-top:10px; background:rgba(255,255,255,0.02);">
+      <div title="ฉาย owner earnings ${comp.years} ปี แล้วคูณ exit ${comp.exit_multiple}x → ผลตอบแทนทบต้น (IRR) จากราคาวันนี้" style="cursor:help; border-bottom:1px dotted #55636f; display:inline-block; margin-bottom:6px;"><b>⏳ จำลองการทบต้น ${comp.years} ปี (IRR คาดหวัง)</b></div>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;">${Object.entries(comp.scenarios).map(([name,s])=>`<div style="text-align:center; padding:6px; border-radius:6px; background:rgba(255,255,255,0.03);"><div class="tiny" style="color:#7d8b99;">${escapeHtml(name)}</div><div style="font-weight:700; color:${s.irr>=0.15?'#4caf7d':s.irr>=0.08?'#e2b93b':'#e0785f'};">${(s.irr*100).toFixed(1)}%</div><div class="tiny" style="color:#7d8b99;">โต ${bPct(s.growth,0)}</div></div>`).join("")}</div>
+    </div>`;
+  }
+
+  el.innerHTML = `
+    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; border:1px solid ${totCol}55; border-radius:12px; padding:12px 14px; background:${totCol}11;">
+      <div>
+        <div style="font-size:15px;"><b>${escapeHtml(d.entity_name || d.symbol || "")}</b> ${d.reporting_currency&&d.reporting_currency!=='USD'?`<span class="tiny" style="color:#7d8b99;">(งบสกุล ${escapeHtml(d.reporting_currency)})</span>`:''}</div>
+        <div class="tiny" style="color:#7d8b99;">งบปี ${d.fy_range?d.fy_range[0]+'–'+d.fy_range[1]:''}${d.price?` · ราคา $${d.price}`:''}${d.market_cap?` · mkt cap ${bMoney(d.market_cap)}`:''}</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:30px; font-weight:800; color:${totCol}; line-height:1;">${tot}<span style="font-size:15px; color:#7d8b99;">/100</span></div>
+        <div class="tiny" style="color:${totCol};">${escapeHtml(d.verdict||"")}</div>
+      </div>
+    </div>
+    ${d.sector_note?`<div class="tiny" style="margin-top:6px; color:#a9c4dd;">ℹ️ ${escapeHtml(d.sector_note)}</div>`:''}
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+      ${bPillarCard("คูเมือง (Moat)", "🏰", P.moat, "ความได้เปรียบที่ทนทาน — วัดจาก ROIC ที่สูงและยืนระยะ + พลังตั้งราคา", moatBody)}
+      ${bPillarCard("คุณภาพ & ความปลอดภัย", "🛡️", P.quality, "งบแข็งแรง ไม่เสี่ยงล้ม ไม่แต่งบัญชี", qBody)}
+      ${bPillarCard("มูลค่า (Value)", "💰", P.value, "ซื้อได้ต่ำกว่ามูลค่าแค่ไหน + ตลาดคาดหวังสูงเกินจริงไหม", vBody)}
+      ${bPillarCard("การจัดสรรทุน", "🎯", P.capital_allocation, "ผู้บริหารใช้เงินสดเป็น — ลงทุน/ซื้อคืน/ปันผล ไม่ทำผู้ถือหุ้นเจือจาง", cBody)}
+    </div>
+    ${compHtml}
+    <div class="tiny" style="margin-top:8px; color:#5f6d7a;">${escapeHtml(d.disclaimer||"")}</div>`;
+}
+
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","macro","history","radar","analyst","revenue","revenuescan","sp500hist","iv","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","history","radar","analyst","revenue","revenuescan","sp500hist","iv","buffett","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);

@@ -32,6 +32,7 @@ from app import stock_history
 from app import revenue_model
 from app import revenue_scanner
 from app import industry_peers
+from app import buffett
 from app import value_scanner
 from app import ema_scanner
 from app import lynch_scanner
@@ -720,6 +721,32 @@ async def _focus_forward_pe(symbol: str) -> float | None:
         return (await fetch_yahoo_fundamentals(symbol)).get("forward_pe")
     except Exception:  # noqa: BLE001
         return None
+
+
+@app.get("/api/buffett/scorecard")
+async def buffett_scorecard_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น US เช่น AAPL")):
+    """Buffett Scorecard — ให้คะแนนคุณภาพ/ความปลอดภัย/มูลค่า/การจัดสรรทุน จากงบ SEC จริง
+    (Piotroski/Altman/Beneish, Owner Earnings, Reverse DCF, ROIC-Moat, Capital Allocation)."""
+    try:
+        sym = (symbol or "").strip().upper()
+        facts = await edgar.get_company_facts(sym)
+        sic = None
+        try:
+            sic = (await edgar.get_submissions(sym)).get("sic")
+        except Exception:  # noqa: BLE001
+            pass
+        price = await _equity_price_safe(sym)
+        shares = market_cap = None
+        try:
+            snap = await fetch_yahoo_fundamentals(sym)
+            shares, market_cap = snap.get("shares"), snap.get("market_cap")
+        except Exception:  # noqa: BLE001
+            pass
+        return buffett.scorecard(facts, price=price, shares=shares, market_cap=market_cap, sic=sic)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สร้าง Buffett Scorecard ไม่สำเร็จ: {exc}")
 
 
 @app.get("/api/industry/peers")
