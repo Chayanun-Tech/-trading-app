@@ -305,7 +305,7 @@ def peers_for(symbol: str, *, ext_sector: str | None = None, ext_industry: str |
               ext_sic_desc: str | None = None, ext_name: str | None = None,
               ext_pe: float | None = None, ext_eps: float | None = None,
               ext_price: float | None = None, ext_yoy_pct: float | None = None,
-              ext_eps_yoy_pct: float | None = None) -> dict:
+              ext_eps_yoy_pct: float | None = None, ext_forward_pe: float | None = None) -> dict:
     """เลนส์เทียบอุตสาหกรรมของหุ้นตัวเดียว. คืน dict เสมอ (degrade เอง ถ้าข้อมูลเพื่อนไม่พอ).
 
     หุ้นใน S&P 500: จัดกลุ่มจาก GICS ในไฟล์ constituents (ไม่ยิงเน็ต).
@@ -383,6 +383,7 @@ def peers_for(symbol: str, *, ext_sector: str | None = None, ext_industry: str |
                 "implied_price": implied,
                 "current_price": round(price, 2) if isinstance(price, (int, float)) else None,
                 "upside_pct": upside,
+                "forward_pe": round(ext_forward_pe, 1) if isinstance(ext_forward_pe, (int, float)) and ext_forward_pe > 0 else None,
             }
     else:
         focus = next((u for u in universe if u["symbol"] == sym), None)
@@ -399,6 +400,7 @@ def peers_for(symbol: str, *, ext_sector: str | None = None, ext_industry: str |
                 "implied_price": implied,
                 "current_price": round(price, 2) if isinstance(price, (int, float)) else None,
                 "upside_pct": upside,
+                "forward_pe": round(ext_forward_pe, 1) if isinstance(ext_forward_pe, (int, float)) and ext_forward_pe > 0 else None,
             }
 
     # เรียง: มี PE ก่อน (จากถูกไปแพง) แล้วค่อยตัวไม่มี PE
@@ -414,6 +416,11 @@ def peers_for(symbol: str, *, ext_sector: str | None = None, ext_industry: str |
         "justified": justified,
         "as_of": as_of,
         "can_scan_live": scan_live,
+        # นิยาม P/E ที่ตารางนี้ใช้ — ให้ frontend เอาไปทำ tooltip กันเข้าใจผิดว่าเลขไม่ตรงเว็บอื่น
+        "pe_basis": ("P/E ในตารางนี้ = trailing GAAP (TTM) คำนวณจากงบจริงที่บริษัทยื่น SEC "
+                     "(ราคา ÷ กำไรต่อหุ้น 4 ไตรมาสล่าสุด) — ต่างจาก 'P/E (FWD)' ที่เว็บอย่าง Seeking Alpha "
+                     "พาดหัว ซึ่งเป็น forward P/E อิงประมาณการกำไรอนาคต (มัก non-GAAP). บริษัทที่กำไร GAAP "
+                     "ต่ำชั่วคราว (เช่นมีค่าตัดจำหน่ายก้อนใหญ่จากดีล) P/E trailing จะสูงกว่า forward มาก"),
     }
     if is_external:
         out["is_external"] = True

@@ -227,6 +227,21 @@ def _metric(label: str, display: str | None, hint: str = "") -> dict:
     return {"label": label, "display": display if display is not None else "—", "hint": hint}
 
 
+def _ttm_eps_latest(facts: dict) -> float | None:
+    """EPS แบบ TTM (ผลรวมกำไรต่อหุ้น 4 ไตรมาสล่าสุด) — เป็นฐาน P/E มาตรฐาน (trailing) ที่เว็บการเงิน
+    ทั่วไปใช้ (Yahoo/Google) ตรวจแล้วว่าตรงกับ Yahoo trailing EPS. ต่างจาก 'EPS ปีงบล่าสุด' ที่ล้าช้ากว่า
+    (ยังไม่รวมไตรมาสใหม่หลังปิดปีงบ) ทำให้ P/E สูงเกินจริงสำหรับบริษัทที่กำไรกำลังโต. สังเคราะห์ไตรมาส
+    ที่ SEC ไม่แยกยื่น (มัก Q4) จากงบทั้งปีก่อน แล้วรวม 4 ไตรมาสติดกันล่าสุด. คืน None ถ้าไตรมาสไม่พอ."""
+    q = _synthesize_missing_quarter(
+        _quarterly_with_fp(facts, _EPS, "USD/shares", prefer_latest_value=True),
+        _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True),
+    )
+    dates = sorted(q)
+    if len(dates) < 4:
+        return None
+    return sum(q[d]["val"] for d in dates[-4:])
+
+
 def _compute_sector_extras(profile_key: str, facts: dict, bars: list[dict], bars_per_q: int,
                            fin: dict, fcf_annual: list[dict], pe_band: dict | None,
                            pfcf_band: dict | None) -> tuple[list[dict], dict | None, list[str]]:
@@ -326,11 +341,17 @@ def _compute_sector_extras(profile_key: str, facts: dict, bars: list[dict], bars
                                    "โต% + FCF margin% ≥ 40 = สมดุลดี"))
 
     elif profile_key == "general":
-        # General stock: use standard P/E multiple for fair value
+        # หุ้นทั่วไป: ประเมินด้วย P/E — ใช้ EPS แบบ TTM (trailing 4 ไตรมาส) ให้สอดคล้องกับ pe_band ที่
+        # คำนวณจาก TTM EPS อยู่แล้ว และตรงมาตรฐาน trailing P/E (เท่า Yahoo). ถ้าไตรมาสไม่พอสังเคราะห์
+        # TTM ค่อย fallback ไป EPS ปีงบล่าสุด (เดิม) กันเคสข้อมูลรายไตรมาสขาด
+        ttm_eps = _ttm_eps_latest(facts)
         ann_eps = _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True)
         eps_vals = [ann_eps[fy]["val"] for fy in sorted(ann_eps)]
-        if eps_vals and eps_vals[-1] > 0 and pe_band:
-            fair = _fair_from_band(eps_vals[-1], pe_band, "P/E median", price)
+        eps_for_pe = ttm_eps if (isinstance(ttm_eps, (int, float)) and ttm_eps > 0) \
+            else (eps_vals[-1] if eps_vals else None)
+        basis = "P/E median (TTM)" if (isinstance(ttm_eps, (int, float)) and ttm_eps > 0) else "P/E median"
+        if eps_for_pe and eps_for_pe > 0 and pe_band:
+            fair = _fair_from_band(eps_for_pe, pe_band, basis, price)
 
     # ด่านสุดท้าย: ตัวคูณ median ที่คำนวณจากช่วงที่ metric "เกือบศูนย์" (เช่น FCF ปีที่เจ๊งพอดี)
     # จะพุ่งเป็นหลักร้อย-พันเท่า แล้วดันราคายุติธรรมหลุดโลก (เคยได้ราคายุติธรรม $4,740 ของหุ้นราคา $92)

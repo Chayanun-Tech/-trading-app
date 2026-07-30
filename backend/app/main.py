@@ -39,8 +39,8 @@ from app import sp500_history
 from app import confluence
 from app.engine import build_report
 from app.financials import build_financials
-from app.fundamentals import (get_fundamentals, get_offline, is_equity_symbol,
-                              save_ai_qualitative, update_offline)
+from app.fundamentals import (fetch_yahoo_fundamentals, get_fundamentals, get_offline,
+                              is_equity_symbol, save_ai_qualitative, update_offline)
 from app.fundamentals_ai import analyze_fundamentals_ai
 from app.indicators import compute_indicators
 from app.math_model import DEFAULT_MODEL_PATH, load_model
@@ -707,9 +707,19 @@ async def _external_peer_context(symbol: str) -> dict:
         "ext_sector": snap.get("sector"), "ext_industry": snap.get("industry"),
         "ext_sic_desc": sic_desc, "ext_name": snap.get("long_name"),
         "ext_pe": pe, "ext_eps": eps, "ext_price": price,
+        "ext_forward_pe": snap.get("forward_pe"),
         "ext_yoy_pct": _pct(snap.get("revenue_growth")),
         "ext_eps_yoy_pct": _pct(snap.get("earnings_growth")),
     }
+
+
+async def _focus_forward_pe(symbol: str) -> float | None:
+    """Forward P/E ระดับหุ้น (จาก Yahoo) สำหรับหุ้น focus ที่อยู่ใน S&P 500 — เอาไปโชว์คู่กับ trailing
+    P/E ให้ผู้ใช้เทียบกับเว็บที่พาดหัวเป็น forward (เช่น Seeking Alpha). best-effort, ดึงไม่ได้คืน None."""
+    try:
+        return (await fetch_yahoo_fundamentals(symbol)).get("forward_pe")
+    except Exception:  # noqa: BLE001
+        return None
 
 
 @app.get("/api/industry/peers")
@@ -722,6 +732,10 @@ async def industry_peers_route(symbol: str = Query(..., description="สัญ�
         ext = {}
         if industry_peers._to_sym(symbol) not in industry_peers.load_constituents():
             ext = await _external_peer_context(symbol)
+        else:
+            # หุ้น US ในลิสต์: กลุ่ม/คู่แข่งอ่านจากแคช (ไม่ยิงเน็ต) — ยิง Yahoo แค่ค่า forward P/E ของ
+            # หุ้น focus ตัวเดียว (cache 30 นาที) เพื่อโชว์คู่กับ trailing ให้เทียบกับ Seeking Alpha ได้
+            ext = {"ext_forward_pe": await _focus_forward_pe(symbol)}
         return industry_peers.peers_for(symbol, **ext)
     except ValueError as exc:
         raise HTTPException(404, str(exc))

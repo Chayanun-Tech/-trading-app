@@ -3963,15 +3963,21 @@ function renderRmIndustry(p) {
 
   // ── ข้อ 1: ชิป PE กลุ่ม เทียบ PE หุ้นนี้
   const myPe = p.justified ? p.justified.current_pe : null;
+  const fwdPe = p.justified ? p.justified.forward_pe : null;
   const peCol = (myPe == null) ? "#7d8b99" : (myPe <= ind.pe_median ? "#4caf7d" : "#e0785f");
+  const peBasisTip = p.pe_basis ? escapeHtml(p.pe_basis) : "";
   const chip1 = `<div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
       <div style="border:1px solid #33404d; border-radius:6px; padding:4px 8px; background:rgba(255,255,255,0.03);">
         <div class="tiny" style="color:#7d8b99;">PE กลาง${escapeHtml(ind.name ? " · " + ind.name : "")} (${ind.n} ตัว)</div>
         <div style="font-weight:600;">${ind.pe_median}x <span class="tiny" style="color:#7d8b99;">(เฉลี่ย ${ind.pe_mean}x)</span></div>
       </div>
-      ${myPe != null ? `<div style="border:1px solid #33404d; border-radius:6px; padding:4px 8px; background:rgba(255,255,255,0.03);">
-        <div class="tiny" style="color:#7d8b99;">PE หุ้นนี้</div>
+      ${myPe != null ? `<div title="${peBasisTip}" style="border:1px solid #33404d; border-radius:6px; padding:4px 8px; background:rgba(255,255,255,0.03); cursor:help;">
+        <div class="tiny" style="color:#7d8b99;">PE หุ้นนี้ <span style="border-bottom:1px dotted #55636f;">(trailing GAAP TTM)</span></div>
         <div style="font-weight:600; color:${peCol};">${myPe}x <span class="tiny">${myPe <= ind.pe_median ? "ถูกกว่ากลุ่ม" : "แพงกว่ากลุ่ม"}</span></div>
+      </div>` : ""}
+      ${fwdPe != null ? `<div title="Forward P/E จาก Yahoo (ราคา ÷ ประมาณการกำไรอนาคต) — เป็นเลขที่เว็บอย่าง Seeking Alpha มักพาดหัว ต่างจาก trailing GAAP ทางซ้าย" style="border:1px solid #33404d; border-radius:6px; padding:4px 8px; background:rgba(255,255,255,0.03); cursor:help;">
+        <div class="tiny" style="color:#7d8b99;">PE forward <span class="tiny" style="color:#7d8b99;">(Yahoo)</span></div>
+        <div style="font-weight:600; color:#7fa8d0;">${fwdPe}x</div>
       </div>` : ""}
     </div>`;
 
@@ -4014,7 +4020,7 @@ function renderRmIndustry(p) {
       <div class="tiny" style="color:#7d8b99; margin-bottom:2px;">👥 คู่แข่งในกลุ่มเดียวกัน (คลิกแถวเพื่อสลับไปหุ้นนั้น) · PE <span style="color:#4caf7d;">เขียว</span>=ถูกกว่ากลาง <span style="color:#e0785f;">แดง</span>=แพงกว่า</div>
       <table style="width:100%; border-collapse:collapse; font-size:12px;">
         <thead><tr style="color:#7d8b99;">
-          <th style="padding:3px 6px; text-align:left;">หุ้น</th><th style="padding:3px 6px; text-align:right;">PE</th>
+          <th style="padding:3px 6px; text-align:left;">หุ้น</th><th style="padding:3px 6px; text-align:right; cursor:help; border-bottom:1px dotted #55636f;" title="${peBasisTip}">PE ⓘ</th>
           <th style="padding:3px 6px; text-align:right;">upside มูลค่า</th><th style="padding:3px 6px; text-align:right;">โตรายได้ YoY</th><th style="padding:3px 6px; text-align:right;">EPS โต YoY</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
