@@ -26,7 +26,11 @@ from pathlib import Path
 from app import industry_peers, llm, wiki_image
 from app.config import get_settings
 
-_CACHE_DIR = Path(__file__).resolve().parents[1].parent / "data" / "financials"
+# ต่างจาก macro_business/business (data/financials/ — gitignored, ต่อ "รายหุ้น" นับพันตัว
+# เปลืองพื้นที่ regenerate เองได้ไม่เสียดาย) — ecosystem cache เป็นชุดข้อมูลตายตัว 85 ธีม ตั้งใจ
+# ให้สร้างครั้งเดียวแล้ว "commit ขึ้น git" เหมือน data_sp500_lynch_scan.json เพื่อให้ทุกคนที่
+# deploy เห็นเนื้อหาเดียวกันทันที ไม่ต้องเรียก AI ใหม่ทุกเครื่อง
+_CACHE_DIR = Path(__file__).resolve().parent / "data_ecosystem"
 _TTL = 180 * 24 * 3600  # เนื้อหาระดับโครงสร้างอุตสาหกรรม evergreen — cache ยาว 180 วัน
 
 # ── Theme registry — 85 ธีมหลัก ครอบคลุมทั้ง 11 GICS sector + ธีมข้าม sector ────────────
@@ -497,6 +501,49 @@ async def generate_theme(slug: str) -> dict:
         "components": components,
         "disclaimer": (
             "เนื้อหานี้สร้างโดย AI เพื่อการศึกษาโครงสร้างอุตสาหกรรม ไม่ใช่คำแนะนำการลงทุน "
+            "ตัวเลขเชิงปริมาณเป็นการประมาณการทิศทาง ไม่ใช่ตัวเลขทางการ — ควรตรวจสอบข้อมูลจริง "
+            "ของบริษัทที่สนใจเพิ่มเติมก่อนตัดสินใจ"
+        ),
+    }
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    _cache_path(slug).write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    return result
+
+
+async def seed_theme(slug: str, raw_overview: dict, raw_components: list[dict]) -> dict:
+    """เหมือน generate_theme() ทุกประการ แต่ข้ามการเรียก LLM ของระบบ (Gemini/Groq) ไปเลย —
+    รับเนื้อหาที่เขียนไว้แล้ว (ตาม schema เดียวกับ _OVERVIEW_CONTRACT/_COMPONENT_CONTRACT_TMPL
+    ที่ปกติ AI ต้องตอบ) มาวิ่งผ่าน pipeline เดียวกันทุกขั้น — validate/truncate + ground บริษัทจริง
+    กับฐาน S&P 500 + ดึงรูปจริงจาก Wikipedia (2 ขั้นหลังนี้ไม่ใช้โควตา AI อยู่แล้ว) ใช้ตอนอยาก
+    เลี่ยงโควตา AI ของระบบ (เช่น Claude Code เขียนเนื้อหาเองแทน).
+
+    raw_components: แต่ละตัวต้องมี name, role_one_liner ครบตาม _COMPONENT_CONTRACT_TMPL."""
+    theme = _THEME_BY_SLUG.get(slug)
+    if not theme:
+        raise ValueError(f"ไม่รู้จัก theme '{slug}'")
+
+    ov = dict(raw_overview)
+    ov["components"] = [{"name": c.get("name"), "role_one_liner": c.get("role_one_liner")} for c in raw_components]
+    overview = _clean_overview(ov)
+    if not overview.get("definition") or not overview.get("components"):
+        raise ValueError("raw_overview ไม่ครบ (ต้องมี definition + components อย่างน้อย 1 รายการ)")
+
+    components = []
+    for raw_c in raw_components:
+        detail = await _clean_component(raw_c)
+        if not detail.get("role") or not detail.get("companies"):
+            raise ValueError(f"component '{raw_c.get('name')}' เนื้อหาไม่ครบ (ต้องมี role + companies)")
+        components.append({"name": raw_c.get("name"), "role_one_liner": raw_c.get("role_one_liner"), **detail})
+
+    result = {
+        "slug": slug,
+        "name_th": theme["name_th"],
+        "sector": theme["sector"],
+        "generated_at": int(time.time()),
+        **{k: v for k, v in overview.items() if k != "components"},
+        "components": components,
+        "disclaimer": (
+            "เนื้อหานี้เขียนโดย AI เพื่อการศึกษาโครงสร้างอุตสาหกรรม ไม่ใช่คำแนะนำการลงทุน "
             "ตัวเลขเชิงปริมาณเป็นการประมาณการทิศทาง ไม่ใช่ตัวเลขทางการ — ควรตรวจสอบข้อมูลจริง "
             "ของบริษัทที่สนใจเพิ่มเติมก่อนตัดสินใจ"
         ),

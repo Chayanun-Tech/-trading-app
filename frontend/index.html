@@ -5160,7 +5160,11 @@ async function loadEcosystemThemes() {
 
 function renderEcosystemThemeList(d) {
   const E = escapeHtml;
-  $("ecoListStatus").innerHTML = `<div class="note">สร้างแล้ว ${d.built_count}/${d.total} ธีม — คลิกธีมไหนก็ได้เพื่อดู/สร้างเนื้อหา (● = สร้างแล้ว, ○ = ยังไม่สร้าง)</div>`;
+  const pct = d.total ? Math.round((d.built_count / d.total) * 100) : 0;
+  $("ecoListStatus").innerHTML =
+    `<div class="note">สร้างแล้ว ${d.built_count}/${d.total} ธีม (${pct}%) — คลิกธีมไหนก็ได้เพื่อดู/สร้างเนื้อหา (● = สร้างแล้ว, ○ = ยังไม่สร้าง)</div>` +
+    `<div style="background:#1a2530; border-radius:6px; height:10px; margin-top:6px; overflow:hidden;">` +
+    `<div style="background:linear-gradient(90deg,#2a6,#4ade80); height:100%; width:${pct}%; transition:width .3s;"></div></div>`;
   let html = "";
   for (const sec of (d.sectors || [])) {
     html += `<div style="margin-top:14px;"><b style="font-size:14px; color:#9fb0c0;">${E(sec.sector)}</b></div>`;
