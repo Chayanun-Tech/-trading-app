@@ -604,8 +604,13 @@ async def ai_analysis(symbol: str, mode: str, sc: dict) -> dict:
                     ctx_txt += f"\n\n[ปัจจัยเสี่ยง]\n{(ctx.get('risk_factors') or '')[:3000]}"
         except Exception:  # noqa: BLE001
             ctx_txt = ""
+    system = _AI_SYSTEMS[mode] + (
+        " ⚠️ สำคัญมาก: ตอบทุกฟิลด์ที่เป็นข้อความ (evidence/summary/tone/positives/concerns/reasoning/"
+        "scenario/early_warning/buffett_case/munger_case/key_swing_factor ฯลฯ) เป็น 'ภาษาไทย' เท่านั้น — "
+        "เอกสาร 10-K/MD&A ที่ให้มาเป็นภาษาอังกฤษ ให้แปล/สรุปเป็นไทยที่อ่านเข้าใจง่าย (คงตัวเลข % และชื่อเฉพาะได้). "
+        "ฟิลด์ที่เป็นค่าตายตัว (strength/candor/durability/width/likelihood/verdict) คงค่า enum ภาษาอังกฤษตาม schema.")
     try:
-        result = await ai_analyst._run_llm(_AI_SYSTEMS[mode], summary + ctx_txt)
+        result = await ai_analyst._run_llm(system, summary + ctx_txt)
         return result if isinstance(result, dict) else {"error": "AI ตอบไม่เป็นรูปแบบที่ใช้ได้"}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"AI วิเคราะห์ไม่สำเร็จ: {exc}"}

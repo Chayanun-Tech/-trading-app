@@ -3446,6 +3446,9 @@ async function loadBuffettAI(mode) {
   }
 }
 
+const BUF_ENUM_TH = { strong:"แข็งแกร่ง", moderate:"ปานกลาง", weak:"อ่อน", none:"ไม่มี",
+  high:"สูง", medium:"ปานกลาง", low:"ต่ำ", wide:"กว้าง", narrow:"แคบ" };
+function bEnum(v) { return v ? (BUF_ENUM_TH[String(v).toLowerCase()] ? BUF_ENUM_TH[String(v).toLowerCase()]+" ("+v+")" : v) : "—"; }
 function renderBuffettAI(mode, d) {
   const li = arr => (arr||[]).map(x => `<li class="tiny" style="margin:2px 0;">${escapeHtml(typeof x==="string"?x:JSON.stringify(x))}</li>`).join("");
   const box = (title, col, body) => `<div style="border:1px solid ${col}55; border-radius:10px; padding:10px 12px; margin-top:8px; background:${col}11;">
@@ -3454,11 +3457,11 @@ function renderBuffettAI(mode, d) {
   if (mode === "moat") {
     const srcCol = s => s==="strong"?"#4caf7d":s==="moderate"?"#e2b93b":s==="weak"?"#e08a6a":"#7d8b99";
     const srcTh = {intangibles:"แบรนด์/สิทธิบัตร", switching_costs:"ต้นทุนย้ายค่าย", network_effect:"เครือข่าย", cost_advantage:"ต้นทุนต่ำ", efficient_scale:"สเกลคุ้มตัว"};
-    const rows = (d.sources||[]).map(s => `<div style="margin:4px 0;"><b style="color:${srcCol(s.strength)};">${escapeHtml(srcTh[s.source]||s.source)} — ${escapeHtml(s.strength||"")}</b><div class="tiny" style="color:#a9c4dd;">${escapeHtml(s.evidence||"")}</div></div>`).join("");
+    const rows = (d.sources||[]).map(s => `<div style="margin:4px 0;"><b style="color:${srcCol(s.strength)};">${escapeHtml(srcTh[s.source]||s.source)} — ${escapeHtml(bEnum(s.strength))}</b><div class="tiny" style="color:#a9c4dd;">${escapeHtml(s.evidence||"")}</div></div>`).join("");
     html = box("🏰 คูเมืองเศรษฐกิจ (AI จาก 10-K)", "#7fa8d0",
-      `<div class="tiny" style="color:#a9c4dd; margin-bottom:6px;">ความกว้าง: <b>${escapeHtml(d.width||"—")}</b> · ความทน: <b>${escapeHtml(d.durability||"—")}</b></div>${rows}<div class="tiny" style="margin-top:6px;">${escapeHtml(d.summary||"")}</div>`);
+      `<div class="tiny" style="color:#a9c4dd; margin-bottom:6px;">ความกว้าง: <b>${escapeHtml(bEnum(d.width))}</b> · ความทน: <b>${escapeHtml(bEnum(d.durability))}</b></div>${rows}<div class="tiny" style="margin-top:6px;">${escapeHtml(d.summary||"")}</div>`);
   } else if (mode === "premortem") {
-    const fm = (d.failure_modes||[]).map(f => `<div style="margin:4px 0;"><b class="tiny" style="color:${f.likelihood==='high'?'#e0785f':f.likelihood==='medium'?'#e2b93b':'#7d8b99'};">⚠️ ${escapeHtml(f.scenario||"")} (${escapeHtml(f.likelihood||"")})</b><div class="tiny" style="color:#a9c4dd;">สัญญาณเตือน: ${escapeHtml(f.early_warning||"")}</div></div>`).join("");
+    const fm = (d.failure_modes||[]).map(f => `<div style="margin:4px 0;"><b class="tiny" style="color:${f.likelihood==='high'?'#e0785f':f.likelihood==='medium'?'#e2b93b':'#7d8b99'};">⚠️ ${escapeHtml(f.scenario||"")} (${escapeHtml(bEnum(f.likelihood))})</b><div class="tiny" style="color:#a9c4dd;">สัญญาณเตือน: ${escapeHtml(f.early_warning||"")}</div></div>`).join("");
     html = box("🔻 Pre-mortem — บริษัทนี้จะพังได้อย่างไร (Munger Invert)", "#e08a6a",
       `${fm}${d.red_flags&&d.red_flags.length?`<div class="tiny" style="margin-top:6px; color:#c9b26a;"><b>ธงแดง:</b><ul style="margin:2px 0; padding-left:16px;">${li(d.red_flags)}</ul></div>`:""}<div class="tiny" style="margin-top:6px;">${escapeHtml(d.summary||"")}</div>`);
   } else if (mode === "debate") {
@@ -3473,7 +3476,7 @@ function renderBuffettAI(mode, d) {
   } else if (mode === "candor") {
     const cc = d.candor==="high"?"#4caf7d":d.candor==="low"?"#e0785f":"#e2b93b";
     html = box("🎙️ ผู้บริหารพูดตรงไหม (จาก MD&A)", "#7fa8d0",
-      `<div class="tiny">ความตรงไปตรงมา: <b style="color:${cc};">${escapeHtml(d.candor||"—")}</b></div>
+      `<div class="tiny">ความตรงไปตรงมา: <b style="color:${cc};">${escapeHtml(bEnum(d.candor))}</b></div>
       <div class="tiny" style="color:#a9c4dd; margin:4px 0;">ท่าทีการจัดสรรทุน: ${escapeHtml(d.capital_allocation_tone||"")}</div>
       ${d.positives&&d.positives.length?`<div class="tiny" style="color:#7fddb0;"><b>จุดบวก:</b><ul style="margin:2px 0; padding-left:16px;">${li(d.positives)}</ul></div>`:""}
       ${d.concerns&&d.concerns.length?`<div class="tiny" style="color:#c9b26a;"><b>ภาษาที่ควรระวัง:</b><ul style="margin:2px 0; padding-left:16px;">${li(d.concerns)}</ul></div>`:""}

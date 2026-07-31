@@ -173,6 +173,43 @@ def _annual_shares(facts: dict) -> dict[int, dict]:
     return out
 
 
+_COMMON_SPLIT_RATIOS = (2, 3, 4, 5, 6, 7, 8, 10, 15, 20, 25, 30, 50)
+
+
+def _detect_split_factor(sec_shares: float | None, live_shares: float | None) -> float | None:
+    """ตรวจจับ 'หุ้นเพิ่งแตกพาร์/รวมพาร์ (stock split) ไปแล้ว แต่ SEC ยังไม่มี 10-Q/10-K ฉบับใหม่
+    มายืนยันจำนวนหุ้น/EPS หลัง split' — เกิดขึ้นได้เพราะราคาจาก provider (Yahoo) ปรับหลัง split ทันที
+    แต่ EPS/จำนวนหุ้นถัวเฉลี่ยใน SEC companyfacts ยังเป็นค่า 'ก่อน split' จนกว่าบริษัทจะยื่นงบใหม่และ
+    รายงาน EPS เปรียบเทียบที่ปรับปรุงแล้ว (เช่น KLA Corp split 10:1 มิ.ย. 2026 — เจอจริงจากการตรวจ 8-K).
+
+    เทียบจำนวนหุ้นถัวเฉลี่ยล่าสุดจาก SEC กับจำนวนหุ้นคงค้างสด (จาก provider ราคา ณ ปัจจุบัน) — ถ้าอัตรา
+    ใกล้ตัวเลข split มาตรฐาน (2,3,4,5...50 หรือกลับด้าน) ห่างจาก 1.0 ชัดเจน ให้คืน 'ตัวคูณที่ต้องหาร EPS/
+    ราคาต่อหุ้นฐาน SEC' เพื่อให้สอดคล้องกับราคาสดหลัง split — ถ้าไม่ใช่ split (แค่ซื้อคืน/ออกหุ้นเพิ่ม
+    ปกติ) คืน None (ไม่ปรับ)."""
+    if not sec_shares or not live_shares or sec_shares <= 0 or live_shares <= 0:
+        return None
+    ratio = live_shares / sec_shares
+    if 0.85 <= ratio <= 1.15:
+        return None
+    for k in _COMMON_SPLIT_RATIOS:
+        if abs(ratio - k) / k < 0.08:
+            return float(k)
+        if abs(ratio - 1 / k) / (1 / k) < 0.08:
+            return 1.0 / k
+    return None
+
+
+async def _fresh_split_factor(symbol: str, sec_shares: float | None) -> float | None:
+    """หา live shares outstanding จาก Yahoo แล้วเทียบกับ SEC เพื่อจับ split ที่เพิ่งเกิด — best-effort,
+    ดึงไม่ได้ก็คืน None (ไม่ปรับ, ใช้ข้อมูล SEC ตรง ๆ เหมือนเดิม)."""
+    try:
+        from app.fundamentals import fetch_yahoo_fundamentals
+        snap = await fetch_yahoo_fundamentals(symbol)
+        return _detect_split_factor(sec_shares, snap.get("shares"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _fcf_annual_points(facts: dict) -> list[dict]:
     """กระแสเงินสดอิสระรายปีจาก 10-K (OCF − CapEx) พร้อมต่อหุ้น — ใช้ทั้งใน get_revenue_model
     (เป็น fallback ของเส้น P/FCF) และในตัวสแกนมูลค่าทั้ง S&P 500 (value_scanner)."""
@@ -244,13 +281,26 @@ def _ttm_eps_latest(facts: dict) -> float | None:
 
 def _compute_sector_extras(profile_key: str, facts: dict, bars: list[dict], bars_per_q: int,
                            fin: dict, fcf_annual: list[dict], pe_band: dict | None,
-                           pfcf_band: dict | None) -> tuple[list[dict], dict | None, list[str]]:
+                           pfcf_band: dict | None,
+                           split_factor: float | None = None) -> tuple[list[dict], dict | None, list[str]]:
     """คำนวณ extra metrics (ตัวเลขจริง) + ราคายุติธรรมตาม primary metric ของ sector.
-    คืน (extra_metrics, fair_value, extra_warnings)."""
+    คืน (extra_metrics, fair_value, extra_warnings).
+
+    split_factor: ถ้าหุ้นเพิ่ง split (ตรวจจาก _fresh_split_factor) แต่ SEC ยังไม่มีงบใหม่ยืนยัน —
+    ตัวเลขต่อหุ้นที่มาจาก SEC (EPS/BVPS/FFO ฯลฯ) ต้อง 'หาร' ด้วยค่านี้ก่อนใช้คู่กับราคาสด (หลัง split)
+    ไม่งั้น P/E จะเพี้ยนหลายเท่าตามอัตรา split (เจอจริงกับ KLA Corp split 10:1 มิ.ย. 2026)."""
     price = bars[-1]["close"] if bars else None
     metrics: list[dict] = []
     fair: dict | None = None
     warns: list[str] = []
+    split_note = (f"⚠️ ตรวจพบหุ้นนี้อาจเพิ่งแตกพาร์ (split ~{split_factor:.0f}:1) แต่ SEC ยังไม่มีงบใหม่ยืนยัน "
+                  f"— ปรับ EPS/มูลค่าต่อหุ้นจาก SEC ให้สอดคล้องกับราคาสดโดยประมาณ (หาร {split_factor:.0f})"
+                  if split_factor and split_factor > 1
+                  else (f"⚠️ ตรวจพบหุ้นนี้อาจเพิ่งรวมพาร์ (reverse split) แต่ SEC ยังไม่มีงบใหม่ยืนยัน "
+                        f"— ปรับ EPS/มูลค่าต่อหุ้นจาก SEC ให้สอดคล้องกับราคาสดโดยประมาณ"
+                        if split_factor else None))
+    if split_note:
+        warns.append(split_note)
 
     def pct(v):
         return f"{v * 100:.1f}%" if isinstance(v, (int, float)) else None
@@ -352,6 +402,15 @@ def _compute_sector_extras(profile_key: str, facts: dict, bars: list[dict], bars
         basis = "P/E median (TTM)" if (isinstance(ttm_eps, (int, float)) and ttm_eps > 0) else "P/E median"
         if eps_for_pe and eps_for_pe > 0 and pe_band:
             fair = _fair_from_band(eps_for_pe, pe_band, basis, price)
+
+    # แก้ per_share ให้สอดคล้องกับราคาสดหลัง split (ถ้าตรวจพบ) — หมายเหตุ: fair_price/upside_pct/
+    # median_multiple ไม่ต้องแตะ เพราะคำนวณจาก per_share (หน่วยก่อน split) x band multiplier (คำนวณจาก
+    # price สดหาร per_share หน่วยก่อน split เหมือนกันตลอดทั้งช่วง) ผลคูณจึงหักล้าง unit ก่อน/หลัง split
+    # กันเองอยู่แล้วและถูกต้องเป็นทุนเดิม — ปรับเฉพาะ per_share ที่ frontend/industry_peers เอาไปหารกับ
+    # ราคาสดตรง ๆ ภายนอกฟังก์ชันนี้ (เจอบั๊กจริง: KLA Corp split 10:1 มิ.ย. 2026 ทำให้ per_share ค้างค่า
+    # ก่อน split แล้ว price(สด)/per_share(ก่อน split) กลายเป็น P/E เพี้ยน ~10 เท่า)
+    if fair and split_factor and split_factor > 0:
+        fair["per_share"] = round(fair["per_share"] / split_factor, 2)
 
     # ด่านสุดท้าย: ตัวคูณ median ที่คำนวณจากช่วงที่ metric "เกือบศูนย์" (เช่น FCF ปีที่เจ๊งพอดี)
     # จะพุ่งเป็นหลักร้อย-พันเท่า แล้วดันราคายุติธรรมหลุดโลก (เคยได้ราคายุติธรรม $4,740 ของหุ้นราคา $92)
@@ -1195,8 +1254,12 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         pfcf_reference["high"] = round(pfcf_band["p75"], 1)
 
     # ชั้น 3 ส่วนขยาย: metric เฉพาะ sector (ตัวเลขจริง) + ราคายุติธรรมตาม primary metric
+    # ตรวจ split ที่เพิ่งเกิดแต่ SEC ยังไม่มีงบใหม่ยืนยัน (เช่น KLA Corp split 10:1 มิ.ย. 2026) — ถ้าไม่ตรวจ
+    # per_share ที่ใช้เทียบกับราคาสด (industry peers PE) จะเพี้ยนหลายเท่าตามอัตรา split
+    sec_shares_latest = ann_shares[max(ann_shares)]["val"] if ann_shares else None
+    split_factor = await _fresh_split_factor(symbol, sec_shares_latest)
     extra_metrics, fair_value, extra_warns = _compute_sector_extras(
-        profile_key, facts, bars, bars_per_q, fin_snapshot, fcf_annual, pe_band, pfcf_band)
+        profile_key, facts, bars, bars_per_q, fin_snapshot, fcf_annual, pe_band, pfcf_band, split_factor)
     warnings.extend(extra_warns)
 
     # ข้อ 4: สถิติการเติบโต (CAGR รายได้/EPS หลายหน้าต่าง) สำหรับแผงคาดการณ์มูลค่าอนาคต ฝั่ง frontend
@@ -1316,8 +1379,12 @@ async def sector_fair_value(symbol: str, *, granularity: str = "weekly", refresh
     if sector_profile.is_disabled(profile_key, "pfcf"):
         pfcf_band = None
 
+    # ตรวจ split ที่เพิ่งเกิดแต่ SEC ยังไม่มีงบใหม่ยืนยัน — reuse ตรรกะเดียวกับ get_revenue_model
+    ann_shares_sfv = _annual_shares(facts)
+    sec_shares_latest_sfv = ann_shares_sfv[max(ann_shares_sfv)]["val"] if ann_shares_sfv else None
+    split_factor = await _fresh_split_factor(symbol, sec_shares_latest_sfv)
     extra_metrics, fair_value, extra_warns = _compute_sector_extras(
-        profile_key, facts, bars, bars_per_q, fin_snapshot, fcf_annual, pe_band, pfcf_band)
+        profile_key, facts, bars, bars_per_q, fin_snapshot, fcf_annual, pe_band, pfcf_band, split_factor)
 
     return {
         "symbol": symbol,
