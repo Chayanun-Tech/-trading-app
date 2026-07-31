@@ -985,6 +985,7 @@
         <button class="tab" id="scanSubValBtn" onclick="showScanSub('val')" title="เทียบราคากับราคายุติธรรมตามกลุ่มธุรกิจ (P/E, P/B, P/FFO ฯลฯ)">💎 ต่ำกว่ามูลค่ายุติธรรม</button>
         <button class="tab" id="scanSubEmaBtn" onclick="showScanSub('ema')" title="สายเทคนิค — หาหุ้นที่ราคาลงมาใกล้เส้นค่าเฉลี่ย EMA 50/100/200">📐 ใกล้เส้น EMA</button>
         <button class="tab" id="scanSubLynchBtn" onclick="showScanSub('lynch')" title="จัดกลุ่มหุ้นทั้ง S&P 500 ตาม 6 ประเภทของ Peter Lynch แล้วซอยย่อยตาม Sector">🎯 จัดกลุ่ม Peter Lynch</button>
+        <button class="tab" id="scanSubEcoBtn" onclick="showScanSub('eco')" title="สารานุกรมอุตสาหกรรมเชิงลึก 85 ธีม: ผ่าระบบนิเวศสินค้าทีละชั้นด้วยบริษัทจริง + กรอบวิเคราะห์ระดับ circle of competence">🕸️ Ecosystem</button>
       </div>
 
       <div id="scanSubAllBox">
@@ -1186,6 +1187,22 @@
         <div id="lsStatus" class="note" style="margin-top:6px;"></div>
         <div id="lsResult" style="margin-top:12px;">
           <div class="note">กำลังโหลดผลอัตโนมัติเมื่อเปิดเมนูนี้ — ผลยังใหม่จะแสดงทันที ถ้าเก่ากว่า 24 ชม. จะสแกนสดใหม่ให้เอง (ดึงพื้นฐาน 500 บริษัทจาก Yahoo ใช้เวลาหลายนาที)</div>
+        </div>
+      </div>
+
+      <div id="scanSubEcoBox" class="hidden">
+        <div>
+          <b style="font-size:16px;">🕸️ Ecosystem Map — สารานุกรมอุตสาหกรรมเชิงลึก</b>
+          <div class="note">แผนที่ระบบนิเวศสินค้า/อุตสาหกรรม 85 ธีม อธิบายทุกชั้นด้วยบริษัทจริง พร้อมกรอบวิเคราะห์ (Five Forces, Profit Pool, Pre-mortem) และเนื้อหาสร้าง "circle of competence" แบบ Buffett ให้ถือยาวได้โดยไม่ตกใจขาย — เปิดธีมไหนครั้งแรก AI จะสร้างเนื้อหาสด (ใช้เวลาราว 1-2 นาที เพราะลงลึกทีละชั้น) แล้ว cache ไว้ถาวรให้ทุกครั้งถัดไปเปิดทันที</div>
+        </div>
+        <div id="ecoListView" style="margin-top:10px;">
+          <div id="ecoListStatus" class="note">กำลังโหลดรายชื่อธีม...</div>
+          <div id="ecoListBody"></div>
+        </div>
+        <div id="ecoDetailView" class="hidden" style="margin-top:10px;">
+          <button onclick="ecoBackToList()" style="margin-bottom:8px;">← กลับไปรายชื่อธีม</button>
+          <div id="ecoDetailStatus" class="note"></div>
+          <div id="ecoDetailBody"></div>
         </div>
       </div>
     </div>
@@ -4703,6 +4720,7 @@ const SCAN_SUBS = {
   val: { box:"scanSubValBox", btn:"scanSubValBtn", load:() => runValueScan() },
   ema: { box:"scanSubEmaBox", btn:"scanSubEmaBtn", load:() => runEmaScan() },
   lynch: { box:"scanSubLynchBox", btn:"scanSubLynchBtn", load:() => runLynchScan() },
+  eco: { box:"scanSubEcoBox", btn:"scanSubEcoBtn", load:() => loadEcosystemThemes() },
 };
 const scanAutoLoaded = {};
 function autoLoadScanSub(which) {
@@ -5114,6 +5132,163 @@ function renderLynchScan(d) {
   html += `<div class="note" style="margin-top:4px;">${E(d.coverage_note || "")}</div>`;
   html += `<div class="note" style="margin-top:4px;">${E(d.disclaimer || "")}</div>`;
   $("lsResult").innerHTML = html;
+}
+
+// ---------- Ecosystem Map: สารานุกรมอุตสาหกรรมเชิงลึก 85 ธีม ----------
+let ecoThemesCache = null;
+
+async function loadEcosystemThemes() {
+  $("ecoDetailView").classList.add("hidden");
+  $("ecoListView").classList.remove("hidden");
+  $("ecoListStatus").innerHTML = `<div class="note">กำลังโหลดรายชื่อธีม...</div>`;
+  try {
+    const res = await fetch(`${API}/api/ecosystem/themes`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    ecoThemesCache = await res.json();
+    renderEcosystemThemeList(ecoThemesCache);
+  } catch (e) {
+    notifyError(errorMessage(e), "โหลดรายชื่อธีมไม่สำเร็จ");
+    $("ecoListStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function renderEcosystemThemeList(d) {
+  const E = escapeHtml;
+  $("ecoListStatus").innerHTML = `<div class="note">สร้างแล้ว ${d.built_count}/${d.total} ธีม — คลิกธีมไหนก็ได้เพื่อดู/สร้างเนื้อหา (● = สร้างแล้ว, ○ = ยังไม่สร้าง)</div>`;
+  let html = "";
+  for (const sec of (d.sectors || [])) {
+    html += `<div style="margin-top:14px;"><b style="font-size:14px; color:#9fb0c0;">${E(sec.sector)}</b></div>`;
+    html += `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">`;
+    for (const t of sec.themes) {
+      const badge = t.built ? `<span style="color:#4ade80;">●</span>` : `<span style="color:#5f6d7a;">○</span>`;
+      html += `<button onclick="viewEcosystemTheme('${E(t.slug)}')" style="padding:6px 10px; border-radius:8px; font-size:13px;" title="${t.built ? "สร้างแล้ว — คลิกเพื่อดู" : "ยังไม่สร้าง — คลิกเพื่อให้ AI สร้างเนื้อหา (ใช้เวลาสักครู่)"}">${badge} ${E(t.name_th)}</button>`;
+    }
+    html += `</div>`;
+  }
+  $("ecoListBody").innerHTML = html;
+}
+
+async function viewEcosystemTheme(slug, refresh) {
+  $("ecoListView").classList.add("hidden");
+  $("ecoDetailView").classList.remove("hidden");
+  $("ecoDetailBody").innerHTML = "";
+  $("ecoDetailStatus").innerHTML = `<div class="note">${refresh ? "🔄 กำลังสร้างเนื้อหาใหม่..." : "กำลังโหลด — ถ้าเปิดธีมนี้ครั้งแรก AI จะสร้างเนื้อหาสดทีละชั้น อาจใช้เวลา 1-2 นาที กรุณารอ..."}</div>`;
+  try {
+    const params = new URLSearchParams();
+    if (refresh) params.set("refresh", "true");
+    const qs = params.toString();
+    const res = await fetch(`${API}/api/ecosystem/${encodeURIComponent(slug)}${qs ? "?" + qs : ""}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({ detail:res.statusText }))).detail || res.statusText);
+    const d = await res.json();
+    renderEcosystemTheme(d);
+    $("ecoDetailStatus").innerHTML = "";
+  } catch (e) {
+    notifyError(errorMessage(e), "โหลด Ecosystem Map ไม่สำเร็จ");
+    $("ecoDetailStatus").innerHTML = `<div class="down">${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+
+function ecoBackToList() {
+  $("ecoDetailView").classList.add("hidden");
+  $("ecoListView").classList.remove("hidden");
+  loadEcosystemThemes();
+}
+
+function ecoCompanyChip(c) {
+  const E = escapeHtml;
+  const roleLabel = { leader:"ผู้นำ", challenger:"ผู้ท้าชิง", niche:"เฉพาะทาง", failed_case:"เคยล้มเหลว" }[c.role] || c.role;
+  const groundedBadge = c.grounded
+    ? `<span style="color:#4ade80;" title="มีในฐานข้อมูล S&P 500 ของแอป — คลิกเพื่อวิเคราะห์ต่อ">●</span>`
+    : `<span style="color:#5f6d7a;" title="ไม่อยู่ในฐานข้อมูล S&P 500 ของแอป (ต่างชาติ/ไม่ใช่บริษัทมหาชนสหรัฐ)">○</span>`;
+  const peNote = c.industry_pe_median != null ? ` · PE กลุ่ม ${c.industry_pe_median}` : "";
+  // ticker ที่ยังไม่ grounded อาจเป็นแค่ AI เดา (บางครั้งไม่ตรงสัญลักษณ์จริง) — โชว์เฉพาะตอน grounded
+  // แล้วเท่านั้น กันเข้าใจผิดว่าเป็นสัญลักษณ์ซื้อขายจริง
+  const tickerLabel = c.grounded && c.ticker ? `<b>${E(c.ticker)}</b> ` : "";
+  const clickable = c.grounded && c.ticker
+    ? ` style="cursor:pointer;" onclick="openSymbolInIV('${E(c.ticker)}')" title="เปิดวิเคราะห์มูลค่า IV ของ ${E(c.ticker)}"` : "";
+  return `<div class="field"${clickable} style="padding:8px; margin-bottom:6px;">`
+    + `<div>${groundedBadge} ${tickerLabel}${E(c.name)} <span class="tiny" style="color:#7d8b99;">(${E(roleLabel)})</span>${E(peNote)}</div>`
+    + `<div class="tiny" style="color:#9fb0c0; margin-top:2px;">${E(c.note || "")}</div>`
+    + `</div>`;
+}
+
+function ecoComponentCard(c) {
+  const E = escapeHtml;
+  if (c.error) {
+    return `<div class="field" style="margin-top:8px; padding:10px;"><b>${E(c.name)}</b><div class="down tiny">${E(c.error)}</div></div>`;
+  }
+  const ff = c.five_forces || {};
+  const companies = (c.companies || []).map(ecoCompanyChip).join("");
+  const glossary = (c.glossary || []).map(g => `<div class="tiny"><b>${E(g.term)}</b>: ${E(g.def)}</div>`).join("");
+  return `<div class="field" style="margin-top:10px; padding:12px;">
+    <b style="font-size:14px;">${E(c.name)}</b>
+    <div class="tiny" style="color:#7d8b99; margin:2px 0 8px;">${E(c.role_one_liner || "")}</div>
+    <div class="note">${E(c.role || "")}</div>
+    <div class="tiny" style="margin-top:8px; color:#9fb0c0;"><b>โครงสร้างตลาด:</b> ${E(c.market_structure || "")}</div>
+    <div style="margin-top:8px;">
+      <div class="tiny" style="color:#7d8b99;">Five Forces</div>
+      <div class="tiny">• อำนาจต่อรองผู้ซื้อ: ${E(ff.buyer_power || "")}</div>
+      <div class="tiny">• อำนาจต่อรอง supplier: ${E(ff.supplier_power || "")}</div>
+      <div class="tiny">• ผู้เล่นใหม่: ${E(ff.new_entrants || "")}</div>
+      <div class="tiny">• สินค้าทดแทน: ${E(ff.substitutes || "")}</div>
+      <div class="tiny">• การแข่งขันในกลุ่ม: ${E(ff.rivalry || "")}</div>
+    </div>
+    <div style="margin-top:8px;"><div class="tiny" style="color:#7d8b99;">บริษัทจริงในชั้นนี้</div>${companies}</div>
+    <div class="tiny" style="margin-top:6px;"><b>Benchmark การเงิน:</b> ${E(c.financial_benchmark || "")}</div>
+    <div class="tiny" style="margin-top:4px;"><b>รูปแบบ Valuation:</b> ${E(c.valuation_pattern || "")}</div>
+    <div class="tiny" style="margin-top:4px;"><b>กรณีศึกษา:</b> ${E(c.case_study || "")}</div>
+    <div class="tiny" style="margin-top:4px;"><b>ตัวชี้วัดล่วงหน้า:</b> ${E(c.leading_indicators || "")}</div>
+    <div class="tiny" style="margin-top:4px;"><b>ผู้รับอานิสงส์ทางอ้อม:</b> ${E(c.second_order_beneficiaries || "")}</div>
+    <div class="tiny" style="margin-top:4px; color:#f0883e;"><b>Pre-mortem:</b> ${E(c.pre_mortem || "")}</div>
+    ${glossary ? `<div style="margin-top:8px;"><div class="tiny" style="color:#7d8b99;">ศัพท์</div>${glossary}</div>` : ""}
+  </div>`;
+}
+
+function renderEcosystemTheme(d) {
+  const E = escapeHtml;
+  const coc = d.circle_of_competence || {};
+  const noiseRows = (coc.noise_vs_signal || []).map(n => {
+    const color = /signal/i.test(n.verdict || "") ? "#f85149" : "#4ade80";
+    return `<div class="tiny" style="margin-top:4px;"><span style="color:${color};">● ${E(n.verdict)}</span> — <b>${E(n.headline)}</b>: ${E(n.explain)}</div>`;
+  }).join("");
+  const killList = (coc.kill_criteria || []).map(k => `<li class="tiny">${E(k)}</li>`).join("");
+  const scenarioCards = (d.scenarios || []).map(s =>
+    `<div class="field" style="padding:8px;"><b>${E(s.name)}</b><div class="tiny">เงื่อนไข: ${E(s.trigger)}</div><div class="tiny">ผลกระทบ: ${E(s.impact)}</div></div>`
+  ).join("");
+  const components = (d.components || []).map(ecoComponentCard).join("");
+
+  let html = `<div><b style="font-size:18px;">${E(d.name_th)}</b> <span class="tiny" style="color:#7d8b99;">(${E(d.sector)})</span>`
+    + `<button onclick="viewEcosystemTheme('${E(d.slug)}', true)" style="float:right;" title="สร้างเนื้อหาใหม่ทับของเดิม">🔄 สร้างใหม่</button></div>`;
+  html += `<div class="note" style="margin-top:8px;">${E(d.definition || "")}</div>`;
+  html += `<div style="margin-top:10px;"><b>เล่าให้ฟังง่าย ๆ</b><div class="note">${E(d.plain_narrative || "")}</div></div>`;
+  html += `<div class="grid3" style="margin-top:10px;">
+    <div class="field"><label>ขนาดตลาด/การเติบโต</label><div class="tiny">${E(d.market_size_growth || "")}</div></div>
+    <div class="field"><label>ช่วงวงจรชีวิต</label><div class="tiny">${E(d.life_cycle_stage || "")}</div></div>
+    <div class="field"><label>ความอ่อนไหวต่อมหภาค</label><div class="tiny">${E(d.macro_sensitivity || "")}</div></div>
+  </div>`;
+  html += `<div style="margin-top:10px;"><b>รูปแบบธุรกิจ</b><div class="note">${E(d.business_models || "")}</div></div>`;
+  html += `<div style="margin-top:10px;"><b>วิวัฒนาการในอดีต</b><div class="note">${E(d.historical_evolution || "")}</div></div>`;
+
+  const pp = d.profit_pool || {};
+  html += `<div style="margin-top:14px;"><b style="font-size:15px;">💰 Profit Pool — ใครกินกำไรในสายนี้</b>
+    <div class="note" style="margin-top:4px;">${E(pp.map || "")}</div>
+    <div class="tiny" style="margin-top:4px; color:#9fb0c0;"><b>วิวัฒนาการ:</b> ${E(pp.evolution || "")}</div></div>`;
+
+  html += `<div style="margin-top:14px;"><b style="font-size:15px;">🔮 ฉากทัศน์ Bull / Base / Bear</b>
+    <div class="grid3" style="margin-top:6px;">${scenarioCards}</div></div>`;
+
+  html += `<div style="margin-top:14px;"><b style="font-size:15px;">🧭 Circle of Competence — ถือยาวได้โดยไม่ตกใจขาย</b>
+    <div class="field" style="margin-top:6px; padding:10px;"><b class="tiny" style="color:#7d8b99;">ความผันผวนปกติของอุตสาหกรรมนี้</b><div class="note">${E(coc.normal_volatility || "")}</div></div>
+    <div class="field" style="margin-top:6px; padding:10px;"><b class="tiny" style="color:#7d8b99;">แยกข่าว noise กับ signal</b>${noiseRows}</div>
+    <div class="field" style="margin-top:6px; padding:10px;"><b class="tiny" style="color:#7d8b99;">ข้อโต้แย้งฝั่งขาย (steelman)</b><div class="note">${E(coc.steelman_bear_case || "")}</div></div>
+    <div class="field" style="margin-top:6px; padding:10px;"><b class="tiny" style="color:#7d8b99;">Kill criteria — ขายเมื่อไหร่</b><ul style="margin:4px 0 0 18px;">${killList}</ul></div>
+    <div class="field" style="margin-top:6px; padding:10px;"><b class="tiny" style="color:#7d8b99;">เทียบกับสิ่งที่คุ้นเคย</b><div class="note">${E(coc.mental_model_analogy || "")}</div></div>
+    <div class="field" style="margin-top:6px; padding:10px;"><b class="tiny" style="color:#7d8b99;">จุดที่คาดเดาไม่ได้จริง</b><div class="note">${E(coc.unpredictable_zones || "")}</div></div>
+  </div>`;
+
+  html += `<div style="margin-top:14px;"><b style="font-size:15px;">🕸️ ผ่าห่วงโซ่คุณค่าทีละชั้น (${(d.components || []).length} ชั้น)</b>${components}</div>`;
+  html += `<div class="note" style="margin-top:14px;">${E(d.disclaimer || "")}</div>`;
+  $("ecoDetailBody").innerHTML = html;
 }
 
 // ---------- S&P 500 ประวัติผลตอบแทนรายปี (survivorship-aware) ----------

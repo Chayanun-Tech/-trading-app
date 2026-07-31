@@ -39,6 +39,7 @@ from app import superinvestors
 from app import value_scanner
 from app import ema_scanner
 from app import lynch_scanner
+from app import ecosystem_map
 from app import sp500_history
 from app import confluence
 from app.engine import build_report
@@ -970,6 +971,27 @@ async def lynch_scan_sp500_publish_route():
         f"Update S&P 500 Peter Lynch classification scan ({result['success_count']}/{result['universe_count']} companies)",
     )
     return {**result, **publish}
+
+
+@app.get("/api/ecosystem/themes")
+async def ecosystem_themes_route():
+    """รายชื่อ 85 theme ของ Ecosystem Map จัดกลุ่มตาม sector พร้อมสถานะว่าสร้างเนื้อหาแล้วหรือยัง."""
+    return ecosystem_map.list_themes()
+
+
+@app.get("/api/ecosystem/{slug}")
+async def ecosystem_theme_route(
+    slug: str,
+    refresh: bool = Query(False, description="True = สร้างเนื้อหาใหม่ทับของเดิม (เรียก AI ใหม่ทั้งธีม)"),
+):
+    """เนื้อหา Ecosystem Map เชิงลึกของ 1 theme — ถ้ายังไม่เคยสร้าง จะ generate ให้ทันที (on-demand)
+    แล้ว cache ไว้ถาวร (evergreen, TTL 180 วัน) ครั้งต่อไปอ่านจากแคชทันที."""
+    try:
+        return await ecosystem_map.get_theme(slug, refresh=refresh)
+    except ValueError as exc:
+        raise HTTPException(404 if "ไม่รู้จัก" in str(exc) else 400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"สร้าง Ecosystem Map ไม่สำเร็จ: {exc}")
 
 
 @app.get("/api/sp500-history/meta")

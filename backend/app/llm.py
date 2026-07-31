@@ -17,7 +17,7 @@ class LLMError(Exception):
 
 
 async def _call_anthropic(cfg: dict, system: str, user_text: str,
-                          image: dict | None) -> str:
+                          image: dict | None, max_tokens: int) -> str:
     import anthropic
     client = anthropic.AsyncAnthropic(api_key=cfg["api_key"])
     content: list = []
@@ -26,7 +26,7 @@ async def _call_anthropic(cfg: dict, system: str, user_text: str,
             "type": "base64", "media_type": image["media_type"], "data": image["b64"]}})
     content.append({"type": "text", "text": user_text})
     resp = await client.messages.create(
-        model=cfg["model"], max_tokens=6000,
+        model=cfg["model"], max_tokens=max_tokens,
         thinking={"type": "adaptive"},
         system=system,
         messages=[{"role": "user", "content": content}],
@@ -35,7 +35,7 @@ async def _call_anthropic(cfg: dict, system: str, user_text: str,
 
 
 async def _call_openai_compatible(cfg: dict, system: str, user_text: str,
-                                  image: dict | None) -> str:
+                                  image: dict | None, max_tokens: int) -> str:
     from openai import AsyncOpenAI
     client = AsyncOpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
     user_content: list = [{"type": "text", "text": user_text}]
@@ -43,7 +43,7 @@ async def _call_openai_compatible(cfg: dict, system: str, user_text: str,
         user_content.insert(0, {"type": "image_url", "image_url": {
             "url": f"data:{image['media_type']};base64,{image['b64']}"}})
     kwargs = dict(
-        model=cfg["model"], max_tokens=6000,
+        model=cfg["model"], max_tokens=max_tokens,
         messages=[{"role": "system", "content": system},
                   {"role": "user", "content": user_content}],
     )
@@ -57,10 +57,12 @@ async def _call_openai_compatible(cfg: dict, system: str, user_text: str,
 
 
 async def complete(system: str, user_text: str, image: dict | None = None,
-                   exclude: set | None = None) -> str:
+                   exclude: set | None = None, max_tokens: int = 6000) -> str:
     """เรียก LLM ที่ resolve ได้. image = {'b64':..., 'media_type':...} หรือ None.
 
-    exclude = ชุด provider ที่ข้าม (เช่น {'gemini'} เมื่อ quota หมด → ตกไป groq)."""
+    exclude = ชุด provider ที่ข้าม (เช่น {'gemini'} เมื่อ quota หมด → ตกไป groq).
+    max_tokens = ความยาวคำตอบสูงสุด (ค่าเริ่มต้น 6000 พอสำหรับ analysis ทั่วไป — เนื้อหายาว
+    เช่น ecosystem primer ที่ต้องการรายละเอียดมากค่อยส่งค่าสูงกว่านี้มาเอง)."""
     cfg = get_settings().resolve_llm(exclude=exclude or set())
     if not cfg["api_key"]:
         raise LLMError("ยังไม่ได้ตั้งคีย์ AI ใด ๆ")
@@ -68,5 +70,5 @@ async def complete(system: str, user_text: str, image: dict | None = None,
         raise LLMError(f"ผู้ให้บริการ '{cfg['provider']}' ไม่รองรับการอ่านภาพ "
                        "— ใช้ Gemini / OpenAI / Anthropic สำหรับโหมดภาพ")
     if cfg["kind"] == "anthropic":
-        return await _call_anthropic(cfg, system, user_text, image)
-    return await _call_openai_compatible(cfg, system, user_text, image)
+        return await _call_anthropic(cfg, system, user_text, image, max_tokens)
+    return await _call_openai_compatible(cfg, system, user_text, image, max_tokens)
