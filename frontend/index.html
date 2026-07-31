@@ -3862,6 +3862,12 @@ function renderBusiness(d) {
       const prodRows = prods.map(p => {
         const pp = (p.pct != null && !isNaN(p.pct)) ? p.pct : null;
         const pdesc = p.desc ? ` <span class="tiny" style="color:#8b99a8;">— ${escapeHtml(p.desc)}</span>` : "";
+        // รูปจริงของผลิตภัณฑ์จาก Wikipedia (ไม่ใช่โลโก้บริษัท) — thumbnail เล็กแทรกหน้าชื่อในตาราง
+        const pimg = p.image_url
+          ? `<img src="${escapeHtml(p.image_url)}" alt="" loading="lazy" onerror="this.style.display='none'" ` +
+            `style="width:36px; height:36px; object-fit:cover; border-radius:6px; vertical-align:middle; margin-right:6px;" ` +
+            `title="${p.image_source_url ? "รูปจาก Wikipedia" : ""}" />`
+          : "";
         const rivals = (p.rivals || []).filter(r => r && (r.company || r.product));
         let comp = "";
         if (rivals.length || p.our_share != null || p.market) {
@@ -3875,7 +3881,7 @@ function renderBusiness(d) {
           comp = `<tr><td colspan="2" style="padding:4px 8px 8px 22px;"><div class="biz-comp">${mkt}` +
                  `<table class="biz-comptbl"><tbody>${us}${rv}</tbody></table></div></td></tr>`;
         }
-        return `<tr><td style="padding-left:22px;"><span class="biz-prod">▪ ${escapeHtml(p.name)}</span>${pdesc}${barFor(pp)}</td>` +
+        return `<tr><td style="padding-left:22px;"><span class="biz-prod">${pimg}▪ ${escapeHtml(p.name)}</span>${pdesc}${barFor(pp)}</td>` +
                `<td class="biz-pct tiny">${pctCell(pp)}</td></tr>` + comp;
       }).join("");
       return head + prodRows;
@@ -5206,9 +5212,23 @@ function ecoCompanyChip(c) {
   const tickerLabel = c.grounded && c.ticker ? `<b>${E(c.ticker)}</b> ` : "";
   const clickable = c.grounded && c.ticker
     ? ` style="cursor:pointer;" onclick="openSymbolInIV('${E(c.ticker)}')" title="เปิดวิเคราะห์มูลค่า IV ของ ${E(c.ticker)}"` : "";
-  return `<div class="field"${clickable} style="padding:8px; margin-bottom:6px;">`
+  // รูปจริงจาก Wikipedia (Wikimedia Commons — ใช้ซ้ำได้ตามสัญญาอนุญาต) ต่างจากรูป scrape ทั่วไป
+  // onerror ซ่อนรูปถ้าลิงก์เสีย กันช่องว่างพัง ไม่มีรูปก็ยังอ่านเนื้อหาได้ปกติ
+  const img = c.image_url
+    ? `<img src="${E(c.image_url)}" alt="${E(c.name)}" loading="lazy" onerror="this.style.display='none'" `
+      + `style="width:56px; height:56px; object-fit:cover; border-radius:8px; flex-shrink:0; background:#1a2530;" />`
+    : `<div style="width:56px; height:56px; border-radius:8px; flex-shrink:0; background:#1a2530;"></div>`;
+  const credit = c.image_source_url
+    ? `<a href="${E(c.image_source_url)}" target="_blank" rel="noopener" class="tiny" style="color:#5f6d7a;" `
+      + `onclick="event.stopPropagation()" title="เปิดหน้า Wikipedia ต้นทางของรูป">ที่มา: Wikipedia ↗</a>`
+    : "";
+  return `<div class="field"${clickable} style="padding:8px; margin-bottom:6px; display:flex; gap:10px; align-items:flex-start;">`
+    + img
+    + `<div style="flex:1; min-width:0;">`
     + `<div>${groundedBadge} ${tickerLabel}${E(c.name)} <span class="tiny" style="color:#7d8b99;">(${E(roleLabel)})</span>${E(peNote)}</div>`
     + `<div class="tiny" style="color:#9fb0c0; margin-top:2px;">${E(c.note || "")}</div>`
+    + (credit ? `<div style="margin-top:2px;">${credit}</div>` : "")
+    + `</div>`
     + `</div>`;
 }
 
@@ -5220,7 +5240,15 @@ function ecoComponentCard(c) {
   const ff = c.five_forces || {};
   const companies = (c.companies || []).map(ecoCompanyChip).join("");
   const glossary = (c.glossary || []).map(g => `<div class="tiny"><b>${E(g.term)}</b>: ${E(g.def)}</div>`).join("");
+  // รูปจริงประกอบเนื้อเรื่องของ component นี้ (ไม่ใช่โลโก้บริษัท) — วางเด่นบนสุดของการ์ด
+  const heroImg = c.image_url
+    ? `<img src="${E(c.image_url)}" alt="${E(c.name)}" loading="lazy" onerror="this.parentElement.style.display='none'" `
+      + `style="width:100%; max-height:220px; object-fit:cover; border-radius:8px; display:block;" />`
+      + (c.image_source_url ? `<a href="${E(c.image_source_url)}" target="_blank" rel="noopener" class="tiny" `
+        + `style="color:#5f6d7a;" title="เปิดหน้า Wikipedia ต้นทางของรูป">ที่มา: Wikipedia ↗</a>` : "")
+    : "";
   return `<div class="field" style="margin-top:10px; padding:12px;">
+    ${heroImg ? `<div style="margin-bottom:10px;">${heroImg}</div>` : ""}
     <b style="font-size:14px;">${E(c.name)}</b>
     <div class="tiny" style="color:#7d8b99; margin:2px 0 8px;">${E(c.role_one_liner || "")}</div>
     <div class="note">${E(c.role || "")}</div>
@@ -5987,7 +6015,10 @@ function renderMacro(d) {
     let body = para(rps.summary);
     const pr = (rps.products || []).filter(p => p && p.name);
     if (pr.length) {
-      const rows = pr.map(p => `<tr><td><b>${E(p.name)}</b>`
+      const rows = pr.map(p => `<tr><td>` +
+        (p.image_url ? `<img src="${E(p.image_url)}" alt="" loading="lazy" onerror="this.style.display='none'" `
+          + `style="width:36px; height:36px; object-fit:cover; border-radius:6px; vertical-align:middle; margin-right:6px;" />` : "")
+        + `<b>${E(p.name)}</b>`
         + `${p.margin_note ? `<div class="mac-note">มาร์จิ้น: ${E(p.margin_note)}</div>` : ""}`
         + `${p.cost_driver ? `<div class="mac-note">ต้นทุนหลัก: ${E(p.cost_driver)}</div>` : ""}`
         + `${p.demand_sensitivity ? `<div class="mac-note">ไวต่อ: ${E(p.demand_sensitivity)}</div>` : ""}</td>`

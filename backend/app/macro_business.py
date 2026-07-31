@@ -13,12 +13,13 @@ cache ผลลัพธ์ลงดิสก์ (TTL ~7 วัน) เพื่
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
 from pathlib import Path
 
-from app import edgar, thai_sec
+from app import edgar, thai_sec, wiki_image
 from app import llm
 from app.config import get_settings
 from app.fundamentals import get_fundamentals, get_offline
@@ -173,7 +174,7 @@ def _list(payload, key):
     return v if isinstance(v, list) else []
 
 
-def _clean(payload: dict) -> dict:
+def _clean_sync(payload: dict) -> dict:
     mr = payload.get("macro_regime") or {}
     factors = []
     for f in (_list(mr, "factors"))[:10]:
@@ -313,6 +314,19 @@ def _clean(payload: dict) -> dict:
         "scenarios": scenarios,
         "bottom_line": _s(payload.get("bottom_line"), 1500),
     }
+
+
+async def _clean(payload: dict) -> dict:
+    """เหมือน _clean_sync แล้วแนบรูปจริงจาก Wikipedia ให้สินค้าใน revenue_profit_structure.products
+    (รูปตัวสินค้าจริง ไม่ใช่โลโก้บริษัท)."""
+    data = _clean_sync(payload)
+    products = data["revenue_profit_structure"]["products"]
+    images = await asyncio.gather(
+        *(wiki_image.fetch_topic_image(p["name"]) for p in products), return_exceptions=True)
+    for p, img in zip(products, images):
+        p["image_url"] = img.get("image_url") if isinstance(img, dict) else None
+        p["image_source_url"] = img.get("page_url") if isinstance(img, dict) else None
+    return data
 
 
 # ---- บังคับให้ทุกฟิลด์มีคำแปลไทย (กันกรณี LLM ไม่ทำตามกฎภาษา) ----------------
@@ -456,7 +470,7 @@ async def get_macro_analysis(symbol: str, *, refresh: bool = False) -> dict:
     for attempt in range(2):
         try:
             text = await llm.complete(system, user_msg, exclude=exclude)
-            data = _clean(_extract_json(text))
+            data = await _clean(_extract_json(text))
             break
         except Exception as exc:  # noqa: BLE001
             last_err = exc

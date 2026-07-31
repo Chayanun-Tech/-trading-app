@@ -14,7 +14,9 @@ import json
 import time
 from pathlib import Path
 
-from app import edgar, thai_sec
+import asyncio
+
+from app import edgar, thai_sec, wiki_image
 from app import llm
 from app.config import get_settings
 from app.fundamentals import get_fundamentals, get_offline
@@ -97,7 +99,7 @@ def _extract_json(text: str) -> dict:
     raise ValueError("ไม่พบ JSON ในคำตอบของโมเดล")
 
 
-def _clean(payload: dict) -> dict:
+def _clean_sync(payload: dict) -> dict:
     segs = []
     for s in (payload.get("segments") or [])[:12]:
         if not isinstance(s, dict):
@@ -166,6 +168,23 @@ def _clean(payload: dict) -> dict:
         "customers": str(payload.get("customers", ""))[:1000] or None,
         "moat_and_position": str(payload.get("moat_and_position", ""))[:1500] or None,
     }
+
+
+async def _clean(payload: dict) -> dict:
+    """เหมือน _clean_sync แล้วแนบรูปจริงจาก Wikipedia ให้ทุกผลิตภัณฑ์ที่มีชื่อจริง (ไม่ใช่โลโก้
+    บริษัท แต่เป็นรูปของตัวสินค้า/เทคโนโลยีนั้นเอง เช่น รูป GPU การ์ดจริง ไม่ใช่โลโก้ NVIDIA)."""
+    data = _clean_sync(payload)
+    products = [p for s in data["segments"] for p in s["products"]]
+    images = await asyncio.gather(
+        *(wiki_image.fetch_topic_image(p["name"]) for p in products), return_exceptions=True)
+    for p, img in zip(products, images):
+        if isinstance(img, dict):
+            p["image_url"] = img.get("image_url")
+            p["image_source_url"] = img.get("page_url")
+        else:
+            p["image_url"] = None
+            p["image_source_url"] = None
+    return data
 
 
 async def get_business_explainer(symbol: str, *, refresh: bool = False) -> dict:
@@ -257,7 +276,7 @@ async def get_business_explainer(symbol: str, *, refresh: bool = False) -> dict:
     for attempt in range(2):
         try:
             text = await llm.complete(system, user_msg, exclude=exclude)
-            data = _clean(_extract_json(text))
+            data = await _clean(_extract_json(text))
             break
         except Exception as exc:  # noqa: BLE001
             last_err = exc

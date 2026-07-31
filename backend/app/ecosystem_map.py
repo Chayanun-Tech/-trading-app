@@ -23,7 +23,7 @@ import json
 import time
 from pathlib import Path
 
-from app import industry_peers, llm
+from app import industry_peers, llm, wiki_image
 from app.config import get_settings
 
 _CACHE_DIR = Path(__file__).resolve().parents[1].parent / "data" / "financials"
@@ -204,6 +204,9 @@ _COMPONENT_CONTRACT_TMPL = """เขียนวิเคราะห์เจ�
 
 รูปแบบ JSON ที่ต้องคืน (เท่านั้น):
 {{
+  "image_query": "<คำค้นภาษาอังกฤษสั้นๆ 2-5 คำ เพื่อหารูปจริงประกอบ component นี้บน Wikipedia
+   เช่น 'smartphone chipset', 'OLED display panel', 'lithium-ion battery' — เจาะจงเป็นชื่อ
+   สิ่งของ/เทคโนโลยีจริงที่จับต้องได้ ไม่ใช่ชื่อบริษัท ไม่ใช่ชื่อ component ภาษาไทย>",
   "role": "<บทบาทของ component นี้ในระบบนิเวศ อธิบายละเอียด 2-4 ประโยค>",
   "five_forces": {{
     "buyer_power": "<อำนาจต่อรองผู้ซื้อของชั้นนี้ สูง/กลาง/ต่ำ + เหตุผล 1-2 ประโยค>",
@@ -294,16 +297,24 @@ def list_themes() -> dict:
     }
 
 
-def _ground_companies(companies: list) -> list[dict]:
+async def _none() -> None:
+    return None
+
+
+async def _ground_companies(companies: list) -> list[dict]:
     """แนบข้อมูลจริงจากฐานข้อมูลแอป (GICS + P/E กลุ่ม) ให้บริษัทที่ LLM ยกมา ถ้า ticker
     match กับหุ้นในฐานข้อมูล (S&P 500 constituents) — ไม่ match ก็ยังเก็บชื่อไว้อธิบายได้
-    แต่ grounded=False (ไม่มีลิงก์วิเคราะห์ต่อในแอป)."""
+    แต่ grounded=False (ไม่มีลิงก์วิเคราะห์ต่อในแอป). แนบรูปจริงจาก Wikipedia ให้ทุกบริษัท
+    (ไม่ว่าจะ grounded หรือไม่ — รูปมาจากชื่อบริษัท ไม่ได้อิงกับ S&P 500)."""
     const = industry_peers.load_constituents()
     pe_map = industry_peers.industry_pe_map()
+    candidates = [c for c in (companies if isinstance(companies, list) else [])
+                  if isinstance(c, dict) and c.get("name")][:6]
+    images = await asyncio.gather(
+        *(wiki_image.fetch_company_image(c["name"]) for c in candidates), return_exceptions=True)
+
     out = []
-    for c in companies if isinstance(companies, list) else []:
-        if not isinstance(c, dict) or not c.get("name"):
-            continue
+    for c, img in zip(candidates, images):
         sym = _to_sym(c.get("ticker"))
         meta = const.get(sym) if sym else None
         role = str(c.get("role") or "").strip().lower()
@@ -322,8 +333,11 @@ def _ground_companies(companies: list) -> list[dict]:
             pe_info = pe_map.get(sym)
             if pe_info:
                 entry["industry_pe_median"] = pe_info.get("industry_pe")
+        if isinstance(img, dict):
+            entry["image_url"] = img.get("image_url")
+            entry["image_source_url"] = img.get("page_url")
         out.append(entry)
-    return out[:6]
+    return out
 
 
 def _clean_overview(payload: dict) -> dict:
@@ -368,13 +382,20 @@ def _clean_overview(payload: dict) -> dict:
     }
 
 
-def _clean_component(payload: dict) -> dict:
+async def _clean_component(payload: dict) -> dict:
     ff = payload.get("five_forces") or {}
     glossary = []
     for g in (payload.get("glossary") or [])[:8]:
         if isinstance(g, dict) and g.get("term"):
             glossary.append({"term": _s(g.get("term"), 60), "def": _s(g.get("def"), 200)})
+    image_query = _s(payload.get("image_query"), 100)
+    companies, topic_img = await asyncio.gather(
+        _ground_companies(payload.get("companies")),
+        wiki_image.fetch_topic_image(image_query) if image_query else _none(),
+    )
     return {
+        "image_url": (topic_img or {}).get("image_url"),
+        "image_source_url": (topic_img or {}).get("page_url"),
         "role": _s(payload.get("role"), 600),
         "five_forces": {
             "buyer_power": _s(ff.get("buyer_power"), 300),
@@ -384,7 +405,7 @@ def _clean_component(payload: dict) -> dict:
             "rivalry": _s(ff.get("rivalry"), 300),
         },
         "market_structure": _s(payload.get("market_structure"), 500),
-        "companies": _ground_companies(payload.get("companies")),
+        "companies": companies,
         "financial_benchmark": _s(payload.get("financial_benchmark"), 500),
         "valuation_pattern": _s(payload.get("valuation_pattern"), 500),
         "case_study": _s(payload.get("case_study"), 1000),
@@ -454,7 +475,7 @@ async def generate_theme(slug: str) -> dict:
         for attempt in range(3):  # เหมือน overview — เจอทั้งเนื้อหาว่าง/ไม่ครบ และ connection error เป็นระยะ
             try:
                 comp_raw, _ = await _llm_json(_COMPONENT_SYSTEM, comp_user, max_tokens=4000)
-                candidate = _clean_component(comp_raw)
+                candidate = await _clean_component(comp_raw)
                 if candidate.get("role") and candidate.get("companies"):
                     detail = candidate
                     break
