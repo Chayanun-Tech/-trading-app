@@ -4287,12 +4287,13 @@ async function loadRmIndustry(sym) {
   renderRmProjection(rmData && rmData.growth_stats, rmPeerData);
 }
 
-// ดึงค่าอุตสาหกรรมสดใหม่ตามสั่ง — สแกนราคา/งบทั้ง S&P 500 ใหม่ (หลายนาที) แล้วโหลดการ์ดซ้ำ
+// ดึงงบ/EPS ใหม่ตามสั่ง — สแกนทั้ง S&P 500 ใหม่ (หลายนาที) แล้วโหลดการ์ดซ้ำ
+// (ราคาไม่ต้องรอปุ่มนี้ — การ์ดดึงราคาสดของกลุ่มให้เองทุกครั้งที่เปิดดู ปุ่มนี้ไว้ตอนมีงบไตรมาสใหม่)
 async function refreshRmIndustry(sym) {
   const btn = $("rmIndRefreshBtn");
   const msg = $("rmIndRefreshMsg");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ กำลังสแกน..."; }
-  if (msg) msg.innerHTML = `<span style="color:#e2b93b;">กำลังสแกนราคา/งบทั้ง S&P 500 ใหม่เพื่ออัปเดต PE กลุ่ม — อาจใช้เวลาหลายนาที กรุณาอย่าปิดหน้านี้...</span>`;
+  if (msg) msg.innerHTML = `<span style="color:#e2b93b;">กำลังสแกนงบ/EPS ทั้ง S&P 500 ใหม่ — อาจใช้เวลาหลายนาที กรุณาอย่าปิดหน้านี้...</span>`;
   try {
     // refresh=true = บังคับสแกนสดใหม่ทั้งดัชนีแล้วเซฟแคช (limit=1 เพราะเราต้องการแค่ให้แคชอัปเดต)
     const res = await fetch(`${API}/api/value-scan/sp500?refresh=true&limit=1&exclude_extreme=false`);
@@ -4325,19 +4326,30 @@ function renderRmIndustry(p) {
   const ind = p.industry;
   const levelTxt = ind.level === "sub_industry" ? "อุตสาหกรรมย่อย" : "กลุ่มเซกเตอร์ (fallback — อุตฯย่อยตัวอย่างน้อย)";
 
-  // แถวสถานะความสด: วันที่สแกนล่าสุด + ปุ่มดึงค่าใหม่ (กดเองได้ทุกเมื่อ ถ้ารันในเครื่อง)
+  // แถวสถานะความสด — แยกเป็น 2 ส่วนเพราะอายุไม่เท่ากัน:
+  //   ราคา = ดึงสดทุกครั้งที่เปิดการ์ด (แคช 15 นาทีฝั่งเซิร์ฟเวอร์) → PE กลุ่มสดตามราคาเสมอ
+  //   งบ/EPS = มาจากแคชสแกนทั้งดัชนี ซึ่งเปลี่ยนแค่ตอนบริษัทยื่นงบใหม่ (ไตรมาสละครั้ง)
+  const liveTxt = p.prices_as_of
+    ? `💹 ราคาสด ณ ${new Date(p.prices_as_of * 1000).toLocaleTimeString("th-TH", { hour:"2-digit", minute:"2-digit" })}` +
+      (p.live_price_count ? ` (${p.live_price_count} ตัวในกลุ่ม)` : "")
+    : "";
   let ageTxt = "ไม่ทราบวันที่สแกน", ageCol = "#7d8b99";
   if (p.as_of) {
     const d = new Date(p.as_of * 1000);
     const ageH = (Date.now() - p.as_of * 1000) / 3600000;
-    ageCol = ageH > 168 ? "#e0785f" : (ageH > 48 ? "#e2b93b" : "#7d8b99");  // >7วัน แดง, >2วัน เหลือง
-    ageTxt = `ข้อมูล PE กลุ่ม ณ ${d.toLocaleString("th-TH", { day:"2-digit", month:"short", year:"2-digit", hour:"2-digit", minute:"2-digit" })}` +
+    const label = p.prices_as_of ? "งบ/EPS ณ" : "ข้อมูล PE กลุ่ม ณ";
+    // ถ้าราคาสดแล้ว ที่เหลือคือ EPS ซึ่งเก่าได้เป็นเดือน (เตือนเมื่อ >45 วัน / แดงเมื่อ >120 วัน)
+    ageCol = p.prices_as_of
+      ? (ageH > 24 * 120 ? "#e0785f" : (ageH > 24 * 45 ? "#e2b93b" : "#7d8b99"))
+      : (ageH > 168 ? "#e0785f" : (ageH > 48 ? "#e2b93b" : "#7d8b99"));  // >7วัน แดง, >2วัน เหลือง
+    ageTxt = `${label} ${d.toLocaleString("th-TH", { day:"2-digit", month:"short", year:"2-digit", hour:"2-digit", minute:"2-digit" })}` +
              (ageH > 48 ? ` (${Math.round(ageH/24)} วันก่อน)` : "");
   }
   const refreshBtn = p.can_scan_live
-    ? `<button id="rmIndRefreshBtn" type="button" onclick="refreshRmIndustry('${escapeHtml(p.symbol)}')" style="padding:2px 8px; font-size:12px;" title="สแกนราคา/งบสดใหม่ทั้ง S&P 500 แล้วคำนวณ PE กลุ่มใหม่ — อาจใช้เวลาหลายนาที">🔄 ดึงค่าใหม่</button>`
-    : `<span class="tiny" style="color:#7d8b99;" title="บนเว็บเสิร์ฟแคชที่ push จากเครื่อง — สแกนสดต้องรันในเครื่อง">🔒 อัปเดตจากการ push ในเครื่อง</span>`;
+    ? `<button id="rmIndRefreshBtn" type="button" onclick="refreshRmIndustry('${escapeHtml(p.symbol)}')" style="padding:2px 8px; font-size:12px;" title="สแกนงบ/EPS สดใหม่ทั้ง S&P 500 (ราคาสดอัปเดตให้อยู่แล้วทุกครั้งที่เปิดดู) — อาจใช้เวลาหลายนาที">🔄 ดึงงบใหม่</button>`
+    : `<span class="tiny" style="color:#7d8b99;" title="ราคาสดอัปเดตทุกครั้งที่เปิดดู · ส่วนงบ/EPS บนเว็บเสิร์ฟแคชที่ push จากเครื่อง">🔒 งบ/EPS อัปเดตจากการ push ในเครื่อง</span>`;
   const statusRow = `<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:4px;">
+      ${liveTxt ? `<span class="tiny" style="color:#4caf7d;" title="PE ในการ์ดนี้ = ราคาสด ÷ EPS จากงบล่าสุด — ราคาดึงใหม่ทุกครั้งที่เปิดดู (แคช 15 นาที)">${escapeHtml(liveTxt)}</span>` : ""}
       <span class="tiny" style="color:${ageCol};">📅 ${ageTxt}</span>${refreshBtn}
       <span id="rmIndRefreshMsg" class="tiny" style="color:#7d8b99;"></span></div>`;
 

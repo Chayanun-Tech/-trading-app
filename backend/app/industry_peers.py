@@ -10,6 +10,10 @@ GICS Sub-Industry) แล้วสรุปเป็นสถิติต่อ 
 
 PE ปัจจุบันต่อหุ้น = price ÷ per_share (EPS TTM) — ใช้ได้เฉพาะแถวที่ตัวสแกนมูลค่าประเมินด้วย
 "P/E median" (กลุ่มทั่วไป/วัฏจักร ฯลฯ) เพราะกลุ่มที่ประเมินด้วย P/B, P/FFO จะไม่มี EPS ให้คิด PE.
+
+ความสดของข้อมูล: แคชสแกนเก็บทั้ง "ราคา" และ "งบ/EPS" ของวันที่สแกน — แต่ราคาเปลี่ยนทุกวัน ส่วน EPS
+เปลี่ยนแค่ตอนบริษัทยื่นงบใหม่ (ไตรมาสละครั้ง) route จึงดึงราคาสดเฉพาะหุ้นในกลุ่มที่กำลังดู (ไม่กี่สิบตัว)
+แล้วส่งเข้ามาทาง price_overrides — PE/upside คำนวณใหม่จากราคาสด ÷ EPS ในแคช โดยไม่ต้องสแกน 500 ตัวใหม่.
 """
 from __future__ import annotations
 
@@ -212,25 +216,37 @@ def _stat_block(values: list[float]) -> dict | None:
     return {"median": round(median(clean), 1), "mean": round(mean(clean), 1), "n": len(clean)}
 
 
-def _build_universe() -> list[dict]:
-    """รวมทุกแหล่งเป็นรายการหุ้นเดียว: symbol, name, sector, sub_industry, pe, upside_pct, yoy_pct."""
+def _build_universe(price_overrides: dict[str, float] | None = None) -> list[dict]:
+    """รวมทุกแหล่งเป็นรายการหุ้นเดียว: symbol, name, sector, sub_industry, pe, upside_pct, yoy_pct.
+
+    price_overrides = symbol → ราคาสด (ถ้ามี) — ตัวไหนมีราคาสด จะคิด PE ใหม่ (ราคาสด ÷ EPS ในแคช)
+    และคิด upside ใหม่จาก fair_price ในแคช เพื่อไม่ให้ตัวเลขสองช่องอิงราคาคนละวัน."""
     const = load_constituents()
     vrows = _value_rows()
     yoy = _revenue_yoy()
     eyoy = _eps_yoy()
+    live = price_overrides or {}
     universe: list[dict] = []
     for sym, meta in const.items():
         vr = vrows.get(sym) or {}
+        live_price = live.get(sym)
+        price = live_price if isinstance(live_price, (int, float)) and live_price > 0 else vr.get("price")
+        row = {**vr, "price": price}
+        upside = vr.get("upside_pct")
+        fair = vr.get("fair_price")
+        if price != vr.get("price") and isinstance(fair, (int, float)) and isinstance(price, (int, float)) and price > 0:
+            upside = round((fair / price - 1) * 100, 1)
         universe.append({
             "symbol": sym,
             "name": meta["name"],
             "sector": meta["sector"],
             "sub_industry": meta["sub_industry"],
-            "pe": _pe_of(vr),
-            "price": vr.get("price"),
+            "pe": _pe_of(row),
+            "price": price,
+            "price_is_live": price is not None and price != vr.get("price"),
             "per_share": vr.get("per_share"),
             "basis": vr.get("basis"),
-            "upside_pct": vr.get("upside_pct"),
+            "upside_pct": upside,
             "yoy_pct": yoy.get(sym),
             "eps_yoy_pct": eyoy.get(sym),
         })
@@ -301,11 +317,44 @@ def _select_group(universe: list[dict], sub: str | None, sector: str | None) -> 
     return industry
 
 
+def _group_of(universe: list[dict], sym: str, ext_sector: str | None, ext_industry: str | None,
+              ext_sic_desc: str | None) -> tuple[dict | None, str | None, str | None, str | None]:
+    """หากลุ่มเทียบของหุ้นตัวหนึ่ง คืน (industry_stat, sub, sector, matched_on) — ใช้ร่วมกันระหว่าง
+    peers_for และ group_symbols_for เพื่อให้ 'กลุ่มที่ดึงราคาสด' กับ 'กลุ่มที่แสดงผล' เป็นชุดเดียวกัน."""
+    meta = load_constituents().get(sym)
+    if meta:
+        return _select_group(universe, meta["sub_industry"], meta["sector"]), \
+            meta["sub_industry"], meta["sector"], None
+    cls = classify_external(universe, ext_sector, ext_industry, ext_sic_desc)
+    sub, sector = cls["sub"], cls["sector"]
+    if not sub and not sector:
+        return None, None, None, None
+    return _select_group(universe, sub, sector), sub, sector, cls["matched_on"]
+
+
+def group_symbols_for(symbol: str, *, ext_sector: str | None = None, ext_industry: str | None = None,
+                      ext_sic_desc: str | None = None) -> list[str]:
+    """รายชื่อหุ้นในกลุ่มที่จะใช้เทียบ (ตรรกะเลือกกลุ่มเดียวกับ peers_for) — ให้ route เอาไปดึงราคาสด
+    เฉพาะกลุ่มนี้ก่อนเรียก peers_for จริง. คำนวณจากแคชล้วน ไม่ยิงเน็ต."""
+    sym = _to_sym(symbol)
+    if not sym:
+        return []
+    universe = _build_universe()
+    industry, sub, _sector, _m = _group_of(universe, sym, ext_sector, ext_industry, ext_sic_desc)
+    key = industry["level"] if industry else "sub_industry"
+    val = industry["name"] if industry else sub
+    if not val:
+        return []
+    return [u["symbol"] for u in universe if u.get(key) == val]
+
+
 def peers_for(symbol: str, *, ext_sector: str | None = None, ext_industry: str | None = None,
               ext_sic_desc: str | None = None, ext_name: str | None = None,
               ext_pe: float | None = None, ext_eps: float | None = None,
               ext_price: float | None = None, ext_yoy_pct: float | None = None,
-              ext_eps_yoy_pct: float | None = None, ext_forward_pe: float | None = None) -> dict:
+              ext_eps_yoy_pct: float | None = None, ext_forward_pe: float | None = None,
+              price_overrides: dict[str, float] | None = None,
+              prices_as_of: float | None = None) -> dict:
     """เลนส์เทียบอุตสาหกรรมของหุ้นตัวเดียว. คืน dict เสมอ (degrade เอง ถ้าข้อมูลเพื่อนไม่พอ).
 
     หุ้นใน S&P 500: จัดกลุ่มจาก GICS ในไฟล์ constituents (ไม่ยิงเน็ต).
@@ -315,31 +364,26 @@ def peers_for(symbol: str, *, ext_sector: str | None = None, ext_industry: str |
     if not sym:
         raise ValueError("กรุณาระบุสัญลักษณ์หุ้น")
 
-    universe = _build_universe()
+    universe = _build_universe(price_overrides)
     const = load_constituents()
     meta = const.get(sym)
 
     as_of = _value_cache_as_of()
     scan_live = can_scan_live()
+    live_count = sum(1 for u in universe if u.get("price_is_live"))
 
-    is_external = False
-    matched_on = None
-    if meta:
-        sector, sub, name = meta["sector"], meta["sub_industry"], meta["name"]
-    else:
-        # หุ้นภายนอก S&P 500 — จับเข้ากลุ่ม GICS จาก sector/industry ที่ route ส่งมา (ADR ต่างชาติ)
-        cls = classify_external(universe, ext_sector, ext_industry, ext_sic_desc)
-        sub, sector, matched_on = cls["sub"], cls["sector"], cls["matched_on"]
-        name = ext_name or sym
-        is_external = True
-        if not sub and not sector:
-            return {"symbol": sym, "name": ext_name, "gics_sector": None, "gics_sub_industry": None,
-                    "industry": None, "peers": [], "justified": None, "as_of": as_of,
-                    "can_scan_live": scan_live, "is_external": True,
-                    "note": ("หุ้นนี้ไม่อยู่ใน S&P 500 และจับกลุ่มอุตสาหกรรมอัตโนมัติไม่ได้ "
-                             "(ไม่มีข้อมูล sector/industry) — ยังไม่มีคู่เทียบให้")}
-
-    industry = _select_group(universe, sub, sector)
+    # จับกลุ่ม + เลือกกลุ่มเทียบ (หุ้นในลิสต์ใช้ GICS ตรง ๆ · ADR ต่างชาติจับเข้ากลุ่มจาก sector/industry
+    # ที่ route ส่งมา) — ใช้ตัวเดียวกับ group_symbols_for เพื่อให้กลุ่มที่ดึงราคาสดตรงกับกลุ่มที่แสดง
+    industry, sub, sector, matched_on = _group_of(universe, sym, ext_sector, ext_industry, ext_sic_desc)
+    is_external = meta is None
+    name = meta["name"] if meta else (ext_name or sym)
+    if is_external and not sub and not sector:
+        return {"symbol": sym, "name": ext_name, "gics_sector": None, "gics_sub_industry": None,
+                "industry": None, "peers": [], "justified": None, "as_of": as_of,
+                "can_scan_live": scan_live, "is_external": True,
+                "prices_as_of": None, "live_price_count": 0,
+                "note": ("หุ้นนี้ไม่อยู่ใน S&P 500 และจับกลุ่มอุตสาหกรรมอัตโนมัติไม่ได้ "
+                         "(ไม่มีข้อมูล sector/industry) — ยังไม่มีคู่เทียบให้")}
 
     # รายชื่อเพื่อนในกลุ่มที่เลือก (คู่แข่ง) — เรียงตาม PE จากน้อยไปมาก
     group_key = industry["level"] if industry else "sub_industry"
@@ -414,7 +458,9 @@ def peers_for(symbol: str, *, ext_sector: str | None = None, ext_industry: str |
         "industry": industry,
         "peers": peers_out,
         "justified": justified,
-        "as_of": as_of,
+        "as_of": as_of,                     # เวลาสแกนงบ/EPS ล่าสุด (แคชทั้งดัชนี)
+        "prices_as_of": prices_as_of,       # เวลาราคาสดที่ใช้คิด PE รอบนี้ (None = ใช้ราคาในแคช)
+        "live_price_count": live_count,     # จำนวนหุ้นในกลุ่มที่ได้ราคาสดจริง
         "can_scan_live": scan_live,
         # นิยาม P/E ที่ตารางนี้ใช้ — ให้ frontend เอาไปทำ tooltip กันเข้าใจผิดว่าเลขไม่ตรงเว็บอื่น
         "pe_basis": ("P/E ในตารางนี้ = trailing GAAP (TTM) คำนวณจากงบจริงที่บริษัทยื่น SEC "

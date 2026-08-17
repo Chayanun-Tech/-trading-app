@@ -718,6 +718,44 @@ async def _external_peer_context(symbol: str) -> dict:
     }
 
 
+_PEER_PRICE_TTL = 15 * 60          # ราคาสดของกลุ่มใช้ซ้ำได้ 15 นาที (กันยิง Yahoo ซ้ำทุกครั้งที่สลับหุ้น)
+_PEER_PRICE_CHUNK = 50             # ยิงทีละ 50 สัญลักษณ์ต่อคำขอ (endpoint quote ของ Yahoo รับได้สบาย)
+_peer_price_cache: dict[str, tuple[float, float]] = {}   # symbol -> (price, fetched_ts)
+
+
+async def _live_peer_prices(symbols: list[str]) -> tuple[dict[str, float], float | None]:
+    """ราคาสดของหุ้นในกลุ่มเทียบ (ไม่กี่สิบตัว) → {symbol: price}, เวลาที่ราคาเก่าสุดถูกดึง.
+
+    เอาไว้ให้ industry_peers คิด PE กลุ่มใหม่จาก 'ราคาสด ÷ EPS ในแคช' ทุกครั้งที่เปิดดู — ต่างจากปุ่ม
+    🔄 ดึงค่าใหม่ ที่สแกนงบทั้งดัชนีใหม่ (หลายนาที) เพราะ EPS เปลี่ยนแค่ตอนยื่นงบใหม่ ราคาเปลี่ยนทุกวัน.
+    best-effort ทั้งหมด: ดึงไม่ได้/ไม่มี get_quotes ก็คืนว่าง แล้ว peers_for จะใช้ราคาในแคชตามเดิม."""
+    now = time.time()
+    out: dict[str, float] = {}
+    oldest: float | None = None
+    missing: list[str] = []
+    for sym in dict.fromkeys(s.upper() for s in symbols if s):
+        hit = _peer_price_cache.get(sym)
+        if hit and now - hit[1] < _PEER_PRICE_TTL:
+            out[sym] = hit[0]
+            oldest = hit[1] if oldest is None else min(oldest, hit[1])
+        else:
+            missing.append(sym)
+
+    get_quotes = getattr(provider, "get_quotes", None)
+    if missing and get_quotes:
+        for i in range(0, len(missing), _PEER_PRICE_CHUNK):
+            try:
+                rows = await get_quotes(missing[i:i + _PEER_PRICE_CHUNK])
+            except Exception:  # noqa: BLE001 — ดึงราคาไม่ได้ = ตกกลับไปใช้ราคาในแคช ไม่ใช่ error ของ route
+                continue
+            for row in rows or []:
+                if row and row.price and row.price > 0:
+                    _peer_price_cache[row.symbol.upper()] = (float(row.price), now)
+                    out[row.symbol.upper()] = float(row.price)
+                    oldest = now if oldest is None else min(oldest, now)
+    return out, (oldest if out else None)
+
+
 async def _focus_forward_pe(symbol: str) -> float | None:
     """Forward P/E ระดับหุ้น (จาก Yahoo) สำหรับหุ้น focus ที่อยู่ใน S&P 500 — เอาไปโชว์คู่กับ trailing
     P/E ให้ผู้ใช้เทียบกับเว็บที่พาดหัวเป็น forward (เช่น Seeking Alpha). best-effort, ดึงไม่ได้คืน None."""
@@ -831,11 +869,15 @@ async def thesis_delete_route(thesis_id: str):
 
 
 @app.get("/api/industry/peers")
-async def industry_peers_route(symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น NVDA (S&P 500) หรือ ADR เช่น TSM")):
+async def industry_peers_route(
+    symbol: str = Query(..., description="สัญลักษณ์หุ้น เช่น NVDA (S&P 500) หรือ ADR เช่น TSM"),
+    live_prices: bool = Query(True, description="True = ดึงราคาสดของหุ้นในกลุ่มมาคิด PE ใหม่ทุกครั้ง (แคช 15 นาที)"),
+):
     """เลนส์ 'เทียบอุตสาหกรรม': PE เฉลี่ยของกลุ่ม (GICS Sub-Industry → fallback Sector) +
     ตารางคู่แข่งในอุตสาหกรรมเดียวกัน + ราคาที่ควรเป็นตาม PE กลุ่ม (EPS จริง × PE median).
-    หุ้น S&P 500 อ่านจากแคชสแกน — เร็ว ไม่ยิงเน็ต. หุ้น ADR ต่างชาตินอกลิสต์ = ดึง sector/industry
-    จาก Yahoo/SEC มาจับเข้ากลุ่ม GICS ของ S&P 500 แล้วเทียบให้ (จับคู่โดยประมาณ)."""
+    กลุ่ม/งบ/EPS อ่านจากแคชสแกน (ไม่ยิงเน็ต) แต่ 'ราคา' ดึงสดเฉพาะหุ้นในกลุ่มที่กำลังดู (ไม่กี่สิบตัว)
+    ทุกครั้งที่เรียก — PE จึงสดเสมอโดยไม่ต้องสแกนทั้งดัชนีใหม่. หุ้น ADR ต่างชาตินอกลิสต์ = ดึง
+    sector/industry จาก Yahoo/SEC มาจับเข้ากลุ่ม GICS ของ S&P 500 แล้วเทียบให้ (จับคู่โดยประมาณ)."""
     try:
         ext = {}
         if industry_peers._to_sym(symbol) not in industry_peers.load_constituents():
@@ -844,7 +886,16 @@ async def industry_peers_route(symbol: str = Query(..., description="สัญ�
             # หุ้น US ในลิสต์: กลุ่ม/คู่แข่งอ่านจากแคช (ไม่ยิงเน็ต) — ยิง Yahoo แค่ค่า forward P/E ของ
             # หุ้น focus ตัวเดียว (cache 30 นาที) เพื่อโชว์คู่กับ trailing ให้เทียบกับ Seeking Alpha ได้
             ext = {"ext_forward_pe": await _focus_forward_pe(symbol)}
-        return industry_peers.peers_for(symbol, **ext)
+        live: dict[str, float] = {}
+        prices_as_of = None
+        if live_prices:
+            group = industry_peers.group_symbols_for(
+                symbol, ext_sector=ext.get("ext_sector"), ext_industry=ext.get("ext_industry"),
+                ext_sic_desc=ext.get("ext_sic_desc"),
+            )
+            live, prices_as_of = await _live_peer_prices(group)
+        return industry_peers.peers_for(symbol, price_overrides=live or None,
+                                        prices_as_of=prices_as_of, **ext)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
     except Exception as exc:  # noqa: BLE001

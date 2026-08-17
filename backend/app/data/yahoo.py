@@ -60,10 +60,20 @@ class YahooProvider(DataProvider):
     QUOTE_BASE = "https://query1.finance.yahoo.com/v7/finance/quote"
     SEARCH_BASE = "https://query2.finance.yahoo.com/v1/finance/search"
 
-    async def _fetch(self, symbol: str, interval: str, rng: str, timeout: float = 15.0) -> dict:
+    # v7/quote (ดึงหลายสัญลักษณ์ในคำขอเดียว) ตอนนี้ Yahoo ปิดสำหรับผู้ใช้ทั่วไป (401 ถ้าไม่มี crumb)
+    # จำไว้ชั่วคราวเมื่อโดนปฏิเสธ จะได้ไม่เสียเวลายิงทิ้งทุกรอบก่อนตกไป fallback (เสียรอบละ ~2 วิ)
+    _v7_blocked_until: float = 0.0
+    _V7_BLOCK_TTL = 3600.0
+
+    async def _fetch(self, symbol: str, interval: str, rng: str, timeout: float = 15.0,
+                     client: httpx.AsyncClient | None = None) -> dict:
         params = {"interval": interval, "range": rng, "includePrePost": "false"}
-        async with httpx.AsyncClient(timeout=timeout, headers=_HEADERS) as client:
-            r = await client.get(f"{self.BASE}/{symbol}", params=params)
+        if client is not None:      # ใช้ client ที่เปิดค้างไว้ (ดึงหลายตัวรวดเดียว ไม่ต้อง handshake ใหม่ทุกตัว)
+            r = await client.get(f"{self.BASE}/{symbol}", params=params, timeout=timeout)
+            r.raise_for_status()
+            return r.json()
+        async with httpx.AsyncClient(timeout=timeout, headers=_HEADERS) as c:
+            r = await c.get(f"{self.BASE}/{symbol}", params=params)
             r.raise_for_status()
             return r.json()
 
@@ -192,40 +202,48 @@ class YahooProvider(DataProvider):
             return []
         # map ตัวที่ Yahoo ไม่รองรับ → ตัวที่ใช้ได้ แต่คืนผลด้วยสัญลักษณ์เดิมที่ผู้ใช้ขอ
         norm_map = {o: _normalize_symbol(o).upper() for o in originals}
-        try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(3.0, connect=1.0),
-                headers=_HEADERS,
-            ) as client:
-                res = await client.get(self.QUOTE_BASE,
-                                       params={"symbols": ",".join(sorted(set(norm_map.values())))})
-                res.raise_for_status()
-                payload = res.json()
-            by_norm: dict[str, Quote] = {}
-            for row in payload.get("quoteResponse", {}).get("result", []):
-                quote = self._quote_from_row(row)
-                if quote:
-                    by_norm[quote.symbol.upper()] = quote
-            out = []
-            for orig in originals:
-                q = by_norm.get(norm_map[orig])
-                if q:
-                    out.append(Quote(symbol=orig, price=q.price, time=q.time,
-                                     change=q.change, change_percent=q.change_percent))
-            if len(out) == len(originals):
-                return out
-        except Exception:
-            pass
-        # fallback: ดึงทีละตัวจาก chart API (คืน symbol เดิมอยู่แล้ว)
-        results = await asyncio.gather(
-            *(self._get_quote_from_chart(symbol) for symbol in originals),
-            return_exceptions=True,
-        )
+        if time.time() >= YahooProvider._v7_blocked_until:
+            try:
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(3.0, connect=1.0),
+                    headers=_HEADERS,
+                ) as client:
+                    res = await client.get(self.QUOTE_BASE,
+                                           params={"symbols": ",".join(sorted(set(norm_map.values())))})
+                    if res.status_code in (401, 403, 429):
+                        YahooProvider._v7_blocked_until = time.time() + self._V7_BLOCK_TTL
+                    res.raise_for_status()
+                    payload = res.json()
+                by_norm: dict[str, Quote] = {}
+                for row in payload.get("quoteResponse", {}).get("result", []):
+                    quote = self._quote_from_row(row)
+                    if quote:
+                        by_norm[quote.symbol.upper()] = quote
+                out = []
+                for orig in originals:
+                    q = by_norm.get(norm_map[orig])
+                    if q:
+                        out.append(Quote(symbol=orig, price=q.price, time=q.time,
+                                         change=q.change, change_percent=q.change_percent))
+                if len(out) == len(originals):
+                    return out
+            except Exception:
+                pass
+        # fallback: ดึงทีละตัวจาก chart API (คืน symbol เดิมอยู่แล้ว) — ใช้ client เดียวร่วมกันทุกตัว
+        # + จำกัดพร้อมกันไม่เกิน 8 (เร็วกว่าเปิด connection ใหม่ทีละตัว และไม่กระแทก Yahoo จนโดนบล็อก)
+        semaphore = asyncio.Semaphore(8)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=3.0), headers=_HEADERS) as client:
+            async def one(sym: str) -> Quote:
+                async with semaphore:
+                    return await self._get_quote_from_chart(sym, client=client)
+
+            results = await asyncio.gather(*(one(symbol) for symbol in originals),
+                                           return_exceptions=True)
         return [item for item in results if isinstance(item, Quote)]
 
-    async def _get_quote_from_chart(self, symbol: str) -> Quote:
+    async def _get_quote_from_chart(self, symbol: str, client: httpx.AsyncClient | None = None) -> Quote:
         # ดึงด้วยสัญลักษณ์ที่ใช้ได้จริง แต่คืน symbol เดิมที่ผู้ใช้ขอ (ให้ frontend จับคู่ถูก)
-        data = await self._fetch(_normalize_symbol(symbol), "1d", "5d", timeout=5.0)
+        data = await self._fetch(_normalize_symbol(symbol), "1d", "5d", timeout=5.0, client=client)
         result = (data.get("chart", {}).get("result") or [None])[0]
         if not result:
             return Quote(symbol=symbol, price=0.0, time=int(time.time()))
