@@ -66,7 +66,13 @@ def classify_by_sic(sic: str | int | None) -> str | None:
     return None
 
 
-def infer_from_financials(f: dict) -> str:
+def sic_known(sic: str | int | None) -> bool:
+    """มีรหัส SIC ที่ใช้ได้หรือไม่ (ตัวเลข ไม่ใช่ 0000)."""
+    s = str(sic).strip() if sic is not None else ""
+    return s.isdigit() and int(s) > 0
+
+
+def infer_from_financials(f: dict, allow_reit: bool = True) -> str:
     """เดา sector จากโครงสร้างงบเมื่อ SIC ไม่ช่วย (fallback). ทุก field เป็น optional —
     ถ้าไม่มีข้อมูลก็ตกลง 'general' อย่างปลอดภัย ไม่ระเบิด.
 
@@ -93,7 +99,9 @@ def infer_from_financials(f: dict) -> str:
         return "bank"
 
     # REIT: ค่าเสื่อมมหาศาลเทียบกำไร + capex สูงเทียบรายได้
-    if (depreciation and net_income and net_income != 0
+    # allow_reit=False เมื่อ SIC ระบุชัดว่าไม่ใช่อสังหาฯ — เกณฑ์นี้หลวมพอจะจับบริษัทที่ลงทุนหนักช่วงหนึ่ง
+    # (AMZN/MU/INTC/T/CHTR ช่วงทุ่ม capex AI/โรงงาน/เครือข่าย) ไปเป็น REIT แล้วประเมินด้วย P/FFO ผิดกลุ่ม
+    if (allow_reit and depreciation and net_income and net_income != 0
             and depreciation / abs(net_income) > 0.8
             and capex and revenue and revenue > 0 and abs(capex) / revenue > 0.15):
         return "reit"
@@ -140,7 +148,8 @@ def classify_sector(sic: str | int | None, financials: dict | None = None) -> di
     if sic_sector:
         return {"sector": sic_sector, "profile": _SECTOR_TO_PROFILE[sic_sector], "source": "sic"}
 
-    inferred = infer_from_financials(fin)
+    # SIC มีจริงแต่ไม่ใช่อสังหาฯ (ถ้าเป็น จะ return ไปแล้วข้างบน) → ห้ามเดาเป็น REIT จากงบ
+    inferred = infer_from_financials(fin, allow_reit=sic_known(sic) is False)
     return {"sector": inferred, "profile": _SECTOR_TO_PROFILE.get(inferred, "general"),
             "source": "financials" if inferred != "general" else "default"}
 

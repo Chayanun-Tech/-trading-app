@@ -270,8 +270,7 @@ def _ttm_eps_latest(facts: dict) -> float | None:
     (ยังไม่รวมไตรมาสใหม่หลังปิดปีงบ) ทำให้ P/E สูงเกินจริงสำหรับบริษัทที่กำไรกำลังโต. สังเคราะห์ไตรมาส
     ที่ SEC ไม่แยกยื่น (มัก Q4) จากงบทั้งปีก่อน แล้วรวม 4 ไตรมาสติดกันล่าสุด. คืน None ถ้าไตรมาสไม่พอ."""
     q = _synthesize_missing_quarter(
-        _quarterly_with_fp(facts, _EPS, "USD/shares", prefer_latest_value=True),
-        _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True),
+        *_eps_split_safe(facts),
     )
     dates = sorted(q)
     if len(dates) < 4:
@@ -352,7 +351,7 @@ def _compute_sector_extras(profile_key: str, facts: dict, bars: list[dict], bars
             metrics.append(_metric("EBITDA (ปีล่าสุด)", _fmt_money(ebit), "กำไรก่อนดอกเบี้ย ภาษี ค่าเสื่อม"))
 
     elif profile_key == "cyclical":
-        ann_eps = _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True)
+        ann_eps = _eps_split_safe(facts)[1]
         eps_vals = [ann_eps[fy]["val"] for fy in sorted(ann_eps)]
         norm = sector_metrics.normalized(eps_vals, 10)
         if norm is not None and norm > 0:
@@ -395,7 +394,7 @@ def _compute_sector_extras(profile_key: str, facts: dict, bars: list[dict], bars
         # คำนวณจาก TTM EPS อยู่แล้ว และตรงมาตรฐาน trailing P/E (เท่า Yahoo). ถ้าไตรมาสไม่พอสังเคราะห์
         # TTM ค่อย fallback ไป EPS ปีงบล่าสุด (เดิม) กันเคสข้อมูลรายไตรมาสขาด
         ttm_eps = _ttm_eps_latest(facts)
-        ann_eps = _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True)
+        ann_eps = _eps_split_safe(facts)[1]
         eps_vals = [ann_eps[fy]["val"] for fy in sorted(ann_eps)]
         eps_for_pe = ttm_eps if (isinstance(ttm_eps, (int, float)) and ttm_eps > 0) \
             else (eps_vals[-1] if eps_vals else None)
@@ -562,6 +561,45 @@ def _annual_with_end(facts: dict, concepts: list[str], unit: str, prefer_latest_
         elif prefer_latest_value and e["end"] == out[fy]["end"]:
             out[fy]["val"] = e["val"]
     return out
+
+
+def _normalize_eps_points(eps: dict, ni: dict, ref_shares: float) -> dict:
+    """ปรับ EPS แต่ละจุดให้อยู่บน 'ฐานจำนวนหุ้นเดียวกัน' (ฐานของ ref_shares).
+
+    ปัญหา: prefer_latest_value ใช้ค่าที่ยื่นล่าสุด ซึ่งถูกปรับย้อนหลังหลัง split เฉพาะไตรมาสที่โผล่มาเป็น
+    ตัวเลขเปรียบเทียบในงบหลัง split เท่านั้น — ไตรมาสที่เก่ากว่านั้นยังค้างเป็นเลขก่อน split ทำให้ซีรีส์ EPS
+    ปนกันสองฐาน (เจอจริง: NFLX split 10:1 พ.ย. 2025 → Q1/25 = 0.68 แต่ Q2/25 = 7.35, Q4 ที่สังเคราะห์
+    จากงบทั้งปีติดลบ −11.45, P/E median ที่ได้เหลือ 7.6 เท่า ราคายุติธรรมเพี้ยนไปหลายเท่า).
+
+    วิธี: จำนวนหุ้นโดยนัยของจุดนั้น = กำไรสุทธิ ÷ EPS ถ้าต่างจาก ref_shares ใกล้อัตรา split มาตรฐาน
+    (2,3,4,5,10,20...) แปลว่าจุดนั้นยังเป็นฐานอื่น → หาร EPS ด้วยอัตรานั้น. ข้ามจุดที่ EPS เล็กมาก/
+    เครื่องหมายไม่ตรงกับกำไร (ปัดเศษทำให้หุ้นโดยนัยเพี้ยนได้ ไม่ควรเดา)."""
+    out = {}
+    for k, m in eps.items():
+        v = m["val"]
+        n = (ni.get(k) or {}).get("val")
+        if (ref_shares and n and v and abs(v) >= 0.05 and (n > 0) == (v > 0)
+                and (f := _detect_split_factor(n / v, ref_shares))):
+            m = {**m, "val": v / f}
+        out[k] = m
+    return out
+
+
+def _eps_split_safe(facts: dict, unit: str = "USD/shares") -> tuple[dict[str, dict], dict[int, dict]]:
+    """EPS รายไตรมาส + รายปี (prefer_latest_value) ที่ปรับให้อยู่ฐาน split เดียวกันทั้งซีรีส์แล้ว
+    — ใช้แทนการเรียก _quarterly_with_fp/_annual_with_end ของ EPS ตรง ๆ.
+    ฐานอ้างอิง = จำนวนหุ้นถัวเฉลี่ยของปีงบล่าสุด (ฐานเดียวกับที่ _fresh_split_factor ใช้เทียบกับหุ้นสด
+    ภายหลัง จึงต่อกันได้พอดีถ้า split เกิดหลังปิดปีงบ)."""
+    q = _quarterly_with_fp(facts, _EPS, unit, prefer_latest_value=True)
+    a = _annual_with_end(facts, _EPS, unit, prefer_latest_value=True)
+    shares = _annual_shares(facts)
+    ref = shares[max(shares)]["val"] if shares else None
+    if not ref:
+        return q, a
+    money = unit.split("/")[0]
+    q = _normalize_eps_points(q, _quarterly_with_fp(facts, _NET_INCOME_CONCEPTS, money), ref)
+    a = _normalize_eps_points(a, _annual_with_end(facts, _NET_INCOME_CONCEPTS, money), ref)
+    return q, a
 
 
 def _synthesize_missing_quarter(quarterly: dict[str, dict], annual: dict[int, dict]) -> dict[str, dict]:
@@ -1060,8 +1098,7 @@ async def get_revenue_model(symbol: str, refresh: bool = False, max_quarters: in
         _annual_with_end(facts, _REVENUE_CONCEPTS, "USD"),
     )
     raw_eps_meta = _synthesize_missing_quarter(
-        _quarterly_with_fp(facts, _EPS, "USD/shares", prefer_latest_value=True),
-        _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True),
+        *_eps_split_safe(facts),
     )
     raw_eps = {d: m["val"] for d, m in raw_eps_meta.items()}
     raw_ni_meta = _synthesize_missing_quarter(
@@ -1336,8 +1373,7 @@ async def sector_fair_value(symbol: str, *, granularity: str = "weekly", refresh
 
     # EPS TTM รายไตรมาส (สำหรับ P/E band) — สังเคราะห์ไตรมาสที่ไม่ได้ยื่นแยกเหมือนโมเดลหลัก
     raw_eps = {d: m["val"] for d, m in _synthesize_missing_quarter(
-        _quarterly_with_fp(facts, _EPS, "USD/shares", prefer_latest_value=True),
-        _annual_with_end(facts, _EPS, "USD/shares", prefer_latest_value=True),
+        *_eps_split_safe(facts),
     ).items()}
     eps_dates = sorted(raw_eps)
     ttm_eps_by_date = [(eps_dates[i], sum(raw_eps[d] for d in eps_dates[i - 3:i + 1]))

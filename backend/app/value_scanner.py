@@ -28,11 +28,11 @@ _SCAN_CACHE = Path(__file__).resolve().parent / "data_sp500_value_scan.json"
 _SCAN_TTL = 24 * 3600  # ผลเก่ากว่านี้ถือว่า stale (ยังเสิร์ฟได้ แต่ขึ้นเตือนให้สแกนใหม่)
 
 
-async def _symbol_fair_value(symbol: str, name: str, sector: str) -> dict | None:
+async def _symbol_fair_value(symbol: str, name: str, sector: str, refresh: bool = False) -> dict | None:
     """ประเมินราคายุติธรรมตาม sector ของหุ้นตัวเดียว. คืน None ถ้าประเมินไม่ได้
     (ข้อมูล SEC ไม่พอ / กลุ่มที่ใช้ multiple ไม่ได้ / ราคาย้อนหลังดึงไม่ได้)."""
     try:
-        d = await revenue_model.sector_fair_value(symbol)
+        d = await revenue_model.sector_fair_value(symbol, refresh=refresh)  # refresh = ดึงงบ SEC ใหม่ ไม่ใช้แคช
     except Exception:  # noqa: BLE001 — บริษัทเดียวพังไม่ควรล้มทั้งการสแกน
         return None
 
