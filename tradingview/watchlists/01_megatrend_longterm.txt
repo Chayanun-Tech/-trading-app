@@ -1,0 +1,7 @@
+###AI & ชิป/ดาต้าเซ็นเตอร์,NVDA,AKAM,ANET,GDDY,APH,TSM,META,AVGO,GOOGL,ASML,ON,QCOM,ADI,FFIV,KLAC,GLW,VRSN,MSFT,NTAP,LRCX,MSI,AMAT,CSCO,AAPL,MPWR,AMD,SNDK
+###คลาวด์ ซอฟต์แวร์ & ไซเบอร์,ADBE,INTU,FTNT,NOW,ADSK,TYL,WDAY,PTC,SHOP,CDNS
+###แพลตฟอร์มดิจิทัล & ชำระเงิน,PDD,PYPL,JKHY,NFLX,V,UPS,GOOG,MA
+###ไฟฟ้า & พลังงานเปลี่ยนผ่าน,AME,GEV
+###ระบบอัตโนมัติ & หุ่นยนต์,TDY
+###สุขภาพสังคมสูงวัย & นวัตกรรมการแพทย์,RMD,REGN,STE,DXCM,GILD,LLY,VRTX,ABT,A,MTD,EW,IDXX,TECH,ISRG,WAT
+###อวกาศ & ความมั่นคง,GD,LMT

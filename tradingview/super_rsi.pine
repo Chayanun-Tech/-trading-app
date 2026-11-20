@@ -1,0 +1,177 @@
+// Super RSI — RSI ฉบับรวมเครื่องมือที่ใช้กันจริงไว้ในหน้าต่างเดียว (สร้างจาก trading-app)
+// 1) RSI + เส้นสัญญาณ (EMA ของ RSI) · สีไล่ตามระดับ
+// 2) โซน Adaptive: ขอบบน/ล่างจากเปอร์เซ็นไทล์ RSI ของหุ้นตัวนั้นเอง (หุ้นแต่ละตัว "ต่ำสุดปกติ" ไม่เท่ากัน)
+// 3) Regime ตามเทรนด์ (แนวคิด Cardwell): ขาขึ้น RSI มักแกว่ง 40–80 · ขาลง 20–60 → ในขาขึ้น RSI 40 ก็คือ "ย่อ" แล้ว
+// 4) RSI ไทม์เฟรมใหญ่ (ค่าเริ่มต้น Weekly) แบบไม่ repaint
+// 5) Divergence ปกติ + Hidden (ยืนยันหลัง pivot ขวาครบ — ช้ากว่าจริง n แท่ง แต่ไม่วาดย้อนเปลี่ยน)
+// 6) สัญญาณซื้อตามสไตล์ RSI + MACD และ "โอกาสทอง" เมื่อราคาใกล้ EMA200 · สัญญาณขึ้นเฉพาะตอนแท่งปิด
+// 7) ตารางสรุปสถานะ + Alerts
+// ค่าเริ่มต้นแสดงแบบเรียบ: เส้น RSI เส้นเดียว + เส้น 70/50/30 + สัญญาณ + ตาราง — ส่วนเสริมเปิดได้ใน Settings
+// หมายเหตุ: backtest ในแอปพบว่าจังหวะจาก RSI/MACD ช่วยจุดเข้าได้เล็กน้อย แต่ไม่ชนะการ DCA ต่อเนื่อง
+// เหมาะใช้กำหนดจังหวะลง "เงินสำรอง" มากกว่าใช้ตัดสินว่าจะลงทุนหรือไม่ — ไม่ใช่คำแนะนำการลงทุน
+//@version=6
+indicator("Super RSI", shorttitle = "Super RSI", overlay = false, max_labels_count = 300, max_lines_count = 300)
+
+// ── Inputs ─────────────────────────────────────────────────────────────────────
+grpR = "RSI"
+src    = input.source(close, "แหล่งราคา", group = grpR)
+len    = input.int(14, "ความยาว RSI", minval = 2, group = grpR)
+sigLen = input.int(9, "เส้นสัญญาณ (EMA ของ RSI)", minval = 1, group = grpR)
+obFix  = input.float(70, "Overbought", group = grpR)
+showSigLine = input.bool(false, "แสดงเส้นสัญญาณ (ใช้คำนวณเสมอ)", group = grpR)
+showBg = input.bool(false, "ระบายพื้นหลังโซนสุดขั้ว", group = grpR)
+osFix  = input.float(30, "Oversold", group = grpR)
+
+grpD = "โซน Adaptive"
+useDyn = input.bool(false, "แสดงโซน Adaptive", group = grpD)
+dynLen = input.int(250, "ย้อนหลัง (แท่ง)", minval = 20, group = grpD)
+dynPct = input.float(10, "ขอบเปอร์เซ็นไทล์ (%)", minval = 1, maxval = 40, group = grpD)
+
+grpT = "เทรนด์ & Regime"
+emaLen  = input.int(200, "EMA เทรนด์", minval = 10, group = grpT)
+nearPct = input.float(3.0, "ใกล้ EMA ภายใน (%)", minval = 0.1, group = grpT)
+showReg = input.bool(false, "แสดงกรอบ Regime (40–80 / 20–60)", group = grpT)
+
+grpM = "ไทม์เฟรมใหญ่"
+showHtf = input.bool(false, "แสดง RSI ไทม์เฟรมใหญ่", group = grpM)
+htf     = input.timeframe("W", "ไทม์เฟรมใหญ่", group = grpM)
+
+grpV = "Divergence"
+showDiv  = input.bool(true, "แสดง Divergence ปกติ", group = grpV)
+showHid  = input.bool(false, "แสดง Hidden Divergence", group = grpV)
+pL       = input.int(5, "Pivot ซ้าย", minval = 1, group = grpV)
+pR       = input.int(5, "Pivot ขวา (ยืนยันช้า n แท่ง)", minval = 1, group = grpV)
+rangeMin = input.int(5, "ระยะห่าง pivot ขั้นต่ำ", minval = 1, group = grpV)
+rangeMax = input.int(60, "ระยะห่าง pivot สูงสุด", minval = 5, group = grpV)
+
+grpS = "สัญญาณ"
+showSig = input.bool(true, "แสดงสัญญาณซื้อ/ร้อนแรง", group = grpS)
+dipLvl  = input.float(35, "RSI ต้องเคยลงถึง (ช่วง 5 แท่ง)", group = grpS)
+showTbl = input.bool(true, "แสดงตารางสรุป", group = grpS)
+
+// ── คำนวณ ──────────────────────────────────────────────────────────────────────
+r      = ta.rsi(src, len)
+rSig   = ta.ema(r, sigLen)
+emaT   = ta.ema(close, emaLen)
+[macdLine, macdSignal, macdHist] = ta.macd(close, 12, 26, 9)
+dynHi  = ta.percentile_nearest_rank(r, dynLen, 100 - dynPct)
+dynLo  = ta.percentile_nearest_rank(r, dynLen, dynPct)
+htfR   = request.security(syminfo.tickerid, htf, ta.rsi(src, len)[1], lookahead = barmerge.lookahead_on)  // [1]+lookahead = ไม่ repaint
+
+upTrend = close > emaT and emaT > emaT[20]
+dnTrend = close < emaT and emaT < emaT[20]
+nearEma = math.abs(close / emaT - 1) * 100 <= nearPct
+distEma = (close / emaT - 1) * 100
+
+// สัญญาณซื้อ: RSI เพิ่งลงลึก → ตัดเส้นสัญญาณขึ้น และ MACD histogram เริ่มฟื้น (โมเมนตัมขาลงอ่อนแรง)
+dipped   = ta.lowest(r, 5) <= dipLvl
+rsiTurn  = ta.crossover(r, rSig)
+macdTurn = macdHist > macdHist[1]
+buySig   = dipped and rsiTurn and macdTurn and barstate.isconfirmed
+golden   = buySig and nearEma
+normal   = buySig and not nearEma
+// ในขาขึ้น RSI ย่อถึงโซน 40 ก็ถือว่าย่อแล้ว (Regime) — สัญญาณเสริม
+trendDip = upTrend and ta.lowest(r, 5) <= 42 and ta.lowest(r, 5) > dipLvl and rsiTurn and macdTurn and barstate.isconfirmed
+overheat = ta.crossunder(r, rSig) and ta.highest(r, 5) >= obFix and barstate.isconfirmed
+
+// ── Divergence ────────────────────────────────────────────────────────────────
+plFound = not na(ta.pivotlow(r, pL, pR))
+phFound = not na(ta.pivothigh(r, pL, pR))
+
+inRange(bool cond) =>
+    bars = ta.barssince(cond)
+    rangeMin <= bars and bars <= rangeMax
+
+plPrevR   = ta.valuewhen(plFound, r[pR], 1)
+plPrevLow = ta.valuewhen(plFound, low[pR], 1)
+plPrevIdx = ta.valuewhen(plFound, bar_index - pR, 1)
+phPrevR    = ta.valuewhen(phFound, r[pR], 1)
+phPrevHigh = ta.valuewhen(phFound, high[pR], 1)
+phPrevIdx  = ta.valuewhen(phFound, bar_index - pR, 1)
+plRange = inRange(plFound[1])
+phRange = inRange(phFound[1])
+
+bullDiv = plFound and plRange and r[pR] > plPrevR and low[pR] < plPrevLow     // ราคาทำ Low ต่ำลง แต่ RSI Low สูงขึ้น
+bearDiv = phFound and phRange and r[pR] < phPrevR and high[pR] > phPrevHigh   // ราคาทำ High สูงขึ้น แต่ RSI High ต่ำลง
+bullHid = plFound and plRange and r[pR] < plPrevR and low[pR] > plPrevLow     // ขาขึ้นย่อ: ราคา Low สูงขึ้น RSI Low ต่ำลง
+bearHid = phFound and phRange and r[pR] > phPrevR and high[pR] < phPrevHigh
+
+colBull = color.new(color.teal, 0)
+colBear = color.new(color.red, 0)
+if showDiv and bullDiv
+    line.new(plPrevIdx, plPrevR, bar_index - pR, r[pR], color = colBull, width = 2)
+    label.new(bar_index - pR, r[pR], "Bull", style = label.style_label_up, color = colBull, textcolor = color.white, size = size.tiny)
+if showDiv and bearDiv
+    line.new(phPrevIdx, phPrevR, bar_index - pR, r[pR], color = colBear, width = 2)
+    label.new(bar_index - pR, r[pR], "Bear", style = label.style_label_down, color = colBear, textcolor = color.white, size = size.tiny)
+if showHid and bullHid
+    line.new(plPrevIdx, plPrevR, bar_index - pR, r[pR], color = colBull, width = 1, style = line.style_dashed)
+    label.new(bar_index - pR, r[pR], "H Bull", style = label.style_label_up, color = color.new(colBull, 40), textcolor = color.white, size = size.tiny)
+if showHid and bearHid
+    line.new(phPrevIdx, phPrevR, bar_index - pR, r[pR], color = colBear, width = 1, style = line.style_dashed)
+    label.new(bar_index - pR, r[pR], "H Bear", style = label.style_label_down, color = color.new(colBear, 40), textcolor = color.white, size = size.tiny)
+
+// ── วาด ─────────────────────────────────────────────────────────────────────────
+hOb  = hline(obFix, "Overbought", color = color.new(color.gray, 40), linestyle = hline.style_dashed)
+hMid = hline(50, "กึ่งกลาง", color = color.new(color.gray, 60), linestyle = hline.style_dotted)
+hOs  = hline(osFix, "Oversold", color = color.new(color.gray, 40), linestyle = hline.style_dashed)
+
+// กรอบ Regime: ขาขึ้นเน้นแถบ 40–80 · ขาลง 20–60
+regTop = showReg ? (upTrend ? 80.0 : dnTrend ? 60.0 : na) : na
+regBot = showReg ? (upTrend ? 40.0 : dnTrend ? 20.0 : na) : na
+pRegT = plot(regTop, "Regime บน", color = color.new(color.gray, 100), style = plot.style_linebr)
+pRegB = plot(regBot, "Regime ล่าง", color = color.new(color.gray, 100), style = plot.style_linebr)
+fill(pRegT, pRegB, color = upTrend ? color.new(color.green, 92) : color.new(color.red, 92), title = "Regime")
+
+pHi = plot(useDyn ? dynHi : na, "Adaptive บน", color = color.new(color.red, 70), style = plot.style_circles, linewidth = 1)
+pLo = plot(useDyn ? dynLo : na, "Adaptive ล่าง", color = color.new(color.teal, 70), style = plot.style_circles, linewidth = 1)
+
+rCol = r >= obFix ? color.rgb(239, 83, 80) : r <= osFix ? color.rgb(38, 166, 154) : color.rgb(126, 87, 194)
+pRsi = plot(r, "RSI", color = rCol, linewidth = 2)
+pObL = plot(obFix, "เส้น OB (ซ่อน)", display = display.none)
+pOsL = plot(osFix, "เส้น OS (ซ่อน)", display = display.none)
+fill(pRsi, pObL, color = r > obFix ? color.new(color.red, 70) : na, title = "เกิน Overbought")
+fill(pRsi, pOsL, color = r < osFix ? color.new(color.teal, 70) : na, title = "ต่ำกว่า Oversold")
+plot(showSigLine ? rSig : na, "เส้นสัญญาณ", color = color.new(color.orange, 40), linewidth = 1)
+plot(showHtf ? htfR : na, "RSI ไทม์เฟรมใหญ่", color = color.new(color.blue, 30), style = plot.style_stepline)
+
+plotshape(showSig and golden ? r : na, "โอกาสทอง", shape.diamond, location.absolute, color.new(color.yellow, 0), size = size.small, text = "ทอง", textcolor = color.yellow)
+plotshape(showSig and normal ? r : na, "สัญญาณซื้อ", shape.triangleup, location.absolute, color.new(color.teal, 0), size = size.tiny)
+plotshape(showSig and trendDip and not buySig ? r : na, "ย่อในขาขึ้น", shape.circle, location.absolute, color.new(color.green, 30), size = size.tiny)
+plotshape(showSig and overheat ? r : na, "ร้อนแรง", shape.triangledown, location.absolute, color.new(color.red, 0), size = size.tiny)
+
+bgcolor(showBg ? (r <= osFix ? color.new(color.teal, 90) : r >= obFix ? color.new(color.red, 90) : na) : na, title = "โซนสุดขั้ว")
+
+// ── ตารางสรุป ──────────────────────────────────────────────────────────────────
+var string lastSig = "–"
+if golden
+    lastSig := "โอกาสทอง " + str.format_time(time, "dd/MM/yy", syminfo.timezone)
+else if normal
+    lastSig := "ซื้อ " + str.format_time(time, "dd/MM/yy", syminfo.timezone)
+else if overheat
+    lastSig := "ร้อนแรง " + str.format_time(time, "dd/MM/yy", syminfo.timezone)
+
+var table tb = table.new(position.top_right, 2, 6, bgcolor = color.new(color.black, 30), border_width = 1)
+if showTbl and barstate.islast
+    string regTxt = upTrend ? "ขาขึ้น (RSI ปกติ 40–80)" : dnTrend ? "ขาลง (RSI ปกติ 20–60)" : "ไซด์เวย์"
+    string macdTxt = macdHist > 0 ? (macdHist > macdHist[1] ? "บวก · แรงขึ้น" : "บวก · อ่อนลง") : (macdHist > macdHist[1] ? "ลบ · ฟื้นตัว" : "ลบ · แรงลง")
+    table.cell(tb, 0, 0, "RSI", text_color = color.white, text_size = size.small)
+    table.cell(tb, 1, 0, str.tostring(r, "#.0") + " (โซน " + str.tostring(dynLo, "#") + "–" + str.tostring(dynHi, "#") + ")", text_color = rCol, text_size = size.small)
+    table.cell(tb, 0, 1, "RSI " + htf, text_color = color.white, text_size = size.small)
+    table.cell(tb, 1, 1, str.tostring(htfR, "#.0"), text_color = color.white, text_size = size.small)
+    table.cell(tb, 0, 2, "เทรนด์", text_color = color.white, text_size = size.small)
+    table.cell(tb, 1, 2, regTxt, text_color = upTrend ? color.lime : dnTrend ? color.red : color.silver, text_size = size.small)
+    table.cell(tb, 0, 3, "ห่าง EMA" + str.tostring(emaLen), text_color = color.white, text_size = size.small)
+    table.cell(tb, 1, 3, str.tostring(distEma, "+#.0;-#.0") + "%" + (nearEma ? " · ใกล้" : ""), text_color = nearEma ? color.yellow : color.white, text_size = size.small)
+    table.cell(tb, 0, 4, "MACD", text_color = color.white, text_size = size.small)
+    table.cell(tb, 1, 4, macdTxt, text_color = color.white, text_size = size.small)
+    table.cell(tb, 0, 5, "สัญญาณล่าสุด", text_color = color.white, text_size = size.small)
+    table.cell(tb, 1, 5, lastSig, text_color = color.yellow, text_size = size.small)
+
+// ── Alerts ─────────────────────────────────────────────────────────────────────
+alertcondition(golden, "Super RSI: โอกาสทอง", "{{ticker}} โอกาสทอง: RSI ฟื้นจากโซนต่ำ + MACD ฟื้น + ราคาใกล้ EMA200")
+alertcondition(normal, "Super RSI: สัญญาณซื้อ", "{{ticker}} RSI ฟื้นจากโซนต่ำ + MACD histogram ฟื้น")
+alertcondition(trendDip, "Super RSI: ย่อในขาขึ้น", "{{ticker}} ขาขึ้น RSI ย่อถึงโซน 40 แล้วฟื้น")
+alertcondition(bullDiv, "Super RSI: Bullish Divergence", "{{ticker}} Bullish divergence (ยืนยันแล้ว)")
+alertcondition(bearDiv, "Super RSI: Bearish Divergence", "{{ticker}} Bearish divergence (ยืนยันแล้ว)")
+alertcondition(overheat, "Super RSI: ร้อนแรง", "{{ticker}} RSI กลับตัวลงจากโซน Overbought")

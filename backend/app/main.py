@@ -833,6 +833,14 @@ async def superinvestors_route(symbol: str = Query(..., description="สัญ�
         raise HTTPException(502, f"ดึงข้อมูล 13F ไม่สำเร็จ: {exc}")
 
 
+@app.get("/api/buffett-way")
+async def buffett_way_route(holdings: str = Query("", description="หุ้นที่ถืออยู่ คั่นด้วยจุลภาค เช่น AAPL,MSFT")):
+    """พอร์ตวิถี Buffett — บรรยากาศตลาด + หุ้นที่เข้าเกณฑ์ (คุณภาพ 6/6 + ส่วนเผื่อความปลอดภัย) + สถานะหุ้นที่ถืออยู่.
+    รายชื่อหุ้นที่ถือเก็บในเบราว์เซอร์ของผู้ใช้แต่ละคน แล้วส่งมากับคำขอ — เซิร์ฟเวอร์ไม่เก็บ."""
+    from app import buffett_portfolio
+    return buffett_portfolio.build_report(buffett_portfolio.parse_symbols(holdings))
+
+
 @app.get("/api/thesis/list")
 async def thesis_list_route():
     """รายการวิทยานิพนธ์การลงทุนที่บันทึกไว้ + สถานะสด (ราคาปัจจุบัน/เข้าเขตซื้อ/น้ำหนักแนะนำ)."""

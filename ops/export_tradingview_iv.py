@@ -1,9 +1,10 @@
 """คำนวณกรอบมูลค่าที่แท้จริง (Intrinsic Value) ของหุ้น S&P 500 + Nasdaq-100 แล้วสร้าง Pine Script
 ไปวางใน TradingView — เปิดกราฟหุ้นตัวไหน กล่องกรอบมูลค่าของตัวนั้นจะขึ้นเอง.
 
-ใช้เครื่องประเมินตัวเดียวกับกล่อง "ราคายุติธรรม" ในแอป (value_scanner → revenue_model.sector_fair_value):
-  เลือก metric ตาม sector (P/E, P/B, P/FFO, P/FCF, Shiller P/E) × ตัวคูณ median ที่ตลาดให้ ~2 ปีล่าสุด
-  → low / fair / high ต่อหุ้น จากงบ SEC ล่าสุดที่ประกาศแล้ว.
+ใช้ consensus_value (ฉันทามติหลายโมเดล ลด bias): DCF ของ Owner FCF (หัก SBC) · Earnings Power ×
+P/E ตามการเติบโต · ตัวคูณในอดีต (ตัดทิ้งถ้าสุดโต่ง) · Justified P/B (ธนาคาร/ประกัน) → ค่ากลาง + เกรดจาก
+ความเห็นตรงกันของโมเดล + Reverse DCF (ราคาวันนี้คาดหวังการโตเท่าไหร่). รายละเอียดอยู่ใน backend/app/consensus_value.py
+หุ้นใน data/focus_list.json ถูกรวมเข้าไปเสมอ (เช่น TSM ที่ไม่อยู่ในดัชนี).
 
 รัน (จากโฟลเดอร์ trading-app):
     python ops/export_tradingview_iv.py              # สแกนใหม่ทั้งหมด (~10-20 นาที)
@@ -28,11 +29,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from app import value_scanner  # noqa: E402
+from app.consensus_value import consensus_fair_value  # noqa: E402
 from app.revenue_scanner import load_sp500  # noqa: E402
 
 OUT_JSON = ROOT / "data" / "intrinsic_ranges.json"
 OUT_PINE = ROOT / "tradingview" / "intrinsic_value.pine"
+FOCUS = ROOT / "data" / "focus_list.json"
 _UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36"}
 
 
@@ -67,6 +69,13 @@ def load_universe() -> list[dict]:
                 "sector": csv_rows.get(r["symbol"], {}).get("sector", ""), "index": [],
             })
             item["index"].append(idx)
+    try:
+        focus = json.loads(FOCUS.read_text(encoding="utf-8"))["symbols"]
+    except (OSError, ValueError, KeyError):
+        focus = []
+    for sym in focus:
+        sym = sym.upper().replace(".", "-")
+        out.setdefault(sym, {"symbol": sym, "name": sym, "sector": "", "index": []})["index"].append("FOCUS")
     return list(out.values())
 
 
@@ -77,12 +86,17 @@ async def scan(universe: list[dict], concurrency: int) -> list[dict]:
     async def worker(item: dict):
         nonlocal done
         async with sem:
-            r = await value_scanner._symbol_fair_value(item["symbol"], item["name"], item["sector"], refresh=True)
+            try:
+                r = await consensus_fair_value(item["symbol"], refresh=True)
+            except Exception as e:  # noqa: BLE001 — ตัวเดียวพังไม่ล้มทั้งการสแกน
+                print(f"  ! {item['symbol']}: {e!r}", flush=True)
+                r = None
         done += 1
         if done % 25 == 0:
             print(f"  {done}/{len(universe)}", flush=True)
         if r:
             r["index"] = item["index"]
+            r["name"] = item["name"]
         return r
 
     results = await asyncio.gather(*(worker(i) for i in universe))
@@ -93,45 +107,42 @@ def _num(x: float) -> str:
     return f"{x:.2f}".rstrip("0").rstrip(".")
 
 
-def grade(r: dict) -> str:
-    """เกรดความน่าเชื่อของกรอบ: A = ใช้ได้ · B = ควรตรวจซ้ำ · C = ไม่น่าเชื่อ.
-    C: ตัวคูณฐานสูงผิดปกติ (extreme) — ราคายุติธรรมแค่สะท้อนความแพงในอดีต
-    B: ตัวคูณสูง (rich) · ใช้ P/FFO แต่ไม่ใช่ Real Estate (จำแนก sector ผิด) ·
-       ราคาห่าง fair เกิน ~2 เท่า (มักเกิดจาก split / กำไรพิเศษครั้งเดียว ทำให้ฐานเพี้ยน)"""
-    level = value_scanner.annotate_multiple_level(r)["multiple_level"]
-    if level == "extreme":
-        return "C"
-    ratio = r["price"] / r["fair_price"] if r["fair_price"] else 99
-    misclassified = "FFO" in r["basis"] and r.get("gics_sector") != "Real Estate"
-    if level == "rich" or misclassified or ratio > 2.0 or ratio < 0.5 or r.get("warnings"):
-        return "B"
-    return "A"
+def cycle_section() -> str:
+    """ต่อท้ายด้วย Cycle Counter (tradingview/cycle_counter.pine) ให้เป็น indicator เดียวกัน —
+    แผน Basic ของ TradingView ใส่ได้แค่ 2 อินดิเคเตอร์ต่อกราฟ การรวมจึงประหยัดช่อง.
+    ตัดส่วนหัว (คอมเมนต์ //@version และบรรทัด indicator) ทิ้ง เหลือแต่ตัวโค้ด."""
+    src = (ROOT / "tradingview" / "cycle_counter.pine").read_text(encoding="utf-8").splitlines()
+    start = next(i for i, ln in enumerate(src) if ln.startswith("indicator(")) + 1
+    head = "\n\n// ════════ Cycle Counter (นับรอบ) — รวมมาจาก tradingview/cycle_counter.pine ════════\n"
+    return head + "\n".join(src[start:]) + "\n"
 
 
 def build_pine(rows: list[dict], as_of: str) -> str:
-    # 1 รายการ = "SYM:low:fair:high:basis:grade" — ตัดเป็นก้อนละ 40 ตัว กันสตริงยาวเกินลิมิตของ Pine
+    # 1 รายการ = "SYM:low:fair:high:grade:จำนวนโมเดล:โตจริง%:โตที่ราคาคาดหวัง%" ("-" = ไม่มีข้อมูล; ไม่ใช้ค่าว่างเพราะ str.split อาจตัดช่องท้ายทิ้ง)
+    # ตัดเป็นก้อนละ 40 ตัว กันสตริงยาวเกินลิมิตของ Pine
     entries = []
     for r in sorted(rows, key=lambda x: x["symbol"]):
         tv_sym = r["symbol"].replace("-", ".")  # TradingView ใช้ BRK.B ไม่ใช่ BRK-B
-        basis = r["basis"].split(" ")[0]       # "P/E median (TTM)" → "P/E"
-        if basis == "Normalized":
-            basis = "Norm-" + r["basis"].split(" ")[1]
-        entries.append(f"{tv_sym}:{_num(r['low'])}:{_num(r['fair_price'])}:{_num(r['high'])}:{basis}:{grade(r)}")
+        hg = "-" if r.get("hist_growth_pct") is None else _num(r["hist_growth_pct"])
+        ig = "-" if r.get("implied_growth_pct") is None else _num(r["implied_growth_pct"])
+        entries.append(f"{tv_sym}:{_num(r['low'])}:{_num(r['fair_price'])}:{_num(r['high'])}:"
+                       f"{r['grade']}:{r['models_used']}:{hg}:{ig}")
     chunks = ["|".join(entries[i:i + 40]) for i in range(0, len(entries), 40)]
     data_lines = "\n".join(f'    array.push(DB, "{c}")' for c in chunks)
 
     return f"""// Intrinsic Value Box — สร้างอัตโนมัติจาก trading-app (ops/export_tradingview_iv.py)
 // ข้อมูล ณ {as_of} · {len(entries)} หุ้น (S&P 500 + Nasdaq-100)
-// วิธี: metric ตาม sector × ตัวคูณ median ~2 ปี จากงบ SEC ล่าสุด — เป็นผลจากโมเดล ไม่ใช่คำแนะนำการลงทุน
+// วิธี: ฉันทามติหลายโมเดล (DCF Owner FCF · Earnings Power · ตัวคูณในอดีต · Justified P/B) จากงบ SEC ล่าสุด
+// คิดลด 8.5% (ADR 9.5%) · โตตามรายได้ย้อนหลัง จำกัด 25% — เป็นผลจากโมเดล ไม่ใช่คำแนะนำการลงทุน
 //@version=6
-indicator("Intrinsic Value Box", overlay = true, max_boxes_count = 5, max_lines_count = 5, max_labels_count = 5)
+indicator("Intrinsic Value + Cycle", shorttitle = "IV + Cycle", overlay = true, max_boxes_count = 5, max_lines_count = 500, max_labels_count = 500, max_polylines_count = 100)
 
-lookback   = input.int(150, "กล่องเริ่มย้อนหลัง (แท่ง)", minval = 1, maxval = 4000)
-extendBars = input.int(40, "ยื่นไปทางขวา (แท่ง)", minval = 0, maxval = 400)
-showFair   = input.bool(true, "แสดงเส้นราคายุติธรรม")
-showLabel  = input.bool(true, "แสดงป้ายตัวเลข")
-boxColor   = input.color(color.new(color.yellow, 85), "สีพื้นกล่อง")
-edgeColor  = input.color(color.yellow, "สีขอบกล่อง")
+lookback   = input.int(150, "กล่องเริ่มย้อนหลัง (แท่ง)", minval = 1, maxval = 4000, group = "Intrinsic Value")
+extendBars = input.int(40, "ยื่นไปทางขวา (แท่ง)", minval = 0, maxval = 400, group = "Intrinsic Value")
+showFair   = input.bool(true, "แสดงเส้นราคายุติธรรม", group = "Intrinsic Value")
+showLabel  = input.bool(true, "แสดงป้ายตัวเลข", group = "Intrinsic Value")
+boxColor   = input.color(color.new(color.yellow, 85), "สีพื้นกล่อง", group = "Intrinsic Value")
+edgeColor  = input.color(color.yellow, "สีขอบกล่อง", group = "Intrinsic Value")
 
 var array<string> DB = array.new<string>()
 if barstate.isfirst
@@ -140,8 +151,10 @@ if barstate.isfirst
 var float ivLow = na
 var float ivFair = na
 var float ivHigh = na
-var string ivBasis = ""
 var string ivGrade = ""
+var string ivModels = ""
+var string ivHistG = ""
+var string ivImplG = ""
 var bool looked = false
 
 if barstate.islast and not looked
@@ -155,8 +168,10 @@ if barstate.islast and not looked
                     ivLow   := str.tonumber(array.get(p, 1))
                     ivFair  := str.tonumber(array.get(p, 2))
                     ivHigh  := str.tonumber(array.get(p, 3))
-                    ivBasis := array.get(p, 4)
-                    ivGrade := array.get(p, 5)
+                    ivGrade  := array.get(p, 4)
+                    ivModels := array.get(p, 5)
+                    ivHistG  := array.get(p, 6)
+                    ivImplG  := array.get(p, 7)
                     break
             break
 
@@ -180,18 +195,24 @@ if barstate.islast and not na(ivLow)
         ivLine := line.new(left, ivFair, right, ivFair, color = eCol, style = line.style_dashed)
     if showLabel
         float up = (ivFair - close) / close * 100
-        color c = close < ivLow ? color.green : close > ivHigh ? color.red : color.orange
+        // เกรด C: ป้ายเป็นสีเทาเสมอ — ไม่ให้สีเขียว/แดงชวนเข้าใจผิดว่าเป็นสัญญาณ
+        color c = ivGrade == "C" ? color.gray : close < ivLow ? color.green : close > ivHigh ? color.red : color.orange
         string zone = close < ivLow ? "ต่ำกว่ากรอบ" : close > ivHigh ? "สูงกว่ากรอบ" : "อยู่ในกรอบ"
+        string gLine = ivGrade == "A" ? "เกรด A · " + ivModels + " โมเดลเห็นตรงกัน" :
+             ivGrade == "B" ? "เกรด B · " + ivModels + " โมเดล เห็นต่างกันพอควร" :
+             "เกรด C · โมเดลขัดกันมาก/มีโมเดลเดียว — อย่าใช้ตัวเลขนี้ตัดสินใจ"
+        string gText = ivImplG == "-" ? "" :
+             "\\nราคาวันนี้ต้องโต " + ivImplG + "%/ปี (5 ปี)" + (ivHistG == "-" ? "" : " · อดีตโต " + ivHistG + "%")
         ivLbl := label.new(right, ivHigh,
              "IV " + str.tostring(ivLow, "#.##") + " – " + str.tostring(ivHigh, "#.##") +
-             "\\nFair " + str.tostring(ivFair, "#.##") + " (" + ivBasis + ")" +
-             "\\nห่างจาก Fair " + str.tostring(up, "+#.#;-#.#") + "% · " + zone +
-             "\\nเกรดความน่าเชื่อ " + ivGrade +
+             " · Fair " + str.tostring(ivFair, "#.##") +
+             "\\nห่างจาก Fair " + str.tostring(up, "+#.#;-#.#") + "% · " + zone + gText +
+             "\\n" + gLine +
              "\\nข้อมูล {as_of}",
              style = label.style_label_lower_left, color = c, textcolor = color.white, size = size.small)
 
 if barstate.islast and na(ivLow)
-    var label miss = label.new(bar_index, high, "ไม่มีข้อมูล IV ของ " + syminfo.ticker,
+    var label miss = label.new(bar_index, high, "ไม่มีกรอบ IV ของ " + syminfo.ticker + "\\n(ไม่อยู่ในรายชื่อ / ยังไม่มีกำไรหรือกระแสเงินสด / งบ SEC ไม่พอ)",
          style = label.style_label_down, color = color.gray, textcolor = color.white, size = size.small)
 """
 
@@ -218,7 +239,7 @@ def main() -> None:
         print(f"เสร็จ {len(rows)}/{len(universe)} ตัว ใน {time.time() - t0:.0f} วินาที → {OUT_JSON}")
 
     OUT_PINE.parent.mkdir(parents=True, exist_ok=True)
-    OUT_PINE.write_text(build_pine(payload["results"], payload["as_of"]), encoding="utf-8")
+    OUT_PINE.write_text(build_pine(payload["results"], payload["as_of"]) + cycle_section(), encoding="utf-8")
     print(f"Pine Script → {OUT_PINE}")
 
 

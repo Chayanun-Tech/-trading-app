@@ -1,0 +1,4 @@
+{
+  "note": "หุ้นที่ผู้ใช้โฟกัส (จาก watchlist TradingView) — สคริปต์ ops/export_tradingview_iv.py ประเมินตัวเหล่านี้เพิ่มเสมอ แม้ไม่อยู่ใน S&P 500/Nasdaq-100. ICHI (หุ้นไทย) และคริปโตไม่อยู่ในนี้ เพราะไม่มีงบ SEC/ประเมินแบบกระแสเงินสดไม่ได้",
+  "symbols": ["NFLX", "META", "TSM", "TSLA", "HIMS", "NVDA", "GOOGL", "ASML", "MSFT", "PLTR", "AMZN", "AVGO", "COST", "CRWD"]
+}

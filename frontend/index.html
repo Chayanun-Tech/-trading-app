@@ -316,6 +316,24 @@
   .toast.error { border-color:rgba(239,68,68,.55); border-left-color:var(--red); background:rgba(127,29,29,.96); }
   .toast-title { font-weight:700; margin-bottom:2px; }
   .hidden { display:none !important; }
+  /* ── พอร์ตวิถี Buffett ── */
+  .bw-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .bw-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; margin:8px 0 12px; }
+  .bw-card { border:1px solid var(--border); border-radius:8px; padding:10px 12px; background:var(--panel2); min-width:0; }
+  .bw-card h4 { margin:0 0 6px; font-size:13px; color:var(--muted); font-weight:600; }
+  .bw-regime { font-size:15px; font-weight:700; }
+  .bw-regime.expensive { color:#f0a35e; } .bw-regime.fear { color:var(--green); } .bw-regime.normal { color:var(--text); }
+  .bw-dim { display:grid; grid-template-columns:110px 1fr 34px; gap:8px; align-items:center; font-size:12px; margin:3px 0; }
+  .bw-dim .t { height:6px; background:var(--border); border-radius:3px; position:relative; overflow:hidden; }
+  .bw-dim .t span { position:absolute; inset:0 auto 0 0; border-radius:3px; }
+  .bw-dim b { text-align:right; font-variant-numeric:tabular-nums; }
+  .bw-sec { margin:14px 0 6px; font-weight:700; }
+  .bw-tone-good { color:var(--green); } .bw-tone-bad { color:#f85149; } .bw-tone-warn { color:#f0a35e; } .bw-tone-ok, .bw-tone-muted { color:var(--muted); }
+  .bw-sym { color:var(--accent2); cursor:pointer; font-weight:700; }
+  .bw-flag { color:#f0a35e; font-size:12px; }
+  .bw-chip { display:inline-block; font-size:11px; border:1px solid var(--border); border-radius:999px; padding:0 6px; margin:1px 2px 1px 0; color:var(--muted); }
+  #bwHoldInput { width:100%; min-height:54px; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font:inherit; }
+  .bw-num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
   @media (max-width:1100px) {
     .portfolio-metrics { grid-template-columns:repeat(2,1fr); }
     .portfolio-grid { grid-template-columns:1fr; }
@@ -531,6 +549,7 @@
       <button class="tab" id="tabMultibagger" onclick="showTab('multibagger')">🚀 หุ้นเล็กเด้งไกล</button>
       <button class="tab" id="tabRadar" onclick="showTab('radar')">🛰️ เรดาร์เทรนด์โลก</button>
       <button class="tab" id="tabSp500hist" onclick="showTab('sp500hist')">🏆 ประวัติ S&P 500</button>
+      <button class="tab" id="tabBuffettway" onclick="showTab('buffettway')" title="คัดหุ้นด้วยกฎวิถี Buffett (คุณภาพ 6/6 + ส่วนเผื่อความปลอดภัย + บรรยากาศตลาด) และติดตามพอร์ตที่ถืออยู่">🏛️ พอร์ตวิถี Buffett</button>
       <button class="tab" id="tabIndicators" onclick="showTab('indicators')">📉 Indicators</button>
       <button class="tab" id="tabAuto" onclick="showTab('auto')" style="display:none">Auto Bot</button>
     </div>
@@ -1205,6 +1224,18 @@
           <div id="ecoDetailBody"></div>
         </div>
       </div>
+    </div>
+
+    <div id="buffettwayPanel" class="panel-body hidden">
+      <div class="bw-head">
+        <div>
+          <b style="font-size:16px;">🏛️ พอร์ตวิถี Buffett</b>
+          <div class="note">ซื้อธุรกิจยอดเยี่ยม (คุณภาพ 6/6) เมื่อราคาต่ำกว่ามูลค่าที่แท้จริง · ถือ 15–20 ตัวยาว ๆ · ไม่ขายเพราะราคาแพง ขายเมื่อธุรกิจเสื่อม · ตลาดแพงเก็บเงินสด ตลาดกลัวทุ่ม</div>
+        </div>
+        <button onclick="loadBuffettWay(true)">↻ โหลดใหม่</button>
+      </div>
+      <div id="bwStatus" class="note">กำลังโหลด...</div>
+      <div id="bwBody"></div>
     </div>
 
     <div id="sp500histPanel" class="panel-body hidden">
@@ -3623,7 +3654,7 @@ function renderTheses(items) {
 }
 
 function showTab(tab) {
-  ["report","multibagger","fundamentals","business","macro","history","radar","analyst","revenue","revenuescan","sp500hist","iv","buffett","thesis","strategy","image","indicators","auto"].forEach(name => {
+  ["report","multibagger","fundamentals","business","macro","history","radar","analyst","revenue","revenuescan","sp500hist","buffettway","iv","buffett","thesis","strategy","image","indicators","auto"].forEach(name => {
     const panel = $(name + "Panel");
     const btn = $("tab" + name[0].toUpperCase() + name.slice(1));
     if (panel) panel.classList.toggle("hidden", name !== tab);
@@ -3631,6 +3662,7 @@ function showTab(tab) {
   });
   if (tab === "revenuescan") autoLoadActiveScanSub();
   if (tab === "sp500hist") initSp500Hist();
+  if (tab === "buffettway") loadBuffettWay();
   if (tab === "history") maybeAutoHistory();
   if (tab === "thesis") loadTheses();
   // เปิดแท็บ Buffett แล้วให้คะแนนหุ้นที่กำลังดูอยู่ทันที (ไม่ต้องพิมพ์ซ้ำ) — เหมือนแท็บวิเคราะห์อื่น ๆ
@@ -3641,6 +3673,93 @@ function showTab(tab) {
       loadBuffett(s);
     }
   }
+}
+
+// ── 🏛️ พอร์ตวิถี Buffett ─────────────────────────────────────────────────────
+let bwData = null;
+// พอร์ตเก็บในเบราว์เซอร์ของแต่ละคน (เว็บเปิดสาธารณะ — ไม่เก็บบนเซิร์ฟเวอร์ คนอื่นจึงไม่เห็นพอร์ตของเรา)
+const BW_KEY = "buffettWayHoldings";
+function bwGetHoldings() { try { return JSON.parse(localStorage.getItem(BW_KEY) || "[]"); } catch (e) { return []; } }
+function bwSetHoldings(list) { try { localStorage.setItem(BW_KEY, JSON.stringify(list)); } catch (e) { /* โหมดส่วนตัว/บล็อกที่เก็บข้อมูล */ } }
+async function loadBuffettWay(force = false) {
+  if (bwData && !force) { renderBuffettWay(bwData); return; }
+  $("bwStatus").textContent = "กำลังโหลด...";
+  try {
+    const res = await fetch(`${API}/api/buffett-way?holdings=${encodeURIComponent(bwGetHoldings().join(","))}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    bwData = await res.json();
+    renderBuffettWay(bwData);
+  } catch (e) {
+    $("bwStatus").innerHTML = `<span class="down">โหลดไม่สำเร็จ: ${escapeHtml(String(e.message || e))}</span>`;
+  }
+}
+
+async function saveBuffettHoldings() {
+  const syms = [...new Set(($("bwHoldInput").value || "").split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean))].slice(0, 50);
+  bwSetHoldings(syms);
+  await loadBuffettWay(true);
+}
+
+function renderBuffettWay(d) {
+  const n = (v, dg = 2) => v == null ? "–" : Number(v).toLocaleString("en-US", { minimumFractionDigits: dg, maximumFractionDigits: dg });
+  const pc = (v, dg = 1) => v == null ? "–" : `${v > 0 ? "+" : ""}${Number(v).toFixed(dg)}%`;
+  // ส่วนลดจากมูลค่า (บวก) หรือ แพงกว่ามูลค่า (ลบ → แสดงเป็น "แพงกว่า X%" จำกัดที่ 300% กันตัวเลขระเบิดเมื่อมูลค่าเกือบศูนย์)
+  const mos = r => r.mos_pct == null ? "–" : r.mos_pct >= 0 ? `<span class="bw-tone-good">ถูกกว่า ${r.mos_pct.toFixed(0)}%</span>`
+    : `<span class="bw-tone-warn">แพงกว่า ${Math.min((r.price / r.fair - 1) * 100, 300).toFixed(0)}%${r.price / r.fair - 1 > 3 ? "+" : ""}</span>`;
+  const sym = s => `<span class="bw-sym" onclick="selectSymbol('${escapeHtml(s)}')" title="เปิดกราฟ ${escapeHtml(s)}">${escapeHtml(s)}</span>`;
+  const chips = r => (r.trends || []).map(t => `<span class="bw-chip">${escapeHtml({ai:"AI/ชิป",software:"ซอฟต์แวร์",digital:"ดิจิทัล",electrify:"พลังงานไฟฟ้า",automation:"อัตโนมัติ",health:"สุขภาพ",space:"อวกาศ/กลาโหม",scarcity:"ทรัพยากร"}[t] || t)}</span>`).join("");
+  const dimColor = v => v >= 60 ? "var(--green)" : v >= 40 ? "#d4a72c" : "#f85149";
+  const c = d.climate || {}, now = c.now || {}, rg = d.regime || {};
+  const dims = ["รวม", "มูลค่า", "ความกลัว/ข่าว", "ราคา/ความกว้าง", "ภาวะการเงิน"].map(k => now[k] == null ? "" :
+    `<div class="bw-dim"><span>${k}</span><div class="t"><span style="width:${now[k]}%;background:${dimColor(now[k])}"></span></div><b>${Math.round(now[k])}</b></div>`).join("");
+  const bt = d.backtest || {}, b20 = bt["ขายเฉพาะธุรกิจเสื่อม · 20 ตัว"], bFull = bt["วิถี Buffett (เต็มกฎ)"];
+  const asof = d.data_as_of || {};
+  $("bwStatus").innerHTML = `ข้อมูล: มูลค่า ${asof.valuation || "–"} · คุณภาพ ${asof.quality || "–"} · บรรยากาศตลาด ${asof.climate || "–"} — อัปเดตทุกไตรมาสหลังงบออกด้วย <code>python ops/refresh_buffett_way.py</code>`;
+
+  const holdRows = (d.holdings || []).map(h => `<tr>
+      <td>${sym(h.symbol)}${h.name && h.name !== h.symbol ? `<div class="note">${escapeHtml(h.name)}</div>` : ""}</td>
+      <td class="bw-tone-${h.tone}">${escapeHtml(h.status)}</td>
+      <td class="bw-num">${n(h.price)}</td><td class="bw-num">${n(h.fair)}</td>
+      <td class="bw-num">${h.quality == null ? "–" : h.quality + "/6"}</td>
+      <td class="bw-num">${mos(h)}</td></tr>`).join("");
+  const ideaRow = r => `<tr>
+      <td>${sym(r.symbol)}<div class="note">${escapeHtml(r.name || "")}</div>${chips(r)}${(r.flags || []).map(f => `<div class="bw-flag">⚠ ${escapeHtml(f)}</div>`).join("")}</td>
+      <td class="bw-num">${n(r.price)}</td><td class="bw-num">${n(r.fair)}</td>
+      <td class="bw-num"><b>${mos(r)}</b></td>
+      <td class="bw-num">${r.implied_growth == null ? "–" : r.implied_growth.toFixed(1) + "%"} / ${r.hist_growth == null ? "–" : r.hist_growth.toFixed(1) + "%"}</td>
+      <td class="bw-num">${r.fcf_margin == null ? "–" : r.fcf_margin + "%"}</td><td class="bw-num">${r.roe == null ? "–" : r.roe + "%"}</td>
+      <td class="bw-num">${r.grade || "–"}</td></tr>`;
+  const ideaHead = `<tr><th>หุ้น</th><th class="bw-num">ราคา</th><th class="bw-num">มูลค่า (Fair)</th><th class="bw-num">ส่วนลด</th><th class="bw-num">ราคาต้องโต / อดีตโต</th><th class="bw-num">FCF margin</th><th class="bw-num">ROE</th><th class="bw-num">เกรด</th></tr>`;
+  const waitRows = (d.wait || []).slice(0, 25).map(r => `<tr><td>${sym(r.symbol)}<div class="note">${escapeHtml(r.name || "")}</div></td>
+      <td class="bw-num">${n(r.price)}</td><td class="bw-num">${n(r.buy_below)}</td><td class="bw-num">${pc(-r.gap_pct)}</td><td class="bw-num">${r.grade || "–"}</td></tr>`).join("");
+
+  $("bwBody").innerHTML = `
+    <div class="bw-grid">
+      <div class="bw-card"><h4>บรรยากาศตลาดตอนนี้ (${escapeHtml(c.as_of || "–")})</h4>
+        <div class="bw-regime ${escapeHtml(rg.key || "")}">${escapeHtml(rg.label || "–")}</div>
+        <div class="note" style="margin-top:4px;">${escapeHtml(rg.advice || "")}</div>
+        <div class="note" style="margin-top:6px;">เกณฑ์ซื้อตอนนี้: มูลค่า ÷ ราคา ≥ <b>${rg.mos}</b> · ลงเงินใหม่ <b>${Math.round((rg.deploy || 0) * 100)}%</b> เก็บเงินสด <b>${Math.round((1 - (rg.deploy || 0)) * 100)}%</b></div></div>
+      <div class="bw-card"><h4>คะแนนบรรยากาศ (สูง = กลัว/ถูก)</h4>${dims}</div>
+      <div class="bw-card"><h4>ผลทดสอบย้อนหลังของกฎ (2013–2026)</h4>
+        <div class="note">ถือ 20 ตัว ขายเฉพาะธุรกิจเสื่อม: <b>${b20 ? b20.vs_sp.toFixed(2) + "×" : "–"}</b> ของการลงเงินเท่ากันใน S&amp;P 500<br>
+        ถ้าเพิ่มกฎ "ขายตอนแพง": ${bFull ? bFull.vs_sp.toFixed(2) + "×" : "–"} (แย่ลง)<br>
+        ผลแกว่งตามปีที่เริ่ม (0.83–1.22×) · ไม่หักค่าธรรมเนียม/ภาษี</div></div>
+    </div>
+
+    <div class="bw-sec">📂 หุ้นที่ถืออยู่ (${(d.holdings || []).length}/${d.rules ? d.rules.max_hold : 20})</div>
+    <div class="note" style="margin-bottom:4px;">ใส่ ticker คั่นด้วยเว้นวรรคหรือจุลภาค เช่น <code>AAPL MSFT KO</code> แล้วกดบันทึก ระบบจะบอกว่าตัวไหนถือต่อ เติมได้ หรือธุรกิจเริ่มเสื่อม · พอร์ตเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น (คนอื่นมองไม่เห็น · เปลี่ยนเครื่อง/ล้างข้อมูลเบราว์เซอร์ต้องใส่ใหม่)</div>
+    <textarea id="bwHoldInput" placeholder="AAPL MSFT KO">${escapeHtml((d.holdings || []).map(h => h.symbol).join(" "))}</textarea>
+    <div style="margin:6px 0 8px;"><button onclick="saveBuffettHoldings()">💾 บันทึกพอร์ต</button></div>
+    ${holdRows ? `<div class="table-scroll"><table><thead><tr><th>หุ้น</th><th>สถานะตามกฎ</th><th class="bw-num">ราคา</th><th class="bw-num">มูลค่า</th><th class="bw-num">คุณภาพ</th><th class="bw-num">เทียบมูลค่า</th></tr></thead><tbody>${holdRows}</tbody></table></div>` : ""}
+
+    <div class="bw-sec">🟢 เข้าเกณฑ์ซื้อตอนนี้ (${d.counts.buy} ตัว · ช่องว่างในพอร์ต ${d.counts.slots})</div>
+    <div class="note">คุณภาพ 6/6 + ราคาต่ำกว่ามูลค่าตามเกณฑ์ตลาดตอนนี้ · เรียงจากส่วนลดมาก→น้อย · คลิกชื่อเพื่อเปิดกราฟ · <b>Buffett จะเลือกเฉพาะธุรกิจที่เข้าใจลึกจากรายชื่อนี้อีกชั้น</b></div>
+    ${d.buy.length ? `<div class="table-scroll"><table><thead>${ideaHead}</thead><tbody>${d.buy.map(ideaRow).join("")}</tbody></table></div>` : `<div class="note">ตอนนี้ไม่มีหุ้นเข้าเกณฑ์ — เก็บเงินสดรอ (วิถี Buffett)</div>`}
+
+    <div class="bw-sec">⏳ ธุรกิจดี แต่รอราคา (ใกล้เข้าเกณฑ์ที่สุด)</div>
+    <div class="table-scroll"><table><thead><tr><th>หุ้น</th><th class="bw-num">ราคา</th><th class="bw-num">เข้าเกณฑ์เมื่อราคา ≤</th><th class="bw-num">ต้องลงอีก</th><th class="bw-num">เกรด</th></tr></thead><tbody>${waitRows}</tbody></table></div>
+
+    <div class="note" style="margin-top:10px;">${escapeHtml(d.disclaimer || "")}</div>`;
 }
 
 function loading(msg) {

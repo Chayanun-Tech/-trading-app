@@ -1,0 +1,308 @@
+// Cycle Counter v2 (นับรอบ) — วางทับบนกราฟราคา (สร้างจาก trading-app)
+// รอบใหญ่ = จุดต่ำใหญ่ → ขาขึ้นใหญ่ → จุดสูงใหญ่ → ขาลงใหญ่ → จุดต่ำใหญ่ถัดไป (เริ่มรอบใหม่)
+// รอบย่อย = การแกว่งระหว่างทางในรอบใหญ่ (ป้าย 5.1, 5.2 ...)
+// ค่าเริ่มต้นเลือกจาก backtest 11+5 วิธี (ops/backtest_cycles.py): รอบใหญ่ 25% คงที่ + ต้องโครงสร้างเปลี่ยน · รอบย่อย 10%
+// ผล: ใช้กับดัชนี (SPY/QQQ) ลดช่วงขาดทุนลึกสุดได้ ~ครึ่ง โดยผลตอบแทนใกล้เดิม · ใช้กับหุ้นรายตัว "ขายตามสัญญาณ" แพ้ซื้อแล้วถือ
+// v2 แก้จาก v1:
+//   • เกณฑ์ปรับตามความผันผวนของหุ้นตัวนั้นเอง (ค่าเฉลี่ย 1 ปีของ ATR14 ÷ ราคา) — หุ้นแกว่งแรงต้องกลับตัวมากกว่าถึงนับ
+//   • รอบใหญ่ต้อง "โครงสร้างเปลี่ยนจริง": จบขาลง = ปิดเหนือยอดย่อยล่าสุด (CHoCH) + เด้งจากก้นเกินเกณฑ์
+//                                         จบขาขึ้น = ปิดต่ำกว่าก้นย่อยล่าสุด + ย่อจากยอดเกินเกณฑ์
+//   • พอยืนยันแล้ว วาดเส้นสีของรอบย้อนทับช่วงจริง (ก้น→ยอด→ก้น) สีจึงตรงกับจุดกลับตัว · ขาที่ยังวิ่งอยู่ = เส้นประ
+//   • นับเลขรอบตั้งแต่วันที่เลือก (ค่าเริ่มต้น 1 ม.ค. 2021)
+// แลกกับความช้า: รู้ว่ารอบใหญ่จบหลังราคาเด้ง/ย่อไปแล้วพอสมควร — เพื่อไม่ให้รอบหลอกหลอกตา · ไม่ใช่คำแนะนำการลงทุน
+//@version=6
+indicator("Cycle Counter v2 (นับรอบ)", shorttitle = "Cycle v2", overlay = true, max_lines_count = 500, max_labels_count = 500, max_polylines_count = 100)
+
+// ── Inputs ─────────────────────────────────────────────────────────────────────
+grpA = "เกณฑ์รอบ"
+thrMode   = input.string("อัตโนมัติตามตลาด", "เกณฑ์การกลับตัว", options = ["อัตโนมัติตามตลาด", "% คงที่", "ปรับตามความผันผวน"], group = grpA, tooltip = "อัตโนมัติ = ค่าที่ backtest ดีที่สุดของแต่ละตลาด: หุ้นไทย (SET) ใช้ผันผวน ×12 · ตลาดอื่น (US) ใช้ 25% คงที่")
+minorMult = input.float(4.0, "รอบย่อย: กี่เท่าของความผันผวนปกติ", minval = 0.5, step = 0.5, group = grpA, tooltip = "ความผันผวนปกติ = ค่าเฉลี่ย 1 ปีของ ATR14 ÷ ราคา (%) · เพิ่ม = รอบย่อยน้อยลง")
+majorMult = input.float(10.0, "รอบใหญ่: กี่เท่าของความผันผวนปกติ", minval = 1, step = 0.5, group = grpA, tooltip = "เพิ่ม = นับเฉพาะรอบที่ใหญ่มาก ๆ · ลด = รอบใหญ่มากขึ้น")
+minorFix  = input.float(10.0, "รอบย่อย % (โหมดคงที่)", minval = 1, group = grpA)
+majorFix  = input.float(25.0, "รอบใหญ่ % (โหมดคงที่)", minval = 2, group = grpA, tooltip = "ทดสอบแล้ว 25–30% ให้ผลใกล้กัน (ช่วงที่เสถียร) · 15% สลับบ่อยเกินไป")
+startT    = input.time(timestamp("01 Jan 2021 00:00 +0000"), "นับรอบตั้งแต่", group = grpA)
+
+grpB = "การแสดงผล"
+showPath     = input.bool(true, "เส้นรอบใหญ่ (สีตามรอบ)", group = grpB)
+smoothLen    = input.int(8, "ความเรียบของเส้นรอบ (EMA)", minval = 1, group = grpB)
+showMinor    = input.bool(true, "เส้นรอบย่อย (บาง)", group = grpB)
+showMinorLbl = input.bool(false, "ป้ายเลขรอบย่อย (5.1, 5.2 ...)", group = grpB)
+showLbl      = input.bool(true, "ป้ายรอบใหญ่", group = grpB)
+showTbl      = input.bool(true, "ตารางสถานะรอบ", group = grpB)
+emaLen       = input.int(200, "EMA ระยะยาว (ใช้ในเช็กลิสต์)", minval = 10, group = grpB)
+
+// ── สีประจำรอบ ──────────────────────────────────────────────────────────────────
+var array<color> pal = array.from(color.rgb(0, 188, 212), color.rgb(255, 193, 7), color.rgb(186, 104, 200),
+     color.rgb(102, 187, 106), color.rgb(255, 112, 67), color.rgb(66, 165, 245), color.rgb(236, 64, 122), color.rgb(212, 225, 87))
+cycCol(int c) =>
+    array.get(pal, c % array.size(pal))
+
+// ── คำนวณพื้นฐาน ────────────────────────────────────────────────────────────────
+atrPct   = ta.atr(14) / close * 100
+volPct   = nz(ta.sma(atrPct, 250), ta.cum(atrPct) / (bar_index + 1))
+autoSet  = thrMode == "อัตโนมัติตามตลาด" and syminfo.prefix == "SET"
+useVol   = thrMode == "ปรับตามความผันผวน" or autoSet
+minorPct = useVol ? minorMult * volPct : minorFix
+majorPct = autoSet ? 12.0 * volPct : useVol ? majorMult * volPct : majorFix
+pathSrc  = ta.ema(close, smoothLen)
+max_bars_back(time, 4900)
+emaT     = ta.ema(close, emaLen)
+rsiW     = request.security(syminfo.tickerid, "W", ta.rsi(close, 14)[1], lookahead = barmerge.lookahead_on)  // ไม่ repaint
+
+// เก็บจุดของเส้นรอบสะสมไว้ทีละแท่ง (ไม่ต้องย้อนอ่านประวัติ) — พอยืนยันจุดกลับตัว ค่อยตัดช่วงที่จบแล้ววาดเป็นเส้น
+var array<chart.point> buf = array.new<chart.point>()
+buf.push(chart.point.from_index(bar_index, pathSrc))
+
+// ตัดบัฟเฟอร์ที่จุดกลับตัว pivB: ส่วนจนถึง pivB วาดเป็นเส้น (ถ้า draw) · ส่วนหลังจากนั้นคืนกลับเป็นบัฟเฟอร์ใหม่ (เริ่มที่จุดกลับตัว)
+splitDraw(array<chart.point> src, int pivB, color col, bool draw) =>
+    array<chart.point> done = array.new<chart.point>()
+    array<chart.point> rest = array.new<chart.point>()
+    for pt in src
+        if pt.index <= pivB
+            done.push(pt)
+        else
+            rest.push(pt)
+    if done.size() > 0
+        rest.unshift(done.last())
+    if draw and done.size() > 1
+        polyline.new(done, line_color = col, line_width = 4)
+    rest
+
+// ── รอบย่อย (zigzag ตามเกณฑ์รอบย่อย) ──────────────────────────────────────────────
+var int   mDir = 0
+var float mHi  = na
+var int   mHiB = na
+var float mLo  = na
+var int   mLoB = na
+var float mPivP = na
+var int   mPivB = na
+var float lastMinHigh  = na
+var int   lastMinHighB = na
+var float lastMinLow   = na
+var int   lastMinLowB  = na
+var float prevMinLow   = na
+bool minorLowNow = false
+
+// ── รอบใหญ่ (state) ─────────────────────────────────────────────────────────────
+var int   MDir = 0       // 1 = ขาขึ้นใหญ่ · -1 = ขาลงใหญ่ · 0 = ยังไม่รู้
+var float MHi = na
+var int   MHiB = na
+var float MLo = na
+var int   MLoB = na
+var int   MLoT = na
+var float hiSinceLo = na
+var int   hiSinceLoB = na
+var float loSinceHi = na
+var int   loSinceHiB = na
+var int   cyc = 0
+var int   sub = 0
+var float cycStartP = na
+var int   cycStartB = na
+var int   cycStartT = na
+var float topP = na
+var int   topB = na
+var int   topT = na
+var array<float> upPct = array.new<float>()
+var array<float> upLen = array.new<float>()
+var array<float> dnPct = array.new<float>()
+var array<float> dnLen = array.new<float>()
+var polyline curPath = na
+
+if na(mHi)
+    mHi := high
+    mHiB := bar_index
+    mLo := low
+    mLoB := bar_index
+    MHi := high
+    MHiB := bar_index
+    MLo := low
+    MLoB := bar_index
+    MLoT := time
+    hiSinceLo := high
+    hiSinceLoB := bar_index
+    loSinceHi := low
+    loSinceHiB := bar_index
+
+// ---- zigzag รอบย่อย
+mUpTrig = mLo * (1 + minorPct / 100)
+mDnTrig = mHi * (1 - minorPct / 100)
+if mDir == 0
+    if high > mHi
+        mHi := high
+        mHiB := bar_index
+    if low < mLo
+        mLo := low
+        mLoB := bar_index
+    if close <= mDnTrig and mHiB < bar_index
+        mDir := -1
+        mPivP := mHi
+        mPivB := mHiB
+        lastMinHigh := mHi
+        lastMinHighB := mHiB
+        mLo := low
+        mLoB := bar_index
+    else if close >= mUpTrig and mLoB < bar_index
+        mDir := 1
+        mPivP := mLo
+        mPivB := mLoB
+        lastMinLow := mLo
+        lastMinLowB := mLoB
+        mHi := high
+        mHiB := bar_index
+else if mDir == 1
+    if high > mHi
+        mHi := high
+        mHiB := bar_index
+    if close <= mHi * (1 - minorPct / 100)
+        if showMinor and time >= startT
+            line.new(mPivB, mPivP, mHiB, mHi, color = color.new(color.gray, 50), width = 1)
+        mPivP := mHi
+        mPivB := mHiB
+        lastMinHigh := mHi
+        lastMinHighB := mHiB
+        mDir := -1
+        mLo := low
+        mLoB := bar_index
+else
+    if low < mLo
+        mLo := low
+        mLoB := bar_index
+    if close >= mLo * (1 + minorPct / 100)
+        if showMinor and time >= startT
+            line.new(mPivB, mPivP, mLoB, mLo, color = color.new(color.gray, 50), width = 1)
+        mPivP := mLo
+        mPivB := mLoB
+        prevMinLow := lastMinLow
+        lastMinLow := mLo
+        lastMinLowB := mLoB
+        minorLowNow := true
+        mDir := 1
+        mHi := high
+        mHiB := bar_index
+
+// ---- ติดตามจุดสุดขั้วของรอบใหญ่
+if MDir <= 0
+    if low < MLo
+        MLo := low
+        MLoB := bar_index
+        MLoT := time
+        hiSinceLo := high
+        hiSinceLoB := bar_index
+    else if high > hiSinceLo
+        hiSinceLo := high
+        hiSinceLoB := bar_index
+if MDir >= 0
+    if high > MHi
+        MHi := high
+        MHiB := bar_index
+        loSinceHi := low
+        loSinceHiB := bar_index
+    else if low < loSinceHi
+        loSinceHi := low
+        loSinceHiB := bar_index
+
+// ---- ยืนยันจุดต่ำใหญ่ (จบรอบ → เริ่มรอบใหม่): ปิดเหนือยอดย่อยหลังยอดใหญ่ (CHoCH) + เด้งเกินเกณฑ์
+float bLevel = not na(lastMinHighB) and (na(topB) or lastMinHighB > topB) ? lastMinHigh : na
+bool bottomOk = MDir <= 0 and MLoB < bar_index and close >= MLo * (1 + majorPct / 100) and (na(bLevel) or close > bLevel)
+// ---- ยืนยันจุดสูงใหญ่ (จบขาขึ้น): ปิดต่ำกว่าก้นย่อยหลังก้นใหญ่ + ย่อเกินเกณฑ์
+float tLevel = not na(lastMinLowB) and (na(cycStartB) or lastMinLowB > cycStartB) ? lastMinLow : na
+bool topOk = MDir >= 0 and MHiB < bar_index and close <= MHi * (1 - majorPct / 100) and (na(tLevel) or close < tLevel)
+
+if bottomOk
+    if MDir == -1 and not na(topB)
+        array.push(dnPct, (MLo / topP - 1) * 100)
+        array.push(dnLen, MLoB - topB)
+        buf := splitDraw(buf, MLoB, color.new(cycCol(cyc), 55), showPath and cyc > 0)
+    if not (MDir == -1 and not na(topB))
+        buf := splitDraw(buf, MLoB, color.gray, false)
+    if MLoT >= startT
+        cyc += 1
+        sub := 0
+        if showLbl
+            string dn = na(topP) ? "" : "\n" + str.tostring((MLo / topP - 1) * 100, "#.0") + "%"
+            label.new(MLoB, MLo, "รอบ " + str.tostring(cyc) + dn, style = label.style_label_up, color = cycCol(cyc), textcolor = color.black, size = size.normal)
+    cycStartP := MLo
+    cycStartB := MLoB
+    cycStartT := MLoT
+    MDir := 1
+    MHi := hiSinceLo
+    MHiB := hiSinceLoB
+    loSinceHi := low
+    loSinceHiB := bar_index
+else if topOk
+    if MDir == 1 and not na(cycStartB)
+        float legP = (MHi / cycStartP - 1) * 100
+        array.push(upPct, legP)
+        array.push(upLen, MHiB - cycStartB)
+        buf := splitDraw(buf, MHiB, cycCol(cyc), showPath and cyc > 0)
+        if showLbl and cyc > 0
+            label.new(MHiB, MHi, "ยอดรอบ " + str.tostring(cyc) + "\n" + str.tostring(legP, "+#.0") + "%", style = label.style_label_down, color = color.new(cycCol(cyc), 10), textcolor = color.black, size = size.small)
+    if not (MDir == 1 and not na(cycStartB))
+        buf := splitDraw(buf, MHiB, color.gray, false)
+    topP := MHi
+    topB := MHiB
+    topT := time[bar_index - MHiB]
+    MDir := -1
+    MLo := loSinceHi
+    MLoB := loSinceHiB
+    MLoT := time[bar_index - loSinceHiB]
+    hiSinceLo := high
+    hiSinceLoB := bar_index
+
+// ---- รอบย่อยในรอบใหญ่
+if minorLowNow and cyc > 0 and MDir == 1 and lastMinLowB > cycStartB
+    sub += 1
+    if showMinorLbl
+        label.new(lastMinLowB, lastMinLow, str.tostring(cyc) + "." + str.tostring(sub), style = label.style_label_up, color = color.new(cycCol(cyc), 40), textcolor = color.black, size = size.tiny)
+
+// ---- ขาที่ยังวิ่งอยู่ (เส้นประ วาดใหม่ทุกครั้งที่แท่งสุดท้ายอัปเดต)
+if barstate.islast and showPath and cyc > 0 and MDir != 0
+    polyline.delete(curPath)
+    if buf.size() > 1
+        curPath := polyline.new(buf, line_color = color.new(cycCol(cyc), MDir == 1 ? 0 : 55), line_width = 3, line_style = line.style_dashed)
+
+// ── ตารางสถานะ ──────────────────────────────────────────────────────────────────
+var table tb = table.new(position.bottom_right, 2, 9, bgcolor = color.new(color.black, 25), border_width = 1)
+if showTbl and barstate.islast and MDir != 0
+    bool isUp = MDir == 1
+    float fromP = isUp ? cycStartP : topP
+    int fromB2 = isUp ? cycStartB : topB
+    int fromT = isUp ? cycStartT : topT
+    float legNow = na(fromP) ? na : (close / fromP - 1) * 100
+    int barsNow = na(fromB2) ? na : bar_index - fromB2
+    array<float> hp = isUp ? upPct : dnPct
+    array<float> hl = isUp ? upLen : dnLen
+    int nPast = array.size(hp)
+    float avgP = nPast > 0 ? array.avg(hp) : na
+    float avgL = nPast > 0 ? array.avg(hl) : na
+    float trig = isUp ? math.min(MHi * (1 - majorPct / 100), na(tLevel) ? MHi * (1 - majorPct / 100) : tLevel) : math.max(MLo * (1 + majorPct / 100), na(bLevel) ? 0.0 : bLevel)
+    bool c1 = not na(prevMinLow) and lastMinLow > prevMinLow
+    bool c2 = not na(lastMinHigh) and close > lastMinHigh
+    bool c3 = close > emaT
+    bool c4 = emaT > emaT[20]
+    bool c5 = rsiW > 50
+    int score = (c1 ? 1 : 0) + (c2 ? 1 : 0) + (c3 ? 1 : 0) + (c4 ? 1 : 0) + (c5 ? 1 : 0)
+    color cc = cycCol(cyc)
+    color w = color.white
+    table.cell(tb, 0, 0, "รอบใหญ่ที่", text_color = w, text_size = size.small)
+    table.cell(tb, 1, 0, str.tostring(cyc) + (sub > 0 ? "  (รอบย่อย " + str.tostring(sub) + ")" : "") + " · นับตั้งแต่ " + str.format_time(startT, "yyyy", syminfo.timezone), text_color = cc, text_size = size.small)
+    table.cell(tb, 0, 1, "ช่วงตอนนี้", text_color = w, text_size = size.small)
+    table.cell(tb, 1, 1, (isUp ? "ขาขึ้นใหญ่" : "ขาลงใหญ่") + (na(fromT) ? "" : " (จาก " + str.format_time(fromT, "dd/MM/yy", syminfo.timezone) + ")"), text_color = isUp ? color.lime : color.red, text_size = size.small)
+    table.cell(tb, 0, 2, "ขานี้ไปแล้ว", text_color = w, text_size = size.small)
+    table.cell(tb, 1, 2, na(legNow) ? "–" : str.tostring(legNow, "+#.0;-#.0") + "% · " + str.tostring(barsNow) + " แท่ง", text_color = w, text_size = size.small)
+    table.cell(tb, 0, 3, "ขาใหญ่แบบนี้ในอดีต", text_color = w, text_size = size.small)
+    table.cell(tb, 1, 3, nPast > 0 ? "เฉลี่ย " + str.tostring(avgP, "+#.0;-#.0") + "% · " + str.tostring(avgL, "#") + " แท่ง (" + str.tostring(nPast) + " ครั้ง)" : "ยังไม่มีข้อมูล", text_color = w, text_size = size.small)
+    table.cell(tb, 0, 4, "เทียบขาเฉลี่ย", text_color = w, text_size = size.small)
+    table.cell(tb, 1, 4, nPast > 0 and not na(legNow) ? "ระยะ " + str.tostring(math.abs(legNow / avgP) * 100, "#") + "% · เวลา " + str.tostring(barsNow / avgL * 100, "#") + "%" : "–", text_color = color.yellow, text_size = size.small)
+    table.cell(tb, 0, 5, isUp ? "ขาขึ้นใหญ่จบถ้าปิดต่ำกว่า" : "ขาลงใหญ่จบถ้าปิดเหนือ", text_color = w, text_size = size.small)
+    table.cell(tb, 1, 5, str.tostring(trig, format.mintick), text_color = color.yellow, text_size = size.small)
+    table.cell(tb, 0, 6, "เกณฑ์ ใหญ่ / ย่อย", text_color = w, text_size = size.small)
+    table.cell(tb, 1, 6, str.tostring(majorPct, "#.0") + "% / " + str.tostring(minorPct, "#.0") + "%", text_color = color.silver, text_size = size.small)
+    table.cell(tb, 0, 7, "สัญญาณจบขาลง", text_color = w, text_size = size.small)
+    table.cell(tb, 1, 7, str.tostring(score) + "/5", text_color = score >= 4 ? color.lime : score >= 2 ? color.orange : color.red, text_size = size.small)
+    table.cell(tb, 0, 8, "", text_color = w, text_size = size.tiny)
+    table.cell(tb, 1, 8, (c1 ? "✓" : "✗") + " Higher Low  " + (c2 ? "✓" : "✗") + " ทะลุยอดย่อย  " + (c3 ? "✓" : "✗") + " >EMA" + str.tostring(emaLen) + "  " + (c4 ? "✓" : "✗") + " EMA ชันขึ้น  " + (c5 ? "✓" : "✗") + " RSI W>50", text_color = color.silver, text_size = size.tiny)
+
+// ── Alerts ─────────────────────────────────────────────────────────────────────
+alertcondition(bottomOk, "Cycle v2: เริ่มรอบใหญ่ใหม่", "{{ticker}} ยืนยันจุดต่ำใหญ่ (โครงสร้างเปลี่ยน) — เริ่มรอบใหม่")
+alertcondition(topOk, "Cycle v2: ขาขึ้นใหญ่จบ", "{{ticker}} ยืนยันจุดสูงใหญ่ — เข้าช่วงขาลงของรอบ")
