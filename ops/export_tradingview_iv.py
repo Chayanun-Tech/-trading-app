@@ -222,8 +222,7 @@ if barstate.islast and not na(ivLow)
             => "ไม่ระบุประเภท"
         string confTh = ivGrade == "A" ? "สูง" : ivGrade == "B" ? "กลาง" : "ต่ำ"
         string gLine = "ประเภท: " + archeTh + " · ความน่าเชื่อ " + confTh +
-             (ivBuy == "0" ? "
-ไม่ให้สัญญาณซื้อ (ถูกแล้วมักเป็นกับดัก / ความน่าเชื่อต่ำ)" : "")
+             (ivBuy == "0" ? "\\nไม่ให้สัญญาณซื้อ (ถูกแล้วมักเป็นกับดัก / ความน่าเชื่อต่ำ)" : "")
         string gText = ivImplG == "-" ? "" :
              "\\nราคาวันนี้ต้องโต " + ivImplG + "%/ปี (5 ปี)" + (ivHistG == "-" ? "" : " · อดีตโต " + ivHistG + "%")
         ivLbl := label.new(right, ivHigh,
