@@ -152,6 +152,8 @@ showFair   = input.bool(true, "แสดงเส้นราคายุติ�
 showLabel  = input.bool(true, "แสดงป้ายตัวเลข", group = "Intrinsic Value")
 boxColor   = input.color(color.new(color.yellow, 85), "สีพื้นกล่อง", group = "Intrinsic Value")
 edgeColor  = input.color(color.yellow, "สีขอบกล่อง", group = "Intrinsic Value")
+showOuter  = input.bool(true, "แสดงกรอบนอก (กรณีแย่สุด–ดีสุด) แบบเส้นประจาง", group = "Intrinsic Value")
+coreWidth  = input.float(50, "ความกว้างกรอบหลัก (% ของระยะถึงกรณีแย่/ดี)", minval = 10, maxval = 100, step = 5, group = "Intrinsic Value")
 
 var array<string> DB = array.new<string>()
 if barstate.isfirst
@@ -187,6 +189,7 @@ if barstate.islast and not looked
             break
 
 var box  ivBox  = na
+var box  ivOuter = na
 var line ivLine = na
 var label ivLbl = na
 
@@ -194,21 +197,29 @@ if barstate.islast and not na(ivLow)
     int left  = math.max(bar_index - lookback, 0)
     int right = bar_index + extendBars
     box.delete(ivBox)
+    box.delete(ivOuter)
     line.delete(ivLine)
     label.delete(ivLbl)
     // เกรด C (ไม่น่าเชื่อ) วาดเป็นกล่องสีเทา จะได้ไม่เผลอใช้เหมือนกรอบปกติ
     color eCol = ivGrade == "C" ? color.gray : edgeColor
     color bCol = ivGrade == "C" ? color.new(color.gray, 88) : boxColor
     string gTxt = ivGrade == "C" ? "  ✕ ความน่าเชื่อต่ำ" : ivBuy == "0" ? "  ⚠ ไม่ใช้เป็นสัญญาณซื้อ" : ivGrade == "B" ? "  · ความน่าเชื่อกลาง" : ""
-    ivBox := box.new(left, ivHigh, right, ivLow, border_color = eCol, bgcolor = bCol,
+    // 2 ชั้น: กรอบหลัก (ทึบ) = ช่วงที่น่าจะเป็นที่สุดรอบ Fair · กรอบนอก (เส้นประจาง) = กรณีแย่สุด–ดีสุด
+    float coreLow  = ivFair - (ivFair - ivLow) * coreWidth / 100
+    float coreHigh = ivFair + (ivHigh - ivFair) * coreWidth / 100
+    if showOuter
+        ivOuter := box.new(left, ivHigh, right, ivLow, border_color = color.new(eCol, 40), bgcolor = color.new(eCol, 96),
+             border_style = line.style_dotted, text = "กรณีดีสุด " + str.tostring(ivHigh, "#.##"), text_color = color.new(color.white, 40),
+             text_size = size.small, text_halign = text.align_left, text_valign = text.align_top)
+    ivBox := box.new(left, coreHigh, right, coreLow, border_color = eCol, bgcolor = bCol,
          text = "Intrinsic Value" + gTxt, text_color = color.white, text_size = size.normal)
     if showFair
         ivLine := line.new(left, ivFair, right, ivFair, color = eCol, style = line.style_dashed)
     if showLabel
         float up = (ivFair - close) / close * 100
         // เกรด C: ป้ายเป็นสีเทาเสมอ — ไม่ให้สีเขียว/แดงชวนเข้าใจผิดว่าเป็นสัญญาณ
-        color c = ivGrade == "C" or ivBuy == "0" ? color.gray : close < ivLow ? color.green : close > ivHigh ? color.red : color.orange
-        string zone = close < ivLow ? "ต่ำกว่ากรอบ" : close > ivHigh ? "สูงกว่ากรอบ" : "อยู่ในกรอบ"
+        color c = ivGrade == "C" or ivBuy == "0" ? color.gray : close < coreLow ? color.green : close > coreHigh ? color.red : color.orange
+        string zone = close < ivLow ? "ต่ำกว่ากรณีแย่สุด" : close < coreLow ? "ต่ำกว่ากรอบหลัก" : close > ivHigh ? "สูงกว่ากรณีดีสุด" : close > coreHigh ? "สูงกว่ากรอบหลัก" : "อยู่ในกรอบหลัก"
         string archeTh = switch ivArche
             "fast" => "โตเร็ว"
             "compounder" => "Compounder มั่นคง"
@@ -225,9 +236,10 @@ if barstate.islast and not na(ivLow)
              (ivBuy == "0" ? "\\nไม่ให้สัญญาณซื้อ (ถูกแล้วมักเป็นกับดัก / ความน่าเชื่อต่ำ)" : "")
         string gText = ivImplG == "-" ? "" :
              "\\nราคาวันนี้ต้องโต " + ivImplG + "%/ปี (5 ปี)" + (ivHistG == "-" ? "" : " · อดีตโต " + ivHistG + "%")
-        ivLbl := label.new(right, ivHigh,
-             "IV " + str.tostring(ivLow, "#.##") + " – " + str.tostring(ivHigh, "#.##") +
+        ivLbl := label.new(right, coreHigh,
+             "IV หลัก " + str.tostring(coreLow, "#.##") + " – " + str.tostring(coreHigh, "#.##") +
              " · Fair " + str.tostring(ivFair, "#.##") +
+             "\\nกรณีแย่สุด " + str.tostring(ivLow, "#.##") + " · ดีสุด " + str.tostring(ivHigh, "#.##") +
              "\\nห่างจาก Fair " + str.tostring(up, "+#.#;-#.#") + "% · " + zone + gText +
              "\\n" + gLine +
              "\\nข้อมูล {as_of}",

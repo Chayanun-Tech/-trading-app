@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ห้องคำนวณมูลค่า</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg:#070b10; --panel:#101721; --panel2:#0d141d; --border:#243140; --text:#edf3f8; --muted:#94a3b8;
+    --accent:#2f7df6; --accent2:#17c6d6; --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --violet:#a78bfa;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",Roboto,sans-serif; font-size:14px; }
+  button, input, select, textarea { font:inherit; color:var(--text); background:#0a1118; border:1px solid var(--border); border-radius:6px; padding:6px 9px; }
+  button { cursor:pointer; } button:hover { border-color:#3b4b5f; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:650; }
+  a { color:var(--accent2); }
+  .app { display:grid; grid-template-columns:300px 1fr; height:100vh; height:100dvh; }
+  .side { border-right:1px solid var(--border); background:var(--panel2); display:flex; flex-direction:column; min-height:0; }
+  .side-head { padding:12px; border-bottom:1px solid var(--border); }
+  .side-head h1 { font-size:16px; margin:0 0 8px; }
+  .side-head input { width:100%; }
+  .tree { overflow:auto; flex:1; padding:6px 0 30px; }
+  .sec > summary, .ind > summary { cursor:pointer; list-style:none; padding:6px 12px; display:flex; justify-content:space-between; gap:6px; }
+  .sec > summary { font-weight:650; }
+  .sec > summary:hover, .ind > summary:hover { background:#13202d; }
+  .ind > summary { padding-left:24px; color:var(--muted); font-size:13px; }
+  .stk { padding:4px 12px 4px 38px; cursor:pointer; display:flex; justify-content:space-between; gap:6px; font-size:13px; }
+  .stk:hover { background:#13202d; } .stk.on { background:#173049; }
+  .stk b { color:var(--accent2); min-width:52px; display:inline-block; }
+  .stk .nm { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .cnt { color:var(--muted); font-weight:400; font-size:12px; }
+  .main { overflow:auto; min-width:0; }
+  .top { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:5; }
+  .tabs { display:flex; gap:4px; flex-wrap:wrap; }
+  .tabs button.on { background:#173049; border-color:var(--accent); }
+  .wrap { padding:14px 16px 60px; max-width:1300px; }
+  .hd { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px 16px; margin-bottom:10px; }
+  .hd h2 { margin:0; font-size:22px; } .muted { color:var(--muted); } .small { font-size:12px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:8px; margin:10px 0 14px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 10px; min-width:0; }
+  .card .k { color:var(--muted); font-size:12px; } .card .v { font-size:17px; font-weight:700; margin-top:2px; }
+  .card .n { color:var(--muted); font-size:11px; margin-top:2px; }
+  .box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+  .box h3 { margin:0 0 8px; font-size:15px; }
+  .scroll { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { padding:5px 8px; border-bottom:1px solid #1b2633; text-align:right; white-space:nowrap; }
+  th:first-child, td:first-child { text-align:left; position:sticky; left:0; background:var(--panel); }
+  thead th { color:var(--muted); font-weight:600; }
+  td.lbl { white-space:normal; min-width:200px; }
+  .up { color:var(--green); } .dn { color:var(--red); } .warn { color:var(--amber); }
+  .subtabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px; }
+  .subtabs button.on { background:#173049; border-color:var(--accent); }
+  .grid2 { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:12px; }
+  .inp { display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:4px 10px; align-items:center; padding:8px 0; border-bottom:1px dashed #1b2633; }
+  .inp .hint { grid-column:1 / -1; }
+  .inp label { font-weight:600; } .inp input, .inp select { width:100%; }
+  .hint { color:var(--muted); font-size:12px; line-height:1.45; }
+  .hint b { color:var(--text); font-weight:600; }
+  .teach { border-left:3px solid var(--violet); background:#141327; padding:8px 10px; border-radius:6px; margin:6px 0; font-size:13px; line-height:1.5; }
+  .alert { border-left:3px solid var(--amber); background:#221a0c; padding:6px 10px; border-radius:6px; margin:4px 0; font-size:13px; }
+  .big { font-size:28px; font-weight:800; }
+  .res-row { display:flex; flex-wrap:wrap; gap:16px; align-items:baseline; }
+  .sens td, .sens th { text-align:center; }
+  .sens td.me { outline:2px solid var(--accent); }
+  .macro-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:12px; }
+  .chart { height:190px; }
+  .pill { display:inline-block; border:1px solid var(--border); border-radius:999px; padding:1px 8px; font-size:12px; color:var(--muted); }
+  .hidden { display:none !important; }
+  .empty { padding:40px; text-align:center; color:var(--muted); }
+  textarea { width:100%; min-height:60px; }
+  .menu-btn { display:none; }
+  @media (max-width: 900px) {
+    .app { grid-template-columns:1fr; }
+    .side { position:fixed; inset:0 20% 0 0; z-index:20; transform:translateX(-105%); transition:transform .2s; }
+    .side.open { transform:none; box-shadow:0 0 40px #000; }
+    .menu-btn { display:inline-block; }
+    .grid2 { grid-template-columns:1fr; }
+    .macro-grid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side">
+    <div class="side-head">
+      <h1>🧮 ห้องคำนวณมูลค่า</h1>
+      <input id="q" placeholder="ค้นหา: ชื่อย่อ / ชื่อบริษัท / อุตสาหกรรม" autocomplete="off">
+      <div class="small muted" style="margin-top:6px">S&P 500 + Nasdaq-100 แยกตามเซกเตอร์ → อุตสาหกรรม (GICS) · <a href="/">← กลับแอปหลัก</a></div>
+    </div>
+    <div class="tree" id="tree"><div class="empty">กำลังโหลดรายชื่อหุ้น…</div></div>
+  </aside>
+  <main class="main">
+    <div class="top">
+      <button class="menu-btn" onclick="$('side').classList.toggle('open')">☰ หุ้น</button>
+      <div class="tabs" id="tabs">
+        <button data-t="data" class="on">📊 ข้อมูลบริษัท</button>
+        <button data-t="calc">🧮 คำนวณมูลค่า</button>
+        <button data-t="macro">🌐 ปัจจัยมหภาค</button>
+        <button data-t="journal">📒 ประวัติการให้มูลค่า</button>
+      </div>
+      <span class="muted small" id="topInfo"></span>
+    </div>
+    <div class="wrap">
+      <section id="t-data"><div class="empty">👈 เลือกหุ้นจากรายชื่อด้านซ้าย (หรือพิมพ์ค้นหา) — ระบบจะดึงงบย้อนหลัง 10 ปีจาก SEC มาแยกหมวดให้</div></section>
+      <section id="t-calc" class="hidden"><div class="empty">เลือกหุ้นก่อน แล้วค่อยมาตั้งสมมติฐานที่นี่</div></section>
+      <section id="t-macro" class="hidden"><div class="empty">กำลังโหลดข้อมูลมหภาค…</div></section>
+      <section id="t-journal" class="hidden"></section>
+    </div>
+  </main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const API = "";
+const JKEY = "valuationLabJournal";
+let UNIVERSE = null, CUR = null, MACRO = null, stmtGroup = "income", charts = [];
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = (v, d = 1) => v == null || !isFinite(v) ? "–" : (v * 100).toFixed(d) + "%";
+const pctS = (v, d = 1) => v == null || !isFinite(v) ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%";
+const num = (v, d = 2) => v == null || !isFinite(v) ? "–" : Number(v).toLocaleString("en-US", {maximumFractionDigits:d, minimumFractionDigits:d});
+function big(v) {
+  if (v == null || !isFinite(v)) return "–";
+  const a = Math.abs(v), s = v < 0 ? "-" : "";
+  if (a >= 1e12) return s + (a / 1e12).toFixed(2) + "T";
+  if (a >= 1e9) return s + (a / 1e9).toFixed(2) + "B";
+  if (a >= 1e6) return s + (a / 1e6).toFixed(1) + "M";
+  return s + a.toLocaleString("en-US", {maximumFractionDigits:2});
+}
+async function getJSON(url, opt) {
+  const r = await fetch(API + url, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+  return d;
+}
+
+// ── แท็บ ──
+let curTab = "data";
+$("tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  showTab(b.dataset.t);
+});
+function showTab(t) {
+  curTab = t;
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  ["data", "calc", "macro", "journal"].forEach(x => $("t-" + x).classList.toggle("hidden", x !== t));
+  if (t === "macro") loadMacro();
+  if (t === "journal") renderJournal();
+  try { localStorage.setItem("labTab", t); } catch (e) {}
+}
+
+// ── รายชื่อหุ้น ──
+async function loadUniverse() {
+  try { UNIVERSE = await getJSON("/api/lab/universe"); }
+  catch (e) { $("tree").innerHTML = `<div class="empty dn">โหลดรายชื่อไม่สำเร็จ: ${esc(e.message)}</div>`; return; }
+  renderTree("");
+}
+function renderTree(q) {
+  q = q.trim().toLowerCase();
+  const html = UNIVERSE.sectors.map(sec => {
+    const inds = sec.industries.map(ind => {
+      const st = ind.stocks.filter(s => !q || s.symbol.toLowerCase().includes(q) || (s.name || "").toLowerCase().includes(q)
+        || ind.industry.toLowerCase().includes(q) || sec.sector.toLowerCase().includes(q) || sec.sector_th.includes(q));
+      if (!st.length) return "";
+      return `<details class="ind" ${q ? "open" : ""}><summary><span>${esc(ind.industry)}</span><span class="cnt">${st.length}</span></summary>
+        ${st.map(s => `<div class="stk ${CUR && CUR.symbol === s.symbol ? "on" : ""}" data-s="${esc(s.symbol)}" title="${esc(s.name)}"><b>${esc(s.symbol)}</b><span class="nm">${esc(s.name)}</span></div>`).join("")}
+      </details>`;
+    }).join("");
+    if (!inds) return "";
+    return `<details class="sec" ${q ? "open" : ""}><summary><span>${esc(sec.sector_th)} <span class="cnt">${esc(sec.sector)}</span></span><span class="cnt">${sec.count}</span></summary>${inds}</details>`;
+  }).join("");
+  $("tree").innerHTML = html || `<div class="empty">ไม่พบ "${esc(q)}" — ถ้าเป็นหุ้นสหรัฐนอกรายชื่อ กด Enter เพื่อดึงข้อมูลโดยตรง</div>`;
+}
+$("q").addEventListener("input", e => renderTree(e.target.value));
+$("q").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.value.trim()) loadStock(e.target.value.trim().toUpperCase()); });
+$("tree").addEventListener("click", e => {
+  const s = e.target.closest(".stk"); if (!s) return;
+  loadStock(s.dataset.s); $("side").classList.remove("open");
+});
+
+// ── ข้อมูลรายหุ้น ──
+async function loadStock(sym) {
+  $("t-data").innerHTML = `<div class="empty">กำลังดึงงบของ ${esc(sym)} จาก SEC…</div>`;
+  $("t-calc").innerHTML = `<div class="empty">กำลังโหลด…</div>`;
+  if (curTab === "macro" || curTab === "journal") showTab("data");
+  try { CUR = await getJSON(`/api/lab/stock?symbol=${encodeURIComponent(sym)}`); }
+  catch (e) { $("t-data").innerHTML = `<div class="empty dn">ดึงข้อมูล ${esc(sym)} ไม่สำเร็จ: ${esc(e.message)}</div>`; return; }
+  document.querySelectorAll(".stk").forEach(x => x.classList.toggle("on", x.dataset.s === CUR.symbol));
+  $("topInfo").textContent = `${CUR.symbol} · ราคา ${num(CUR.price)} · ข้อมูล ${CUR.as_of}`;
+  try { localStorage.setItem("labSymbol", CUR.symbol); } catch (e) {}
+  if (!MACRO) loadMacro(true);
+  renderData(); initCalc(); renderCalc();
+}
+
+function series(group, key) {
+  const g = CUR.financials.groups.find(x => x.key === group);
+  const m = g && g.metrics.find(x => x.key === key);
+  return m ? m.values : [];
+}
+function spark(vals) {
+  const xs = vals.map((v, i) => [i, v]).filter(p => p[1] != null && isFinite(p[1]));
+  if (xs.length < 2) return "";
+  const ys = xs.map(p => p[1]), lo = Math.min(...ys), hi = Math.max(...ys), w = 70, h = 18;
+  const pts = xs.map(([i, v]) => `${(i / (vals.length - 1) * w).toFixed(1)},${(h - (hi === lo ? h / 2 : (v - lo) / (hi - lo) * h)).toFixed(1)}`).join(" ");
+  const col = ys[ys.length - 1] >= ys[0] ? "#22c55e" : "#ef4444";
+  return `<svg width="${w}" height="${h}" style="vertical-align:middle"><polyline fill="none" stroke="${col}" stroke-width="1.5" points="${pts}"/></svg>`;
+}
+function fmtVal(v, unit) {
+  if (v == null) return "–";
+  if (unit === "%") return pct(v);
+  if (unit === "ratio") return num(v, 2);
+  if (unit === "USD/shares") return num(v, 2);
+  if (unit === "shares") return big(v);
+  return big(v);
+}
+function cagrOf(vals, n) {
+  const xs = vals.filter(v => v != null);
+  if (xs.length < n + 1) return null;
+  const a = xs[xs.length - 1 - n], b = xs[xs.length - 1];
+  return a > 0 && b > 0 ? Math.pow(b / a, 1 / n) - 1 : null;
+}
+
+function renderData() {
+  const c = CUR, h = c.hints, f = c.financials, m = c.model;
+  const mcap = c.price && h.shares ? c.price * h.shares : null;
+  const card = (k, v, n = "") => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div>${n ? `<div class="n">${n}</div>` : ""}</div>`;
+  const group = f.groups.find(g => g.key === stmtGroup) || f.groups[0];
+  const isPct = group.key === "ratios";
+  const rows = group.metrics.map(mt => {
+    const g5 = (mt.unit === "%" || mt.unit === "ratio") ? null : cagrOf(mt.values, 5);
+    return `<tr><td class="lbl">${esc(mt.label)}</td>${mt.values.map(v => `<td class="${v != null && v < 0 ? "dn" : ""}">${fmtVal(v, mt.unit)}</td>`).join("")}
+      <td>${spark(mt.values)}</td><td>${isPct ? "–" : pctS(g5)}</td></tr>`;
+  }).join("");
+  $("t-data").innerHTML = `
+    <div class="hd"><h2>${esc(c.symbol)} · ${esc(c.name || "")}</h2>
+      <span class="pill">${esc(c.sector_th)} · ${esc(c.industry)}</span>
+      <span class="muted">ราคา <b style="color:var(--text);font-size:18px">${num(c.price)}</b> ${c.currency}</span>
+      <button class="primary" onclick="showTab('calc')">🧮 ไปตั้งสมมติฐานคิดมูลค่า →</button></div>
+    <div class="cards">
+      ${card("มูลค่าตลาด", big(mcap), `${big(h.shares)} หุ้น`)}
+      ${card("P/E (TTM)", num(h.pe_ttm, 1), `EPS TTM ${num(h.eps_ttm)}`)}
+      ${card("FCF Yield", pct(h.fcf_yield), `FCF TTM ${big(h.fcf_ttm)}`)}
+      ${card("รายได้โต 3 / 5 / 10 ปี", `${pct(h.rev_cagr_5)}`, `3 ปี ${pct(h.rev_cagr_3)} · 10 ปี ${pct(h.rev_cagr_10)} (ต่อปี)`)}
+      ${card("EPS โต 5 ปี", pct(h.eps_cagr_5), "ต่อปี · ปรับ split แล้ว")}
+      ${card("FCF margin (มัธยฐาน 5 ปี)", pct(h.fcf_margin_med5), `กำไรดำเนินงาน ${pct(h.op_margin_med5)}`)}
+      ${card("ROE (มัธยฐาน 5 ปี)", pct(h.roe_med5))}
+      ${card("เงินสดสุทธิ", big(h.net_cash), `เงินสด ${big(h.cash)} · หนี้ ${big(h.debt)}`)}
+      ${card("SBC (ค่าตอบแทนเป็นหุ้น)", big(h.sbc_ttm), `= ${pct(h.fcf_ttm ? h.sbc_ttm / h.fcf_ttm : null)} ของ FCF`)}
+      ${card("จำนวนหุ้นเปลี่ยน/ปี (5 ปี)", pctS(h.share_change_5y), h.share_change_5y < 0 ? "ซื้อหุ้นคืน (ดีต่อผู้ถือหุ้น)" : "หุ้นเพิ่ม (ถูกเจือจาง)")}
+    </div>
+    <div class="box">
+      <div class="subtabs">${f.groups.map(g => `<button class="${g.key === group.key ? "on" : ""}" onclick="stmtGroup='${g.key}';renderData()">${esc(g.label)}</button>`).join("")}</div>
+      <div class="scroll"><table><thead><tr><th>รายการ (ปีงบ)</th>${f.periods.map(p => `<th>${esc(p)}</th>`).join("")}<th>แนวโน้ม</th><th>โต/ปี 5 ปี</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="small muted" style="margin-top:6px">${esc(f.disclaimer)}${f.splits && f.splits.length ? ` · ปรับ EPS/จำนวนหุ้นตาม split แล้ว: ${esc(f.splits.join(", "))}` : ""} · ข้อมูลงบล่าสุดถึง ${esc(h.data_end || "–")}</div>
+    </div>
+    ${m ? `<div class="box"><h3>🤖 ความเห็นที่สองจากโมเดลของระบบ (ไม่ใช่คำตอบ — ไว้เทียบกับของคุณ)</h3>
+      <div>ประเภทธุรกิจ <b>${esc(m.archetype_label || "–")}</b> · วิธี ${esc(m.method || "–")} · ความน่าเชื่อ <b>${esc(m.confidence_level || "–")}</b></div>
+      <div>กรอบมูลค่า <b>${num(m.low)} – ${num(m.high)}</b> · Fair <b>${num(m.fair_price)}</b> · อัตราคิดลดที่ระบบใช้ ${num(m.discount_rate_pct)}% · ราคาวันนี้คาดหวังการโต ${num(m.implied_growth_pct, 1)}%/ปี (อดีตโต ${num(m.hist_growth_pct, 1)}%)</div>
+      ${m.no_buy_reason ? `<div class="alert">${esc(m.no_buy_reason)}</div>` : ""}</div>` : ""}`;
+}
+
+// ── เครื่องคิดมูลค่า ──
+let CALC = null;
+function tenY() {
+  const s = MACRO && MACRO.series.find(x => x.id === "DGS10");
+  return s ? (s.daily_latest ? s.daily_latest[1] : s.latest[1]) / 100 : 0.045;
+}
+const clip = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const r2 = x => Math.round(x * 1000) / 1000;
+function initCalc() {
+  const h = CUR.hints;
+  // โตเร็วมาก (รายได้ >25%/ปี) ค่าเฉลี่ย 3 ปีจะล้าหลังเกินไป → เริ่มจาก 12 เดือนล่าสุด
+  const fast = (h.rev_cagr_3 ?? 0) > 0.25;
+  const baseKey = fast && h.owner_fcf_ttm > 0 ? "owner_ttm" : h.owner_fcf_avg3 > 0 ? "owner_avg3" : h.owner_fcf_ttm > 0 ? "owner_ttm" : h.fcf_ttm > 0 ? "fcf_ttm" : "custom";
+  const g = clip(h.rev_cagr_5 ?? 0.05, 0, 0.20);
+  CALC = {
+    method: h.fcf_ttm > 0 && CUR.sector !== "Financials" ? "dcf" : "pe",
+    base: baseKey, custom_base: Math.max(h.fcf_ttm || 0, 0),
+    g1: r2(g), g2: r2(g / 2), gt: 0.025, r: r2(Math.round((tenY() + 0.05) * 200) / 200), net_cash: true, mos: 0.30,
+    eps0: h.eps_ttm > 0 ? h.eps_ttm : (h.eps_last_fy || 0), eps_g: r2(clip(h.eps_cagr_5 ?? g, 0, 0.20)), exit_pe: 18, pe_years: 5,
+    note: "",
+  };
+}
+function baseFCF() {
+  const h = CUR.hints;
+  return {owner_avg3: h.owner_fcf_avg3, owner_ttm: h.owner_fcf_ttm, fcf_ttm: h.fcf_ttm, fcf_avg3: h.fcf_avg3, custom: CALC.custom_base}[CALC.base];
+}
+function dcfValue(base, g1, g2, gt, r, netCash, shares) {
+  let fcf = base, pv = 0, pvYears = [];
+  for (let i = 1; i <= 10; i++) {
+    fcf *= 1 + (i <= 5 ? g1 : g2);
+    const p = fcf / Math.pow(1 + r, i); pv += p; pvYears.push({year: i, fcf, pv: p});
+  }
+  const tv = r > gt ? fcf * (1 + gt) / (r - gt) : NaN;
+  const pvTV = tv / Math.pow(1 + r, 10);
+  const equity = pv + pvTV + (netCash || 0);
+  return {perShare: equity / shares, pv, pvTV, equity, pvYears, tvShare: pvTV / (pv + pvTV)};
+}
+function peValue(eps0, g, pe, n, r) {
+  const epsN = eps0 * Math.pow(1 + g, n), priceN = epsN * pe;
+  return {perShare: priceN / Math.pow(1 + r, n), epsN, priceN};
+}
+function valueWith(o) {
+  const h = CUR.hints;
+  if (o.method === "pe") return peValue(o.eps0, o.eps_g, o.exit_pe, o.pe_years, o.r).perShare;
+  return dcfValue(baseFCF(), o.g1, o.g2, o.gt, o.r, o.net_cash ? h.net_cash : 0, h.shares).perShare;
+}
+function reverseGrowth() {
+  // ราคาวันนี้คาดหวังการโตปี 1–5 เท่าไหร่ (ปี 6–10 = ครึ่งหนึ่ง) ภายใต้อัตราคิดลด/การโตปลายทางของคุณ
+  const price = CUR.price; if (!price) return null;
+  let lo = -0.5, hi = 1.5;
+  const f = g => CALC.method === "pe" ? valueWith({...CALC, eps_g: g}) : valueWith({...CALC, g1: g, g2: g / 2});
+  if (!(f(lo) < price && f(hi) > price)) return null;
+  for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (f(mid) < price) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+function teach() {
+  const h = CUR.hints, c = CALC, t = tenY(), out = [];
+  const add = s => out.push(`<div class="alert">⚠️ ${s}</div>`);
+  if (CUR.sector === "Financials" && c.method === "dcf") add("ธนาคาร/ประกัน/บริษัทการเงิน: กระแสเงินสดปนกับเงินฝาก/เงินกู้ของลูกค้า FCF จึงไม่สะท้อนกำไรจริง — ใช้วิธี EPS × P/E (หรือดูมูลค่าทางบัญชี/ROE ในแท็บข้อมูล)");
+  if (c.method === "dcf") {
+    const b = baseFCF();
+    if (!(b > 0)) add("ฐานกระแสเงินสดติดลบหรือไม่มีข้อมูล — DCF ใช้ไม่ได้ ลองวิธี EPS × P/E หรือใส่ฐานเอง");
+    if (h.rev_cagr_5 != null && c.g1 > h.rev_cagr_5 + 0.05) add(`คุณให้โตปี 1–5 ที่ ${pct(c.g1)} สูงกว่าที่รายได้เคยโตใน 5 ปี (${pct(h.rev_cagr_5)}) มาก — มีเหตุผลอะไรรองรับว่าอนาคตจะดีกว่าอดีต?`);
+    if (c.g1 > 0.25) add("โตเกิน 25%/ปี ต่อเนื่อง 5 ปีเกิดขึ้นกับบริษัทน้อยมาก (และยิ่งบริษัทใหญ่ยิ่งยาก) — ลองดูกรณีที่โตช้ากว่านี้ประกอบ");
+    if (c.g2 > c.g1) add("ปี 6–10 โตเร็วกว่าปี 1–5 — ปกติการโตจะชะลอลงเมื่อบริษัทใหญ่ขึ้น");
+    if (c.gt > 0.03) add(`การโตปลายทาง ${pct(c.gt)} สูงเกินเศรษฐกิจระยะยาว (~2–3%) — ไม่มีบริษัทไหนโตเร็วกว่าเศรษฐกิจได้ตลอดไป`);
+    if (c.r - c.gt < 0.04) add("อัตราคิดลด − การโตปลายทาง ห่างกันน้อยกว่า 4% — มูลค่าจะอ่อนไหวมาก ขยับนิดเดียวเปลี่ยนเยอะ");
+    if (CALC._tvShare > 0.75) add(`มูลค่า ${pct(CALC._tvShare, 0)} มาจาก "หลังปีที่ 10" — คำตอบขึ้นกับสมมติฐานไกล ๆ มากกว่าผลงานที่เห็นได้`);
+    if (c.base === "fcf_ttm" && h.sbc_ttm > 0.1 * (h.fcf_ttm || 0)) add(`บริษัทจ่ายพนักงานเป็นหุ้น (SBC) ${pct(h.sbc_ttm / h.fcf_ttm, 0)} ของ FCF — ถ้าใช้ FCF ดิบ จะประเมินสูงเกิน ลองฐาน "หัก SBC"`);
+  } else {
+    if (c.exit_pe > 25) add(`P/E ปลายทาง ${c.exit_pe} สูง — ตอนนั้นบริษัทน่าจะโตช้าลงแล้ว ตลาดมักให้ P/E ต่ำลงตาม`);
+    if (h.eps_cagr_5 != null && c.eps_g > h.eps_cagr_5 + 0.05 && h.eps_cagr_5 >= 0) add(`EPS โต ${pct(c.eps_g)} สูงกว่าอดีต 5 ปี (${pct(h.eps_cagr_5)})`);
+    if (!(c.eps0 > 0)) add("EPS ติดลบ/ไม่มี — วิธีนี้ใช้ไม่ได้");
+  }
+  if (c.r < t + 0.03) add(`อัตราคิดลด ${pct(c.r)} ต่ำเกินไป — พันธบัตรรัฐบาลสหรัฐ 10 ปีให้ ${pct(t, 2)} แบบแทบไม่มีความเสี่ยง หุ้นควรให้มากกว่านี้อย่างน้อย 3–6%`);
+  return out.join("");
+}
+function sensTable() {
+  const rs = [-0.02, -0.01, 0, 0.01, 0.02].map(d => CALC.r + d);
+  const gKey = CALC.method === "pe" ? "eps_g" : "g1";
+  const gs = [-0.10, -0.05, 0, 0.05, 0.10].map(d => CALC[gKey] + d);
+  const price = CUR.price;
+  const head = `<tr><th>อัตราคิดลด ↓ / โต →</th>${gs.map(g => `<th>${pct(g, 0)}</th>`).join("")}</tr>`;
+  const body = rs.map((r, i) => `<tr><th>${pct(r, 1)}</th>${gs.map((g, j) => {
+    const o = {...CALC, r}; o[gKey] = g; if (gKey === "g1") o.g2 = CALC.g2 + (g - CALC.g1) / 2;
+    const v = valueWith(o), cls = !isFinite(v) ? "" : v > price * 1.3 ? "up" : v < price ? "dn" : "warn";
+    return `<td class="${cls} ${i === 2 && j === 2 ? "me" : ""}">${isFinite(v) && v > 0 ? num(v, 0) : "–"}</td>`;
+  }).join("")}</tr>`).join("");
+  return `<table class="sens">${head}${body}</table>`;
+}
+function field(key, label, hint, opts = {}) {
+  const v = CALC[key];
+  const step = opts.step ?? 0.5, isPct = opts.pct !== false;
+  const val = isPct ? +(v * 100).toFixed(2) : v;
+  return `<div class="inp"><label for="f_${key}">${label}</label>
+    <input id="f_${key}" type="number" step="${step}" value="${val}" oninput="setF('${key}', this.value, ${isPct})">
+    <div class="hint">${hint}</div></div>`;
+}
+function setF(key, raw, isPct) {
+  const v = parseFloat(raw); if (!isFinite(v)) return;
+  CALC[key] = isPct ? v / 100 : v; renderResult();
+}
+function renderCalc() {
+  if (!CUR || !CALC) return;
+  const h = CUR.hints, c = CALC, t = tenY(), m = CUR.model;
+  const baseOpts = [["owner_avg3", "FCF เฉลี่ย 3 ปี หัก SBC", h.owner_fcf_avg3], ["owner_ttm", "FCF 12 เดือนล่าสุด หัก SBC", h.owner_fcf_ttm],
+    ["fcf_avg3", "FCF เฉลี่ย 3 ปี", h.fcf_avg3], ["fcf_ttm", "FCF 12 เดือนล่าสุด", h.fcf_ttm], ["custom", "ใส่เอง", c.custom_base]];
+  const dcfInputs = `
+    <div class="inp"><label>ฐานกระแสเงินสด (ปีที่ 0)</label>
+      <select onchange="CALC.base=this.value;renderCalc()">${baseOpts.map(([k, l, v]) => `<option value="${k}" ${k === c.base ? "selected" : ""}>${l}: ${big(v)}</option>`).join("")}</select>
+      <div class="hint">เงินสดที่เจ้าของธุรกิจ "หยิบออกมาได้จริง" ต่อปี · <b>หัก SBC</b> เพราะการจ่ายพนักงานเป็นหุ้นคือค่าใช้จ่ายจริงที่ทำให้หุ้นคุณถูกเจือจาง · ใช้ <b>เฉลี่ย 3 ปี</b> ถ้าปีล่าสุดดีหรือแย่ผิดปกติ · บริษัทที่โตเร็วมาก ค่าเฉลี่ยจะต่ำกว่าความจริงปัจจุบัน — ใช้ 12 เดือนล่าสุด</div></div>
+    ${c.base === "custom" ? `<div class="inp"><label>ฐานที่ใส่เอง (USD)</label><input type="number" value="${c.custom_base}" oninput="setF('custom_base',this.value,false)"><div class="hint">เช่น FCF ที่คุณคิดว่าเป็นปีปกติ</div></div>` : ""}
+    ${field("g1", "โตต่อปี ปีที่ 1–5 (%)", `อดีต: รายได้โต <b>${pct(h.rev_cagr_3)}</b> (3 ปี) · <b>${pct(h.rev_cagr_5)}</b> (5 ปี) · <b>${pct(h.rev_cagr_10)}</b> (10 ปี) · ยิ่งบริษัทใหญ่ ยิ่งโตเร็วต่อเนื่องยาก`)}
+    ${field("g2", "โตต่อปี ปีที่ 6–10 (%)", "ช่วงชะลอตัว — ปกติต่ำกว่าปี 1–5 (หลายคนใช้ครึ่งหนึ่ง)")}
+    ${field("gt", "โตปลายทาง หลังปีที่ 10 (%)", "ตลอดไปหลังจากนั้น — ไม่ควรเกินเศรษฐกิจระยะยาว 2–3% (ใช้ 0–2% ถ้าธุรกิจอาจถูกแย่งตลาด)", {step: 0.25})}`;
+  const peInputs = `
+    ${field("eps0", "EPS ตั้งต้น (USD)", `EPS 12 เดือนล่าสุด <b>${num(h.eps_ttm)}</b> · ปีงบล่าสุด <b>${num(h.eps_last_fy)}</b>`, {pct: false, step: 0.1})}
+    ${field("eps_g", "EPS โตต่อปี (%)", `อดีต: EPS โต <b>${pct(h.eps_cagr_5)}</b>/ปี (5 ปี) · รายได้โต <b>${pct(h.rev_cagr_5)}</b> — EPS โตเร็วกว่ารายได้ได้ถ้า margin ขยายหรือซื้อหุ้นคืน`)}
+    ${field("pe_years", "จำนวนปีที่ถือ", "มองไปข้างหน้ากี่ปี (3–10)", {pct: false, step: 1})}
+    ${field("exit_pe", "P/E ตอนขาย", `P/E วันนี้ <b>${num(h.pe_ttm, 1)}</b> · ตลาดโดยรวมเฉลี่ยระยะยาว ~15–18 · สูตร Graham: P/E ≈ 8.5 + 2×การโต(%) = <b>${num(8.5 + 2 * c.eps_g * 100, 1)}</b>`, {pct: false, step: 1})}`;
+  $("t-calc").innerHTML = `
+    <div class="hd"><h2>🧮 ${esc(CUR.symbol)} — มูลค่าตามสมมติฐานของคุณ</h2><span class="muted">ราคาวันนี้ <b style="color:var(--text)">${num(CUR.price)}</b></span></div>
+    <div class="teach">👨‍🏫 <b>หลักคิด:</b> มูลค่าของหุ้น = เงินสดทั้งหมดที่ธุรกิจจะสร้างให้เจ้าของในอนาคต คิดลดกลับมาเป็นมูลค่าวันนี้ ·
+      ตัวเลขทุกช่องเป็น <b>ความเชื่อของคุณ</b> — ระบบแค่เติมค่าตั้งต้นจากอดีตให้ แล้วเตือนถ้าสมมติฐานดูเกินจริง ·
+      ซื้อเมื่อราคาต่ำกว่ามูลค่ามากพอ (ส่วนเผื่อความปลอดภัย) เผื่อคุณคิดผิด</div>
+    <div class="grid2">
+      <div class="box">
+        <div class="subtabs">
+          <button class="${c.method === "dcf" ? "on" : ""}" onclick="CALC.method='dcf';renderCalc()">DCF กระแสเงินสด (Buffett: Owner Earnings)</button>
+          <button class="${c.method === "pe" ? "on" : ""}" onclick="CALC.method='pe';renderCalc()">EPS × P/E ในอนาคต</button>
+        </div>
+        ${c.method === "dcf" ? dcfInputs : peInputs}
+        ${field("r", "อัตราคิดลด / ผลตอบแทนที่ต้องการ (%)", `พันธบัตรสหรัฐ 10 ปีตอนนี้ <b>${pct(t, 2)}</b> + ส่วนชดเชยความเสี่ยงหุ้น 4–6% = <b>${pct(t + 0.04, 1)}–${pct(t + 0.06, 1)}</b> · ธุรกิจผันผวน/หนี้เยอะ ใช้ค่าสูง · Buffett ใช้ประมาณผลตอบแทนพันธบัตรระยะยาว แต่ชดเชยด้วยการเลือกเฉพาะธุรกิจที่คาดเดาได้มาก`, {step: 0.25})}
+        ${c.method === "dcf" ? `<div class="inp"><label>บวกเงินสดสุทธิ</label><select onchange="CALC.net_cash=this.value==='1';renderResult()"><option value="1" ${c.net_cash ? "selected" : ""}>บวก (${big(h.net_cash)})</option><option value="0" ${!c.net_cash ? "selected" : ""}>ไม่บวก</option></select><div class="hint">เงินสด − หนี้ ณ งบล่าสุด · ติดลบ = มีหนี้มากกว่าเงินสด จะลดมูลค่า</div></div>` : ""}
+        ${field("mos", "ส่วนเผื่อความปลอดภัย (%)", "ซื้อเมื่อราคาต่ำกว่ามูลค่าเท่านี้ — Graham ใช้ 33%+ · ธุรกิจที่มั่นใจมาก 20–25% · ไม่มั่นใจ 40–50%", {step: 5})}
+      </div>
+      <div>
+        <div class="box" id="resBox"></div>
+        <div class="box"><h3>🎯 ตารางความอ่อนไหว — ถ้าสมมติฐานคลาดไปนิดหน่อย มูลค่าเปลี่ยนแค่ไหน</h3><div class="scroll" id="sensBox"></div>
+          <div class="small muted" style="margin-top:6px">กรอบน้ำเงิน = สมมติฐานของคุณ · <span class="up">เขียว</span> = สูงกว่าราคาเกิน 30% · <span class="warn">เหลือง</span> = สูงกว่าราคาไม่ถึง 30% · <span class="dn">แดง</span> = ต่ำกว่าราคา</div></div>
+        <div class="box"><h3>💾 บันทึกการให้มูลค่าครั้งนี้</h3>
+          <textarea id="calcNote" placeholder="เหตุผลของสมมติฐาน เช่น 'คิดว่า AI ยังโตได้อีก 5 ปี แต่ margin จะลดเพราะคู่แข่ง'">${esc(c.note)}</textarea>
+          <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap"><button class="primary" onclick="saveValuation()">💾 บันทึกลงประวัติ</button><span id="saveMsg" class="small muted"></span></div></div>
+      </div>
+    </div>`;
+  renderResult();
+}
+function renderResult() {
+  const h = CUR.hints, c = CALC, price = CUR.price;
+  let v, detail = "";
+  if (c.method === "dcf") {
+    const r = dcfValue(baseFCF(), c.g1, c.g2, c.gt, c.r, c.net_cash ? h.net_cash : 0, h.shares);
+    v = r.perShare; CALC._tvShare = r.tvShare;
+    detail = `<div class="small muted" style="margin-top:6px">มูลค่ากิจการ ${big(r.equity)} = กระแสเงินสด 10 ปี ${big(r.pv)} + มูลค่าหลังปีที่ 10 ${big(r.pvTV)} (${pct(r.tvShare, 0)})${c.net_cash ? ` + เงินสดสุทธิ ${big(h.net_cash)}` : ""} ÷ ${big(h.shares)} หุ้น<br>
+      FCF ปีที่ 5 ≈ ${big(r.pvYears[4].fcf)} · ปีที่ 10 ≈ ${big(r.pvYears[9].fcf)} (วันนี้ ${big(baseFCF())})</div>`;
+  } else {
+    const r = peValue(c.eps0, c.eps_g, c.exit_pe, c.pe_years, c.r);
+    v = r.perShare; CALC._tvShare = null;
+    detail = `<div class="small muted" style="margin-top:6px">EPS ปีที่ ${c.pe_years} ≈ ${num(r.epsN)} × P/E ${c.exit_pe} = ราคาในอนาคต ${num(r.priceN)} → คิดลดกลับ ${c.pe_years} ปีที่ ${pct(c.r)} = ${num(v)} (ยังไม่รวมเงินปันผล)</div>`;
+  }
+  const buy = v * (1 - c.mos), mos = price ? 1 - price / v : null, impl = reverseGrowth();
+  const verdict = !isFinite(v) || v <= 0 ? `<span class="dn">คำนวณไม่ได้ด้วยสมมติฐานนี้</span>`
+    : price <= buy ? `<span class="up">✓ ราคาต่ำกว่าราคาซื้อของคุณ — ถูกตามสมมติฐานของคุณ</span>`
+    : price < v ? `<span class="warn">ต่ำกว่ามูลค่า แต่ส่วนเผื่อยังไม่ถึง ${pct(c.mos, 0)} — รอราคา ≤ ${num(buy)}</span>`
+    : `<span class="dn">ราคาสูงกว่ามูลค่าตามสมมติฐานของคุณ</span>`;
+  CALC._value = v; CALC._buy = buy; CALC._implied = impl;
+  $("resBox").innerHTML = `<h3>📐 ผลลัพธ์</h3>
+    <div class="res-row"><div><div class="muted small">มูลค่าต่อหุ้นของคุณ</div><div class="big">${isFinite(v) ? num(v) : "–"}</div></div>
+      <div><div class="muted small">ราคาซื้อ (หักส่วนเผื่อ ${pct(c.mos, 0)})</div><div class="big" style="color:var(--accent2)">${isFinite(buy) ? num(buy) : "–"}</div></div>
+      <div><div class="muted small">ราคาวันนี้</div><div class="big" style="font-size:22px">${num(price)}</div><div class="small ${mos > 0 ? "up" : "dn"}">${mos == null || !isFinite(mos) ? "" : mos > 0 ? `ถูกกว่ามูลค่า ${pct(mos, 0)}` : `แพงกว่ามูลค่า ${pct(-mos, 0)}`}</div></div></div>
+    <div style="margin-top:8px">${verdict}</div>${detail}
+    ${impl != null ? `<div class="teach" style="margin-top:8px">🔁 <b>มองกลับด้าน (Reverse DCF):</b> ที่อัตราคิดลด ${pct(c.r)} ราคาวันนี้ ${num(price)} คาดหวังว่า${c.method === "pe" ? " EPS" : "กระแสเงินสด"}จะโต <b>${pct(impl)}/ปี</b>${c.method === "dcf" ? " ใน 5 ปีแรก (และครึ่งหนึ่งใน 5 ปีถัดไป)" : ""} — คุณเชื่อว่าบริษัททำได้ดีกว่านี้ไหม? ถ้าใช่ = ราคาถูก</div>` : ""}
+    ${CUR.model ? `<div class="small muted">เทียบโมเดลของระบบ: Fair ${num(CUR.model.fair_price)} (กรอบ ${num(CUR.model.low)}–${num(CUR.model.high)})</div>` : ""}
+    ${teach()}`;
+  $("sensBox").innerHTML = sensTable();
+}
+
+// ── บันทึกประวัติ ──
+function localJournal() { try { return JSON.parse(localStorage.getItem(JKEY) || "[]"); } catch (e) { return []; } }
+function setLocalJournal(rows) { try { localStorage.setItem(JKEY, JSON.stringify(rows)); } catch (e) {} }
+async function saveValuation() {
+  const c = CALC; c.note = $("calcNote").value;
+  const baseName = {owner_avg3: "FCF เฉลี่ย 3 ปี หัก SBC", owner_ttm: "FCF 12 เดือน หัก SBC", fcf_avg3: "FCF เฉลี่ย 3 ปี", fcf_ttm: "FCF 12 เดือน", custom: "ใส่เอง"}[c.base];
+  const inputs = c.method === "dcf"
+    ? {base: c.base, base_usd: baseFCF(), g1: c.g1, g2: c.g2, gt: c.gt, r: c.r, net_cash: c.net_cash, mos: c.mos}
+    : {eps0: c.eps0, eps_g: c.eps_g, years: c.pe_years, exit_pe: c.exit_pe, r: c.r, mos: c.mos};
+  const inputs_text = c.method === "dcf"
+    ? `ฐาน ${baseName} ${big(baseFCF())} · โตปี 1–5 ${pct(c.g1)} · ปี 6–10 ${pct(c.g2)} · ปลายทาง ${pct(c.gt)} · คิดลด ${pct(c.r)} · ${c.net_cash ? "บวก" : "ไม่บวก"}เงินสดสุทธิ · ส่วนเผื่อ ${pct(c.mos, 0)}`
+    : `EPS ${num(c.eps0)} · โต ${pct(c.eps_g)}/ปี · ${c.pe_years} ปี · P/E ตอนขาย ${c.exit_pe} · คิดลด ${pct(c.r)} · ส่วนเผื่อ ${pct(c.mos, 0)}`;
+  const d = new Date(), z = n => String(n).padStart(2, "0");
+  const e = {id: Math.random().toString(16).slice(2, 14), symbol: CUR.symbol, name: CUR.name, inputs_text,
+    saved_at: `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`,
+    price: CUR.price, method: c.method, inputs, value: c._value, buy_below: c._buy, implied_growth: c._implied, note: c.note,
+    model_fair: CUR.model ? CUR.model.fair_price : null, ten_year: tenY()};
+  setLocalJournal([e, ...localJournal()]);
+  let where = "บันทึกในเบราว์เซอร์นี้แล้ว";
+  try { await getJSON("/api/lab/journal", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(e)}); where += " + ไฟล์บนเซิร์ฟเวอร์"; } catch (err) {}
+  $("saveMsg").textContent = `✓ ${where} (${e.saved_at})`;
+}
+async function allJournal() {
+  const local = localJournal(); let server = [];
+  try { server = (await getJSON("/api/lab/journal")).entries || []; } catch (e) {}
+  const by = {}; [...server, ...local].forEach(r => { by[r.id] = r; });
+  return Object.values(by).sort((a, b) => (b.saved_at || "").localeCompare(a.saved_at || ""));
+}
+async function renderJournal() {
+  $("t-journal").innerHTML = `<div class="empty">กำลังโหลดประวัติ…</div>`;
+  const rows = await allJournal();
+  const syms = [...new Set(rows.map(r => r.symbol))];
+  let now = {};
+  if (syms.length) { try { (await getJSON(`/api/quotes?symbols=${encodeURIComponent(syms.join(","))}`)).forEach(q => { now[q.symbol] = q.price; }); } catch (e) {} }
+  const tr = rows.map(r => {
+    const p = now[r.symbol], since = p && r.price ? p / r.price - 1 : null, gap = p && r.value ? 1 - p / r.value : null;
+    const inp = esc(r.inputs_text || Object.entries(r.inputs || {}).map(([k, v]) => `${k}: ${v}`).join(" · "));
+    return `<tr><td><b class="sym" style="color:var(--accent2);cursor:pointer" onclick="loadStock('${esc(r.symbol)}')">${esc(r.symbol)}</b><div class="small muted">${esc(r.saved_at)}</div></td>
+      <td>${r.method === "pe" ? "EPS×P/E" : "DCF"}</td><td>${num(r.price)}</td><td><b>${num(r.value)}</b></td><td>${num(r.buy_below)}</td>
+      <td>${num(p)}</td><td class="${since >= 0 ? "up" : "dn"}">${pctS(since)}</td><td class="${gap > 0 ? "up" : "dn"}">${gap == null ? "–" : gap > 0 ? "ถูกกว่า " + pct(gap, 0) : "แพงกว่า " + pct(-gap, 0)}</td>
+      <td class="lbl small">${inp}${r.note ? `<div style="color:var(--text);margin-top:3px">📝 ${esc(r.note)}</div>` : ""}</td>
+      <td><button onclick="delEntry('${esc(r.id)}')" title="ลบ">🗑</button></td></tr>`;
+  }).join("");
+  $("t-journal").innerHTML = `
+    <div class="hd"><h2>📒 ประวัติการให้มูลค่าของคุณ</h2><span class="muted">${rows.length} รายการ</span>
+      <button onclick="exportJournal()">⬇️ ส่งออกเป็นไฟล์</button><label class="pill" style="cursor:pointer">⬆️ นำเข้าไฟล์<input type="file" accept=".json" class="hidden" onchange="importJournal(this.files[0])"></label></div>
+    <div class="teach">👨‍🏫 ย้อนดูว่าสมมติฐานในอดีตของคุณแม่นแค่ไหน — ราคาวิ่งไปทางที่คุณคิดไหม? สมมติฐานไหนคลาดบ่อย (โตเกินจริง / คิดลดต่ำไป)? นี่คือวิธีที่นักลงทุนเก่งขึ้นจริง ๆ</div>
+    ${rows.length ? `<div class="box scroll"><table><thead><tr><th>หุ้น / วันที่</th><th>วิธี</th><th>ราคาตอนนั้น</th><th>มูลค่าที่ให้</th><th>ราคาซื้อ</th><th>ราคาตอนนี้</th><th>ราคาเปลี่ยน</th><th>ตอนนี้เทียบมูลค่า</th><th>สมมติฐาน / เหตุผล</th><th></th></tr></thead><tbody>${tr}</tbody></table></div>`
+      : `<div class="empty">ยังไม่มีบันทึก — ไปที่แท็บ 🧮 คำนวณมูลค่า แล้วกด 💾 บันทึก</div>`}
+    <div class="small muted">เก็บในเบราว์เซอร์นี้ (และไฟล์ data/lab/valuation_journal.json เมื่อใช้แอปในเครื่อง) · บนเว็บสาธารณะ ส่งออกไฟล์ไว้เป็นระยะกันหาย</div>`;
+}
+async function delEntry(id) {
+  if (!confirm("ลบบันทึกนี้?")) return;
+  setLocalJournal(localJournal().filter(r => r.id !== id));
+  try { await getJSON(`/api/lab/journal/${encodeURIComponent(id)}`, {method: "DELETE"}); } catch (e) {}
+  renderJournal();
+}
+async function exportJournal() {
+  const rows = await allJournal();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(rows, null, 1)], {type: "application/json"}));
+  a.download = `valuation_journal_${new Date().toISOString().slice(0, 10)}.json`; a.click();
+}
+async function importJournal(file) {
+  if (!file) return;
+  try {
+    const rows = JSON.parse(await file.text()); if (!Array.isArray(rows)) throw new Error("รูปแบบไฟล์ไม่ถูกต้อง");
+    const by = {}; [...localJournal(), ...rows].forEach(r => { if (r && r.id && r.symbol) by[r.id] = r; });
+    setLocalJournal(Object.values(by)); renderJournal();
+  } catch (e) { alert("นำเข้าไม่สำเร็จ: " + e.message); }
+}
+
+// ── มหภาค ──
+async function loadMacro(silent = false) {
+  if (!MACRO) {
+    try { MACRO = await getJSON("/api/lab/macro"); }
+    catch (e) { if (!silent) $("t-macro").innerHTML = `<div class="empty dn">ดึงข้อมูล FRED ไม่สำเร็จ: ${esc(e.message)}</div>`; return; }
+    if (CUR && CALC && curTab === "calc") renderCalc();
+  }
+  if (!silent || curTab === "macro") renderMacro();
+}
+function renderMacro() {
+  charts.forEach(c => c.remove()); charts = [];
+  const yearsAgo = (pts, n) => pts.length > n * 12 ? pts[pts.length - 1 - n * 12][1] : null;
+  $("t-macro").innerHTML = `
+    <div class="hd"><h2>🌐 ปัจจัยมหภาคที่กระทบมูลค่าหุ้น</h2><span class="muted small">${esc(MACRO.source)} · อัปเดต ${esc(MACRO.updated)} · รายเดือนตั้งแต่ปี 2000</span>
+      <button onclick="MACRO=null;getJSON('/api/lab/macro?refresh=true').then(d=>{MACRO=d;renderMacro()})">🔄 ดึงล่าสุด</button></div>
+    <div class="teach">👨‍🏫 <b>ทำไมต้องดู:</b> ดอกเบี้ยคือ "แรงโน้มถ่วง" ของมูลค่าหุ้น — ยิ่งพันธบัตรให้ผลตอบแทนสูง หุ้นต้องถูกลงถึงจะคุ้ม ·
+      ใช้ดอกเบี้ย 10 ปีเป็นจุดตั้งต้นของอัตราคิดลดในแท็บคำนวณ · แต่อย่าพยายามทายดอกเบี้ย — Buffett เลือกธุรกิจที่ดีพอจะผ่านทุกสภาวะ</div>
+    <div class="macro-grid">${MACRO.series.map((s, i) => {
+      const last = s.latest ? s.latest[1] : null, y1 = yearsAgo(s.points, 1), y5 = yearsAgo(s.points, 5);
+      const d = s.daily_latest;
+      return `<div class="box"><h3>${esc(s.name)}</h3>
+        <div class="res-row"><div class="big" style="font-size:22px">${num(d ? d[1] : last, 2)}%</div>
+          <div class="small muted">${d ? `ล่าสุด ${esc(d[0])}` : `เดือน ${esc(s.latest[0])}`}<br>1 ปีก่อน ${num(y1, 2)}% · 5 ปีก่อน ${num(y5, 2)}%</div></div>
+        <div class="chart" id="mc${i}"></div><div class="hint" style="margin-top:4px">${esc(s.note)}</div></div>`;
+    }).join("")}</div>
+    ${MACRO.errors && MACRO.errors.length ? `<div class="small warn">ดึงไม่สำเร็จรอบนี้ (ใช้ข้อมูลเดิม): ${esc(MACRO.errors.join(", "))}</div>` : ""}`;
+  MACRO.series.forEach((s, i) => {
+    const el = $("mc" + i); if (!el || !window.LightweightCharts) return;
+    const ch = LightweightCharts.createChart(el, {height: 190, layout: {background: {color: "transparent"}, textColor: "#94a3b8"},
+      grid: {vertLines: {color: "#16202b"}, horzLines: {color: "#16202b"}}, rightPriceScale: {borderColor: "#243140"},
+      timeScale: {borderColor: "#243140"}, handleScroll: false, handleScale: false});
+    const ln = ch.addLineSeries({color: ["#2f7df6", "#17c6d6", "#a78bfa", "#f59e0b", "#22c55e", "#ef4444", "#f472b6", "#94a3b8"][i % 8], lineWidth: 2, priceLineVisible: false});
+    ln.setData(s.points.map(([m, v]) => ({time: m + "-01", value: v})));
+    if (s.id === "T10Y2Y") ln.createPriceLine({price: 0, color: "#ef4444", lineStyle: 2, axisLabelVisible: false});
+    ch.timeScale().fitContent(); charts.push(ch);
+  });
+}
+window.addEventListener("resize", () => charts.forEach(c => { const el = c.chartElement().parentElement; c.applyOptions({width: el.clientWidth}); }));
+
+// ── เริ่ม ──
+loadUniverse();
+(() => {
+  let sym = new URLSearchParams(location.search).get("symbol"), tab = null;
+  try { sym = sym || localStorage.getItem("labSymbol"); tab = localStorage.getItem("labTab"); } catch (e) {}
+  if (sym) loadStock(sym.toUpperCase()).then(() => { if (tab && tab !== "data") showTab(tab); });
+  else if (tab === "macro" || tab === "journal") showTab(tab);
+})();
+</script>
+</body>
+</html>

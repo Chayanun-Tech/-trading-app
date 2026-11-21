@@ -38,3 +38,6 @@ data/thai/thai_failures.json
 
 # Experimental model versions (keep only the promoted production model)
 models/registry/
+
+# บันทึกการให้มูลค่าส่วนตัว + แคชมหภาค (ห้องคำนวณมูลค่า)
+data/lab/

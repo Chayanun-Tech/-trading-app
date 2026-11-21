@@ -1571,6 +1571,69 @@ async def _shutdown():
             await task
 
 
+# ---------- ห้องคำนวณมูลค่า (Valuation Lab) ----------
+@app.get("/lab")
+async def lab_page():
+    page = FRONTEND_DIR / "lab.html"
+    if not page.exists():
+        raise HTTPException(404, "ไม่พบหน้า lab.html")
+    return FileResponse(page, headers=NO_CACHE_HEADERS)
+
+
+@app.get("/api/lab/universe")
+async def lab_universe_route():
+    """รายชื่อหุ้น S&P 500 + Nasdaq-100 แยกเซกเตอร์ → อุตสาหกรรมย่อย."""
+    from app import valuation_lab
+    return valuation_lab.universe()
+
+
+@app.get("/api/lab/stock")
+async def lab_stock_route(symbol: str = Query(..., description="สัญลักษณ์หุ้นสหรัฐ เช่น NVDA")):
+    """งบย้อนหลังแยกหมวด + ราคา + สถิติช่วยตั้งสมมติฐาน + ผลระบบเป็นความเห็นที่สอง."""
+    from app import valuation_lab
+    if not is_equity_symbol(symbol):
+        raise HTTPException(400, "ใช้ได้กับหุ้นรายตัวเท่านั้น")
+    try:
+        return await valuation_lab.stock(symbol, provider)
+    except ValueError:
+        raise HTTPException(404, f"ไม่พบงบ SEC ของ {symbol} (รองรับเฉพาะหุ้นที่ยื่นงบกับ SEC)")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูลไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/lab/macro")
+async def lab_macro_route(refresh: bool = Query(False)):
+    """ดอกเบี้ย/เงินเฟ้อ/ส่วนต่างเครดิต/ว่างงาน ย้อนหลังรายเดือนตั้งแต่ปี 2000 (FRED · แคช 12 ชม.)."""
+    from app import valuation_lab
+    try:
+        return await valuation_lab.macro(refresh)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"ดึงข้อมูล FRED ไม่สำเร็จ: {exc}")
+
+
+@app.get("/api/lab/journal")
+async def lab_journal_list_route(symbol: str | None = Query(None)):
+    from app import valuation_lab
+    return {"entries": valuation_lab.journal_list(symbol)}
+
+
+@app.post("/api/lab/journal")
+async def lab_journal_save_route(entry: dict = Body(...)):
+    from app import valuation_lab
+    try:
+        return valuation_lab.journal_save(entry)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.delete("/api/lab/journal/{entry_id}")
+async def lab_journal_delete_route(entry_id: str):
+    from app import valuation_lab
+    if not valuation_lab.journal_delete(entry_id):
+        raise HTTPException(404, "ไม่พบบันทึกนี้")
+    return {"ok": True}
+
+
 # ---------- เสิร์ฟ frontend ----------
 @app.get("/")
 async def index():

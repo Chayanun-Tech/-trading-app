@@ -137,7 +137,7 @@ async def build_rows() -> list[dict]:
                 "vr2": r2["fair_price"] / p0[0], "vr2_ov": (r2o or r2)["fair_price"] / p0[0],
                 "arche": r2["archetype"], "conf": r2["confidence"], "conf_level": r2["confidence_level"],
                 "vr1": o["value_ratio"] if o else None, "grade1": o["grade"] if o else None,
-                "long_term": lt, "q_passed": qp,
+                "long_term": lt, "q_passed": qp, "sic": sic, "r2": r2["discount_rate_pct"],
             })
             n_ok += 1
         print(f"  {y}: ประเมิน v2 ได้ {n_ok}", flush=True)

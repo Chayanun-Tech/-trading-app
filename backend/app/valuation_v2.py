@@ -72,6 +72,7 @@ _DA = ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "D
        "Depreciation", "DepreciationAndAmortisationExpense", "DepreciationPropertyPlantAndEquipment"]
 COMMODITY_SIC = ("10", "12", "13", "14", "29")
 SOFTWARE_SIC = ("7370", "7371", "7372", "7373", "7374")
+
 LABEL = {"financial": "การเงิน (ธนาคาร/ประกัน)", "reit": "REIT", "unprofitable": "ยังไม่ทำกำไร (กำลังโต)",
          "turnaround": "กำลังพลิกฟื้น", "commodity": "ผูกราคาสินค้าโภคภัณฑ์", "cyclical": "วัฏจักร",
          "fast": "โตเร็ว", "compounder": "Compounder มั่นคง", "mature": "อิ่มตัว/โตช้า"}
@@ -198,6 +199,8 @@ def discount_rate(m: dict, arche: str, foreign: bool) -> tuple[float, int]:
         lev = m["net_debt"] / m["norm_fcf"]
         risk += 0 if lev <= 1 else 1 if lev <= 3 else 2
     risk += {"unprofitable": 2, "turnaround": 1, "commodity": 1}.get(arche, 0)
+    # ทดสอบแล้ว (2026-11-21): บวกความเสี่ยงอุตสาหกรรมวัฏจักร (ชิป/รถ/เหล็ก/เคมี ฯลฯ) +1.5% ไม่ช่วย —
+    # IC รวม +0.009→+0.008 และตัวที่ "ดูถูก" ในกลุ่มนี้กลับให้ผลตอบแทนดีกว่า (20% vs 15%/ปี) จึงไม่ใช้
     r = _clip(0.07 + 0.0075 * risk, 0.07, 0.12) + (0.01 if foreign else 0.0)
     return r, risk
 
