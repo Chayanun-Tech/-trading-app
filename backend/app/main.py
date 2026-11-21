@@ -1580,6 +1580,14 @@ async def lab_page():
     return FileResponse(page, headers=NO_CACHE_HEADERS)
 
 
+@app.get("/lab/learn")
+async def lab_learn_page():
+    page = FRONTEND_DIR / "learn.html"
+    if not page.exists():
+        raise HTTPException(404, "ไม่พบหน้าตำรา")
+    return FileResponse(page, headers=NO_CACHE_HEADERS)
+
+
 @app.get("/api/lab/universe")
 async def lab_universe_route():
     """รายชื่อหุ้น S&P 500 + Nasdaq-100 แยกเซกเตอร์ → อุตสาหกรรมย่อย."""

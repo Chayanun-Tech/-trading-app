@@ -101,6 +101,7 @@
         <button data-t="macro">🌐 ปัจจัยมหภาค</button>
         <button data-t="journal">📒 ประวัติการให้มูลค่า</button>
       </div>
+      <a href="/lab/learn" target="_blank" style="text-decoration:none"><button>📖 ตำรา 101</button></a>
       <span class="muted small" id="topInfo"></span>
     </div>
     <div class="wrap">
@@ -364,6 +365,7 @@ function setF(key, raw, isPct) {
   const v = parseFloat(raw); if (!isFinite(v)) return;
   CALC[key] = isPct ? v / 100 : v; renderResult();
 }
+const L = ch => ` · <a href="/lab/learn#${ch}" target="_blank">📖 อ่านบทเรียน</a>`;
 function renderCalc() {
   if (!CUR || !CALC) return;
   const h = CUR.hints, c = CALC, t = tenY(), m = CUR.model;
@@ -372,21 +374,21 @@ function renderCalc() {
   const dcfInputs = `
     <div class="inp"><label>ฐานกระแสเงินสด (ปีที่ 0)</label>
       <select onchange="CALC.base=this.value;renderCalc()">${baseOpts.map(([k, l, v]) => `<option value="${k}" ${k === c.base ? "selected" : ""}>${l}: ${big(v)}</option>`).join("")}</select>
-      <div class="hint">เงินสดที่เจ้าของธุรกิจ "หยิบออกมาได้จริง" ต่อปี · <b>หัก SBC</b> เพราะการจ่ายพนักงานเป็นหุ้นคือค่าใช้จ่ายจริงที่ทำให้หุ้นคุณถูกเจือจาง · ใช้ <b>เฉลี่ย 3 ปี</b> ถ้าปีล่าสุดดีหรือแย่ผิดปกติ · บริษัทที่โตเร็วมาก ค่าเฉลี่ยจะต่ำกว่าความจริงปัจจุบัน — ใช้ 12 เดือนล่าสุด</div></div>
+      <div class="hint">เงินสดที่เจ้าของธุรกิจ "หยิบออกมาได้จริง" ต่อปี · <b>หัก SBC</b> เพราะการจ่ายพนักงานเป็นหุ้นคือค่าใช้จ่ายจริงที่ทำให้หุ้นคุณถูกเจือจาง · ใช้ <b>เฉลี่ย 3 ปี</b> ถ้าปีล่าสุดดีหรือแย่ผิดปกติ · บริษัทที่โตเร็วมาก ค่าเฉลี่ยจะต่ำกว่าความจริงปัจจุบัน — ใช้ 12 เดือนล่าสุด${L("ch4")}</div></div>
     ${c.base === "custom" ? `<div class="inp"><label>ฐานที่ใส่เอง (USD)</label><input type="number" value="${c.custom_base}" oninput="setF('custom_base',this.value,false)"><div class="hint">เช่น FCF ที่คุณคิดว่าเป็นปีปกติ</div></div>` : ""}
-    ${field("g1", "โตต่อปี ปีที่ 1–5 (%)", `อดีต: รายได้โต <b>${pct(h.rev_cagr_3)}</b> (3 ปี) · <b>${pct(h.rev_cagr_5)}</b> (5 ปี) · <b>${pct(h.rev_cagr_10)}</b> (10 ปี) · ยิ่งบริษัทใหญ่ ยิ่งโตเร็วต่อเนื่องยาก`)}
-    ${field("g2", "โตต่อปี ปีที่ 6–10 (%)", "ช่วงชะลอตัว — ปกติต่ำกว่าปี 1–5 (หลายคนใช้ครึ่งหนึ่ง)")}
-    ${field("gt", "โตปลายทาง หลังปีที่ 10 (%)", "ตลอดไปหลังจากนั้น — ไม่ควรเกินเศรษฐกิจระยะยาว 2–3% (ใช้ 0–2% ถ้าธุรกิจอาจถูกแย่งตลาด)", {step: 0.25})}`;
+    ${field("g1", "โตต่อปี ปีที่ 1–5 (%)", `อดีต: รายได้โต <b>${pct(h.rev_cagr_3)}</b> (3 ปี) · <b>${pct(h.rev_cagr_5)}</b> (5 ปี) · <b>${pct(h.rev_cagr_10)}</b> (10 ปี) · ยิ่งบริษัทใหญ่ ยิ่งโตเร็วต่อเนื่องยาก${L("ch5")}`)}
+    ${field("g2", "โตต่อปี ปีที่ 6–10 (%)", "ช่วงชะลอตัว — ปกติต่ำกว่าปี 1–5 (หลายคนใช้ครึ่งหนึ่ง)" + L("ch6"))}
+    ${field("gt", "โตปลายทาง หลังปีที่ 10 (%)", "ตลอดไปหลังจากนั้น — ไม่ควรเกินเศรษฐกิจระยะยาว 2–3% (ใช้ 0–2% ถ้าธุรกิจอาจถูกแย่งตลาด)" + L("ch7"), {step: 0.25})}`;
   const peInputs = `
     ${field("eps0", "EPS ตั้งต้น (USD)", `EPS 12 เดือนล่าสุด <b>${num(h.eps_ttm)}</b> · ปีงบล่าสุด <b>${num(h.eps_last_fy)}</b>`, {pct: false, step: 0.1})}
     ${field("eps_g", "EPS โตต่อปี (%)", `อดีต: EPS โต <b>${pct(h.eps_cagr_5)}</b>/ปี (5 ปี) · รายได้โต <b>${pct(h.rev_cagr_5)}</b> — EPS โตเร็วกว่ารายได้ได้ถ้า margin ขยายหรือซื้อหุ้นคืน`)}
     ${field("pe_years", "จำนวนปีที่ถือ", "มองไปข้างหน้ากี่ปี (3–10)", {pct: false, step: 1})}
-    ${field("exit_pe", "P/E ตอนขาย", `P/E วันนี้ <b>${num(h.pe_ttm, 1)}</b> · ตลาดโดยรวมเฉลี่ยระยะยาว ~15–18 · สูตร Graham: P/E ≈ 8.5 + 2×การโต(%) = <b>${num(8.5 + 2 * c.eps_g * 100, 1)}</b>`, {pct: false, step: 1})}`;
+    ${field("exit_pe", "P/E ตอนขาย", `P/E วันนี้ <b>${num(h.pe_ttm, 1)}</b> · ตลาดโดยรวมเฉลี่ยระยะยาว ~15–18 · สูตร Graham: P/E ≈ 8.5 + 2×การโต(%) = <b>${num(8.5 + 2 * c.eps_g * 100, 1)}</b>${L("ch12")}`, {pct: false, step: 1})}`;
   $("t-calc").innerHTML = `
     <div class="hd"><h2>🧮 ${esc(CUR.symbol)} — มูลค่าตามสมมติฐานของคุณ</h2><span class="muted">ราคาวันนี้ <b style="color:var(--text)">${num(CUR.price)}</b></span></div>
     <div class="teach">👨‍🏫 <b>หลักคิด:</b> มูลค่าของหุ้น = เงินสดทั้งหมดที่ธุรกิจจะสร้างให้เจ้าของในอนาคต คิดลดกลับมาเป็นมูลค่าวันนี้ ·
       ตัวเลขทุกช่องเป็น <b>ความเชื่อของคุณ</b> — ระบบแค่เติมค่าตั้งต้นจากอดีตให้ แล้วเตือนถ้าสมมติฐานดูเกินจริง ·
-      ซื้อเมื่อราคาต่ำกว่ามูลค่ามากพอ (ส่วนเผื่อความปลอดภัย) เผื่อคุณคิดผิด</div>
+      ซื้อเมื่อราคาต่ำกว่ามูลค่ามากพอ (ส่วนเผื่อความปลอดภัย) เผื่อคุณคิดผิด · <a href="/lab/learn" target="_blank">📖 เปิดตำราประเมินมูลค่า 101</a></div>
     <div class="grid2">
       <div class="box">
         <div class="subtabs">
@@ -394,9 +396,9 @@ function renderCalc() {
           <button class="${c.method === "pe" ? "on" : ""}" onclick="CALC.method='pe';renderCalc()">EPS × P/E ในอนาคต</button>
         </div>
         ${c.method === "dcf" ? dcfInputs : peInputs}
-        ${field("r", "อัตราคิดลด / ผลตอบแทนที่ต้องการ (%)", `พันธบัตรสหรัฐ 10 ปีตอนนี้ <b>${pct(t, 2)}</b> + ส่วนชดเชยความเสี่ยงหุ้น 4–6% = <b>${pct(t + 0.04, 1)}–${pct(t + 0.06, 1)}</b> · ธุรกิจผันผวน/หนี้เยอะ ใช้ค่าสูง · Buffett ใช้ประมาณผลตอบแทนพันธบัตรระยะยาว แต่ชดเชยด้วยการเลือกเฉพาะธุรกิจที่คาดเดาได้มาก`, {step: 0.25})}
-        ${c.method === "dcf" ? `<div class="inp"><label>บวกเงินสดสุทธิ</label><select onchange="CALC.net_cash=this.value==='1';renderResult()"><option value="1" ${c.net_cash ? "selected" : ""}>บวก (${big(h.net_cash)})</option><option value="0" ${!c.net_cash ? "selected" : ""}>ไม่บวก</option></select><div class="hint">เงินสด − หนี้ ณ งบล่าสุด · ติดลบ = มีหนี้มากกว่าเงินสด จะลดมูลค่า</div></div>` : ""}
-        ${field("mos", "ส่วนเผื่อความปลอดภัย (%)", "ซื้อเมื่อราคาต่ำกว่ามูลค่าเท่านี้ — Graham ใช้ 33%+ · ธุรกิจที่มั่นใจมาก 20–25% · ไม่มั่นใจ 40–50%", {step: 5})}
+        ${field("r", "อัตราคิดลด / ผลตอบแทนที่ต้องการ (%)", `พันธบัตรสหรัฐ 10 ปีตอนนี้ <b>${pct(t, 2)}</b> + ส่วนชดเชยความเสี่ยงหุ้น 4–6% = <b>${pct(t + 0.04, 1)}–${pct(t + 0.06, 1)}</b> · ธุรกิจผันผวน/หนี้เยอะ ใช้ค่าสูง · Buffett ใช้ประมาณผลตอบแทนพันธบัตรระยะยาว แต่ชดเชยด้วยการเลือกเฉพาะธุรกิจที่คาดเดาได้มาก${L("ch8")}`, {step: 0.25})}
+        ${c.method === "dcf" ? `<div class="inp"><label>บวกเงินสดสุทธิ</label><select onchange="CALC.net_cash=this.value==='1';renderResult()"><option value="1" ${c.net_cash ? "selected" : ""}>บวก (${big(h.net_cash)})</option><option value="0" ${!c.net_cash ? "selected" : ""}>ไม่บวก</option></select><div class="hint">เงินสด − หนี้ ณ งบล่าสุด · ติดลบ = มีหนี้มากกว่าเงินสด จะลดมูลค่า${L("ch9")}</div></div>` : ""}
+        ${field("mos", "ส่วนเผื่อความปลอดภัย (%)", "ซื้อเมื่อราคาต่ำกว่ามูลค่าเท่านี้ — Graham ใช้ 33%+ · ธุรกิจที่มั่นใจมาก 20–25% · ไม่มั่นใจ 40–50%" + L("ch11"), {step: 5})}
       </div>
       <div>
         <div class="box" id="resBox"></div>
