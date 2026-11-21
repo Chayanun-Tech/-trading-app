@@ -1,0 +1,8 @@
+{
+ "_note": "กำหนดประเภทธุรกิจรายหุ้น เมื่อกฎอัตโนมัติจับผิด (valuation_v2) — ใส่เหตุผลทุกครั้ง แก้/เพิ่มได้เอง · archetype ที่ใช้ได้: compounder mature fast cyclical commodity financial reit turnaround unprofitable",
+ "MU": {"archetype": "cyclical", "reason": "หน่วยความจำ (DRAM/NAND/HBM) ราคาขึ้นลงเป็นวัฏจักรแรง — กำไรปีที่ราคาพุ่งไม่ใช่กำไรปกติ"},
+ "WDC": {"archetype": "cyclical", "reason": "อุปกรณ์จัดเก็บข้อมูล ราคาและอุปสงค์เป็นวัฏจักร"},
+ "STX": {"archetype": "cyclical", "reason": "ฮาร์ดดิสก์ อุปสงค์เป็นวัฏจักรตามรอบลงทุนดาต้าเซ็นเตอร์"},
+ "SNDK": {"archetype": "cyclical", "reason": "NAND flash ราคาเป็นวัฏจักรแรง และเพิ่งแยกบริษัท"},
+ "AMZN": {"archetype": "fast", "reason": "ขาดทุนปี 2022 มาจากการลงทุนใน Rivian (ไม่ใช่วัฏจักร) · ยังอยู่ช่วงลงทุนขยายหนัก (AWS/AI) จึงประเมินแบบหุ้นโตที่กระแสเงินสดจะดีขึ้นเมื่อการลงทุนชะลอ"}
+}

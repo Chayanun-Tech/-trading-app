@@ -841,6 +841,37 @@ async def buffett_way_route(holdings: str = Query("", description="หุ้น�
     return buffett_portfolio.build_report(buffett_portfolio.parse_symbols(holdings))
 
 
+@app.get("/api/buffett-way/refresh")
+async def buffett_way_refresh_status_route():
+    """สถานะงานดึงข้อมูลล่าสุด (กำลังรัน/เสร็จ/ขั้นตอน) + เวลาที่ Pine Script อัปเดตล่าสุด."""
+    from app import buffett_portfolio
+    return buffett_portfolio.refresh_status()
+
+
+@app.post("/api/buffett-way/refresh")
+async def buffett_way_refresh_route(mode: str = Query("quick", description="quick = บรรยากาศตลาด (~3 นาที) · full = สแกนใหม่ทั้งหมด (~45 นาที)")):
+    """ปุ่ม "ดึงข้อมูลล่าสุด" — รันสคริปต์อัปเดตเป็นงานเบื้องหลัง (เฉพาะแอปที่รันในเครื่อง)."""
+    from app import buffett_portfolio
+    try:
+        return buffett_portfolio.start_refresh(mode)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc))
+
+
+@app.get("/api/buffett-way/pine")
+async def buffett_way_pine_route():
+    """ดาวน์โหลด Pine Script ล่าสุด (Intrinsic Value + Cycle) สำหรับวางใน TradingView."""
+    from fastapi.responses import PlainTextResponse
+    from app import buffett_portfolio
+    txt = buffett_portfolio.pine_text()
+    if not txt:
+        raise HTTPException(404, "ยังไม่มีไฟล์ Pine Script — กดสแกนใหม่ทั้งหมดก่อน")
+    return PlainTextResponse(txt, headers={"Content-Disposition": 'attachment; filename="IV_plus_Cycle.pine.txt"',
+                                           **NO_CACHE_HEADERS})
+
+
 @app.get("/api/thesis/list")
 async def thesis_list_route():
     """รายการวิทยานิพนธ์การลงทุนที่บันทึกไว้ + สถานะสด (ราคาปัจจุบัน/เข้าเขตซื้อ/น้ำหนักแนะนำ)."""

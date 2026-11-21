@@ -19,9 +19,11 @@ COPY frontend ./frontend
 # Trained model artifact (bot gate). Without this the container shows "missing".
 COPY models ./models
 # ข้อมูลที่หน้า "พอร์ตวิถี Buffett" อ่าน (/api/buffett-way) — คัดเฉพาะไฟล์ที่ใช้ ไม่ก๊อป data/ ทั้งโฟลเดอร์
-COPY data/intrinsic_ranges.json data/megatrend_quality.json ./data/
+COPY data/intrinsic_ranges.json data/megatrend_quality.json data/archetype_overrides.json ./data/
 COPY data/climate/climate_results.json ./data/climate/
 COPY data/backtest/buffett_way_summary.json ./data/backtest/
+# Pine Script ล่าสุด ให้กดดาวน์โหลดจากหน้าพอร์ตวิถี Buffett ได้
+COPY tradingview/intrinsic_value.pine ./tradingview/
 
 # HF Spaces runs as non-root uid 1000; give it ownership
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

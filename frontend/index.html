@@ -1232,8 +1232,14 @@
           <b style="font-size:16px;">🏛️ พอร์ตวิถี Buffett</b>
           <div class="note">ซื้อธุรกิจยอดเยี่ยม (คุณภาพ 6/6) เมื่อราคาต่ำกว่ามูลค่าที่แท้จริง · ถือ 15–20 ตัวยาว ๆ · ไม่ขายเพราะราคาแพง ขายเมื่อธุรกิจเสื่อม · ตลาดแพงเก็บเงินสด ตลาดกลัวทุ่ม</div>
         </div>
-        <button onclick="loadBuffettWay(true)">↻ โหลดใหม่</button>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="bw-local-only" onclick="bwStartRefresh('quick')" title="ดึงราคา ข่าว ดอกเบี้ย มูลค่าตลาดล่าสุด แล้วคำนวณบรรยากาศตลาดใหม่ (~3 นาที)">⚡ อัปเดตบรรยากาศตลาด</button>
+          <button class="bw-local-only" onclick="bwStartRefresh('full')" title="ดึงงบ SEC ล่าสุดของทุกหุ้น ประเมินมูลค่ารายตัว + คุณภาพ + บรรยากาศตลาดใหม่ทั้งหมด และสร้าง Pine Script ใหม่ (~45 นาที)">🔄 ดึงข้อมูลล่าสุดทั้งหมด</button>
+          <button onclick="bwDownloadPine()" title="ดาวน์โหลด Pine Script ล่าสุด (Intrinsic Value + Cycle) ไปวางใน TradingView">📄 Pine Script ล่าสุด</button>
+          <button onclick="loadBuffettWay(true)">↻ โหลดหน้าใหม่</button>
+        </div>
       </div>
+      <div id="bwRefreshBox" class="note hidden" style="border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin-bottom:8px;"></div>
       <div id="bwStatus" class="note">กำลังโหลด...</div>
       <div id="bwBody"></div>
     </div>
@@ -3682,6 +3688,7 @@ const BW_KEY = "buffettWayHoldings";
 function bwGetHoldings() { try { return JSON.parse(localStorage.getItem(BW_KEY) || "[]"); } catch (e) { return []; } }
 function bwSetHoldings(list) { try { localStorage.setItem(BW_KEY, JSON.stringify(list)); } catch (e) { /* โหมดส่วนตัว/บล็อกที่เก็บข้อมูล */ } }
 async function loadBuffettWay(force = false) {
+  if (!force) bwPollRefresh();   // เปิดแท็บแล้วโชว์งานที่ยังรันค้าง (ถ้ามี)
   if (bwData && !force) { renderBuffettWay(bwData); return; }
   $("bwStatus").textContent = "กำลังโหลด...";
   try {
@@ -3692,6 +3699,58 @@ async function loadBuffettWay(force = false) {
   } catch (e) {
     $("bwStatus").innerHTML = `<span class="down">โหลดไม่สำเร็จ: ${escapeHtml(String(e.message || e))}</span>`;
   }
+}
+
+// ── ปุ่มดึงข้อมูลล่าสุด (งานเบื้องหลังบนเซิร์ฟเวอร์ในเครื่อง) ──
+let bwPollTimer = null;
+function bwRenderRefresh(st) {
+  const box = $("bwRefreshBox");
+  if (!st || (!st.running && st.exit_code == null)) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  const steps = (st.steps || []).map(s => `<div>${escapeHtml(s)}</div>`).join("");
+  if (st.running) {
+    box.innerHTML = `<b>⏳ กำลัง${escapeHtml(st.mode_label || "อัปเดต")}</b> · เริ่ม ${escapeHtml(st.started || "")} · ประมาณ ${st.eta_min || "?"} นาที — ปิดแท็บนี้ได้ งานยังรันต่อ${steps}<div class="tiny">${escapeHtml((st.tail || []).slice(-1)[0] || "")}</div>`;
+  } else if (st.ok) {
+    box.innerHTML = `<b style="color:var(--green)">✓ อัปเดตเสร็จแล้ว</b> (${escapeHtml(st.mode_label || "")}) · Pine Script อัปเดต ${escapeHtml(st.pine_updated || "–")}${steps}`;
+  } else {
+    box.innerHTML = `<b class="down">✗ อัปเดตไม่สำเร็จ</b> (exit ${st.exit_code})${steps}<div class="tiny">${escapeHtml((st.tail || []).join(" · "))}</div>`;
+  }
+}
+async function bwPollRefresh() {
+  try {
+    const st = await (await fetch(`${API}/api/buffett-way/refresh`)).json();
+    // บนเว็บ (HF Space) สแกนไม่ได้ — ซ่อนปุ่มสแกน เหลือแค่ดาวน์โหลด Pine
+    document.querySelectorAll(".bw-local-only").forEach(b => b.classList.toggle("hidden", !st.available));
+    bwRenderRefresh(st);
+    clearTimeout(bwPollTimer);
+    if (st.running) bwPollTimer = setTimeout(bwPollRefresh, 5000);
+    else if (st.ok) loadBuffettWay(true);
+  } catch (e) { /* เงียบไว้ ลองใหม่รอบหน้า */ }
+}
+async function bwStartRefresh(mode) {
+  if (mode === "full" && !window.__bwConfirmFull) {
+    window.__bwConfirmFull = true;
+    $("bwRefreshBox").classList.remove("hidden");
+    $("bwRefreshBox").innerHTML = `สแกนใหม่ทั้งหมดใช้เวลาประมาณ 45 นาที (ดึงงบ SEC ทุกหุ้น) — <b>กด "🔄 ดึงข้อมูลล่าสุดทั้งหมด" อีกครั้งเพื่อยืนยัน</b>`;
+    return;
+  }
+  window.__bwConfirmFull = false;
+  try {
+    const res = await fetch(`${API}/api/buffett-way/refresh?mode=${mode}`, { method: "POST" });
+    const st = await res.json();
+    if (!res.ok) throw new Error(st.detail || `HTTP ${res.status}`);
+    bwRenderRefresh(st);
+    bwPollTimer = setTimeout(bwPollRefresh, 3000);
+  } catch (e) {
+    $("bwRefreshBox").classList.remove("hidden");
+    $("bwRefreshBox").innerHTML = `<span class="down">เริ่มอัปเดตไม่ได้: ${escapeHtml(String(e.message || e))}</span>`;
+  }
+}
+function bwDownloadPine() {
+  const a = document.createElement("a");
+  a.href = `${API}/api/buffett-way/pine`;
+  a.download = "IV_plus_Cycle.pine.txt";
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 async function saveBuffettHoldings() {
@@ -3728,10 +3787,13 @@ function renderBuffettWay(d) {
       <td class="bw-num"><b>${mos(r)}</b></td>
       <td class="bw-num">${r.implied_growth == null ? "–" : r.implied_growth.toFixed(1) + "%"} / ${r.hist_growth == null ? "–" : r.hist_growth.toFixed(1) + "%"}</td>
       <td class="bw-num">${r.fcf_margin == null ? "–" : r.fcf_margin + "%"}</td><td class="bw-num">${r.roe == null ? "–" : r.roe + "%"}</td>
-      <td class="bw-num">${r.grade || "–"}</td></tr>`;
-  const ideaHead = `<tr><th>หุ้น</th><th class="bw-num">ราคา</th><th class="bw-num">มูลค่า (Fair)</th><th class="bw-num">ส่วนลด</th><th class="bw-num">ราคาต้องโต / อดีตโต</th><th class="bw-num">FCF margin</th><th class="bw-num">ROE</th><th class="bw-num">เกรด</th></tr>`;
+      <td>${archeCell(r)}</td></tr>`;
+  const archeCell = r => `<span title="${escapeHtml(r.method || "")}">${escapeHtml(r.archetype_label || "–")}</span><div class="note">ความน่าเชื่อ ${escapeHtml(r.confidence_level || "–")}${r.source === "v1" ? " · v1" : ""}</div>`;
+  const ideaHead = `<tr><th>หุ้น</th><th class="bw-num">ราคา</th><th class="bw-num">มูลค่า (Fair)</th><th class="bw-num">ส่วนลด</th><th class="bw-num">ราคาต้องโต / อดีตโต</th><th class="bw-num">FCF margin</th><th class="bw-num">ROE</th><th>ประเภทธุรกิจ</th></tr>`;
   const waitRows = (d.wait || []).slice(0, 25).map(r => `<tr><td>${sym(r.symbol)}<div class="note">${escapeHtml(r.name || "")}</div></td>
-      <td class="bw-num">${n(r.price)}</td><td class="bw-num">${n(r.buy_below)}</td><td class="bw-num">${pc(-r.gap_pct)}</td><td class="bw-num">${r.grade || "–"}</td></tr>`).join("");
+      <td class="bw-num">${n(r.price)}</td><td class="bw-num">${n(r.buy_below)}</td><td class="bw-num">${pc(-r.gap_pct)}</td><td>${archeCell(r)}</td></tr>`).join("");
+  const blockedRows = (d.blocked || []).slice(0, 20).map(r => `<tr><td>${sym(r.symbol)}<div class="note">${escapeHtml(r.name || "")}</div></td>
+      <td class="bw-num">${n(r.price)}</td><td class="bw-num">${n(r.fair)}</td><td class="bw-num">${mos(r)}</td><td>${archeCell(r)}<div class="bw-flag">${escapeHtml(r.no_buy_reason || "")}</div></td></tr>`).join("");
 
   $("bwBody").innerHTML = `
     <div class="bw-grid">
@@ -3753,11 +3815,14 @@ function renderBuffettWay(d) {
     ${holdRows ? `<div class="table-scroll"><table><thead><tr><th>หุ้น</th><th>สถานะตามกฎ</th><th class="bw-num">ราคา</th><th class="bw-num">มูลค่า</th><th class="bw-num">คุณภาพ</th><th class="bw-num">เทียบมูลค่า</th></tr></thead><tbody>${holdRows}</tbody></table></div>` : ""}
 
     <div class="bw-sec">🟢 เข้าเกณฑ์ซื้อตอนนี้ (${d.counts.buy} ตัว · ช่องว่างในพอร์ต ${d.counts.slots})</div>
-    <div class="note">คุณภาพ 6/6 + ราคาต่ำกว่ามูลค่าตามเกณฑ์ตลาดตอนนี้ · เรียงจากส่วนลดมาก→น้อย · คลิกชื่อเพื่อเปิดกราฟ · <b>Buffett จะเลือกเฉพาะธุรกิจที่เข้าใจลึกจากรายชื่อนี้อีกชั้น</b></div>
+    <div class="note">คุณภาพ 6/6 + ราคาต่ำกว่ามูลค่าตามเกณฑ์ตลาดตอนนี้ · มูลค่าประเมินรายตัวตามประเภทธุรกิจ (ชี้ที่ชื่อประเภทเพื่อดูวิธีที่ใช้) · เรียงจากส่วนลดมาก→น้อย · คลิกชื่อเพื่อเปิดกราฟ · <b>Buffett จะเลือกเฉพาะธุรกิจที่เข้าใจลึกจากรายชื่อนี้อีกชั้น</b></div>
     ${d.buy.length ? `<div class="table-scroll"><table><thead>${ideaHead}</thead><tbody>${d.buy.map(ideaRow).join("")}</tbody></table></div>` : `<div class="note">ตอนนี้ไม่มีหุ้นเข้าเกณฑ์ — เก็บเงินสดรอ (วิถี Buffett)</div>`}
 
     <div class="bw-sec">⏳ ธุรกิจดี แต่รอราคา (ใกล้เข้าเกณฑ์ที่สุด)</div>
-    <div class="table-scroll"><table><thead><tr><th>หุ้น</th><th class="bw-num">ราคา</th><th class="bw-num">เข้าเกณฑ์เมื่อราคา ≤</th><th class="bw-num">ต้องลงอีก</th><th class="bw-num">เกรด</th></tr></thead><tbody>${waitRows}</tbody></table></div>
+    <div class="table-scroll"><table><thead><tr><th>หุ้น</th><th class="bw-num">ราคา</th><th class="bw-num">เข้าเกณฑ์เมื่อราคา ≤</th><th class="bw-num">ต้องลงอีก</th><th>ประเภทธุรกิจ</th></tr></thead><tbody>${waitRows}</tbody></table></div>
+    ${blockedRows ? `<div class="bw-sec">🚫 ดูถูก แต่ไม่ให้สัญญาณซื้อ (${d.counts.blocked || 0} ตัว)</div>
+    <div class="note">ผ่านคุณภาพและราคาต่ำกว่ามูลค่า แต่ backtest 2013–2026 พบว่าหุ้นกลุ่มนี้ที่ "ดูถูก" มักให้ผลแย่กว่า (กับดักหุ้นถูก) — ศึกษาเพิ่มได้ แต่อย่าซื้อเพราะตัวเลขนี้</div>
+    <div class="table-scroll"><table><thead><tr><th>หุ้น</th><th class="bw-num">ราคา</th><th class="bw-num">มูลค่า</th><th class="bw-num">เทียบมูลค่า</th><th>ประเภท / เหตุผล</th></tr></thead><tbody>${blockedRows}</tbody></table></div>` : ""}
 
     <div class="note" style="margin-top:10px;">${escapeHtml(d.disclaimer || "")}</div>`;
 }

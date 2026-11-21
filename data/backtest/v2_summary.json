@@ -1,0 +1,191 @@
+{
+ "overall": {
+  "n": 4116,
+  "n_both": 4064,
+  "v1": {
+   "ic": 0.0029317163821400236,
+   "years": 14,
+   "positive_years": 8,
+   "spread": 0.0015457195560522326
+  },
+  "v2": {
+   "ic": 0.009865267137503329,
+   "years": 14,
+   "positive_years": 9,
+   "spread": 0.010195759326036263
+  },
+  "v2_all": {
+   "ic": 0.008161479137184888,
+   "years": 14,
+   "positive_years": 8,
+   "spread": 0.008330563213491491
+  },
+  "v2_with_overrides": {
+   "ic": 0.005651851689114644,
+   "years": 14,
+   "positive_years": 7,
+   "spread": 0.005911296226781575
+  }
+ },
+ "by_archetype": {
+  "financial": {
+   "n": 659,
+   "v2": {
+    "ic": 0.01382134167051746,
+    "years": 14,
+    "positive_years": 8,
+    "spread": 0.008414530778820479
+   },
+   "v1_same_stocks": {
+    "ic": 0.024451637017564847,
+    "years": 14,
+    "positive_years": 6,
+    "spread": 0.024406852453412276
+   }
+  },
+  "reit": {
+   "n": 0
+  },
+  "unprofitable": {
+   "n": 101,
+   "v2": {
+    "ic": null,
+    "years": 0,
+    "positive_years": 0,
+    "spread": -0.17950231101779177
+   },
+   "v1_same_stocks": {
+    "ic": null,
+    "years": 0,
+    "positive_years": 0,
+    "spread": -0.04903615646929385
+   }
+  },
+  "turnaround": {
+   "n": 225,
+   "v2": {
+    "ic": 0.03962371809418157,
+    "years": 9,
+    "positive_years": 5,
+    "spread": 0.015380411128249505
+   },
+   "v1_same_stocks": {
+    "ic": 0.1474031717950338,
+    "years": 7,
+    "positive_years": 4,
+    "spread": 0.07130879493108842
+   }
+  },
+  "commodity": {
+   "n": 86,
+   "v2": {
+    "ic": 0.7428571428571429,
+    "years": 1,
+    "positive_years": 1,
+    "spread": 0.23018324207375235
+   },
+   "v1_same_stocks": {
+    "ic": 0.6785714285714286,
+    "years": 1,
+    "positive_years": 1,
+    "spread": 0.15530431275163048
+   }
+  },
+  "cyclical": {
+   "n": 318,
+   "v2": {
+    "ic": -0.02595809100660661,
+    "years": 10,
+    "positive_years": 5,
+    "spread": 0.023227410272016042
+   },
+   "v1_same_stocks": {
+    "ic": -0.05735546388935235,
+    "years": 10,
+    "positive_years": 4,
+    "spread": -0.007738991368589085
+   }
+  },
+  "fast": {
+   "n": 443,
+   "v2": {
+    "ic": 0.01688760280241702,
+    "years": 14,
+    "positive_years": 7,
+    "spread": 0.01084018771104981
+   },
+   "v1_same_stocks": {
+    "ic": 0.07128535047775639,
+    "years": 14,
+    "positive_years": 7,
+    "spread": 0.018985851476325324
+   }
+  },
+  "compounder": {
+   "n": 1387,
+   "v2": {
+    "ic": 0.01348537833036708,
+    "years": 12,
+    "positive_years": 7,
+    "spread": 0.008841695990862793
+   },
+   "v1_same_stocks": {
+    "ic": 0.00361120552852976,
+    "years": 12,
+    "positive_years": 7,
+    "spread": -0.00040471200865985446
+   }
+  },
+  "mature": {
+   "n": 897,
+   "v2": {
+    "ic": -0.029098912659067007,
+    "years": 14,
+    "positive_years": 6,
+    "spread": -0.011802008513946022
+   },
+   "v1_same_stocks": {
+    "ic": -0.03246022803162869,
+    "years": 14,
+    "positive_years": 7,
+    "spread": -0.01226967522361781
+   }
+  }
+ },
+ "by_confidence": {
+  "สูง": {
+   "n": 2606,
+   "ic": 0.01925913827997887,
+   "years": 14,
+   "positive_years": 10
+  },
+  "กลาง": {
+   "n": 1114,
+   "ic": -0.012525231752436344,
+   "years": 14,
+   "positive_years": 5
+  },
+  "ต่ำ": {
+   "n": 396,
+   "ic": 0.020612528482459973,
+   "years": 12,
+   "positive_years": 7
+  }
+ },
+ "buffett_way_vs_sp500": {
+  "v1": {
+   "2013": 1.135,
+   "2015": 0.832,
+   "2017": 1.009,
+   "2019": 1.22,
+   "2021": 1.064
+  },
+  "v2": {
+   "2013": 1.291,
+   "2015": 0.986,
+   "2017": 0.94,
+   "2019": 1.143,
+   "2021": 1.088
+  }
+ }
+}

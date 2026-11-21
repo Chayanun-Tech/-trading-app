@@ -1,9 +1,9 @@
 """คำนวณกรอบมูลค่าที่แท้จริง (Intrinsic Value) ของหุ้น S&P 500 + Nasdaq-100 แล้วสร้าง Pine Script
 ไปวางใน TradingView — เปิดกราฟหุ้นตัวไหน กล่องกรอบมูลค่าของตัวนั้นจะขึ้นเอง.
 
-ใช้ consensus_value (ฉันทามติหลายโมเดล ลด bias): DCF ของ Owner FCF (หัก SBC) · Earnings Power ×
-P/E ตามการเติบโต · ตัวคูณในอดีต (ตัดทิ้งถ้าสุดโต่ง) · Justified P/B (ธนาคาร/ประกัน) → ค่ากลาง + เกรดจาก
-ความเห็นตรงกันของโมเดล + Reverse DCF (ราคาวันนี้คาดหวังการโตเท่าไหร่). รายละเอียดอยู่ใน backend/app/consensus_value.py
+ประเมินแบบรายตัว (backend/app/valuation_v2.py): จำแนกประเภทธุรกิจ 9 แบบ แล้วใช้วิธี/อัตราคิดลด/การโตเฉพาะบริษัท
+รวมกับ v1 (consensus_value) ตามผล backtest ระยะ 2: ใช้ v2 กับหุ้นโตเร็ว/วัฏจักร/Compounder · ใช้ v1 กับการเงิน/พลิกฟื้น
+· ไม่ให้สัญญาณซื้อกับหุ้นอิ่มตัว (กับดักหุ้นถูก) / ยังไม่ทำกำไร / ความน่าเชื่อต่ำ (valuation_v2.combine_v1_v2)
 หุ้นใน data/focus_list.json ถูกรวมเข้าไปเสมอ (เช่น TSM ที่ไม่อยู่ในดัชนี).
 
 รัน (จากโฟลเดอร์ trading-app):
@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.consensus_value import consensus_fair_value  # noqa: E402
+from app.valuation_v2 import combine_v1_v2, value_stock  # noqa: E402
 from app.revenue_scanner import load_sp500  # noqa: E402
 
 OUT_JSON = ROOT / "data" / "intrinsic_ranges.json"
@@ -86,11 +87,18 @@ async def scan(universe: list[dict], concurrency: int) -> list[dict]:
     async def worker(item: dict):
         nonlocal done
         async with sem:
+            r1 = r2 = None
             try:
-                r = await consensus_fair_value(item["symbol"], refresh=True)
+                r1 = await consensus_fair_value(item["symbol"], refresh=True)   # v1 + ดึงงบ SEC ใหม่
             except Exception as e:  # noqa: BLE001 — ตัวเดียวพังไม่ล้มทั้งการสแกน
-                print(f"  ! {item['symbol']}: {e!r}", flush=True)
-                r = None
+                print(f"  ! v1 {item['symbol']}: {e!r}", flush=True)
+            try:
+                r2 = await value_stock(item["symbol"])                            # v2 (ใช้งบที่เพิ่งดึง)
+            except Exception as e:  # noqa: BLE001
+                print(f"  ! v2 {item['symbol']}: {e!r}", flush=True)
+            r = combine_v1_v2(r1, r2)
+            if r:
+                r["symbol"] = item["symbol"]
         done += 1
         if done % 25 == 0:
             print(f"  {done}/{len(universe)}", flush=True)
@@ -118,7 +126,8 @@ def cycle_section() -> str:
 
 
 def build_pine(rows: list[dict], as_of: str) -> str:
-    # 1 รายการ = "SYM:low:fair:high:grade:จำนวนโมเดล:โตจริง%:โตที่ราคาคาดหวัง%" ("-" = ไม่มีข้อมูล; ไม่ใช้ค่าว่างเพราะ str.split อาจตัดช่องท้ายทิ้ง)
+    # 1 รายการ = "SYM:low:fair:high:ความน่าเชื่อ(A=สูง B=กลาง C=ต่ำ):ประเภทธุรกิจ:โตจริง%:โตที่ราคาคาดหวัง%:ให้สัญญาณซื้อ(1/0)"
+    # ("-" = ไม่มีข้อมูล; ไม่ใช้ค่าว่างเพราะ str.split อาจตัดช่องท้ายทิ้ง)
     # ตัดเป็นก้อนละ 40 ตัว กันสตริงยาวเกินลิมิตของ Pine
     entries = []
     for r in sorted(rows, key=lambda x: x["symbol"]):
@@ -126,14 +135,14 @@ def build_pine(rows: list[dict], as_of: str) -> str:
         hg = "-" if r.get("hist_growth_pct") is None else _num(r["hist_growth_pct"])
         ig = "-" if r.get("implied_growth_pct") is None else _num(r["implied_growth_pct"])
         entries.append(f"{tv_sym}:{_num(r['low'])}:{_num(r['fair_price'])}:{_num(r['high'])}:"
-                       f"{r['grade']}:{r['models_used']}:{hg}:{ig}")
+                       f"{r['grade']}:{r.get('archetype') or 'none'}:{hg}:{ig}:{1 if r.get('buy_allowed') else 0}")
     chunks = ["|".join(entries[i:i + 40]) for i in range(0, len(entries), 40)]
     data_lines = "\n".join(f'    array.push(DB, "{c}")' for c in chunks)
 
     return f"""// Intrinsic Value Box — สร้างอัตโนมัติจาก trading-app (ops/export_tradingview_iv.py)
 // ข้อมูล ณ {as_of} · {len(entries)} หุ้น (S&P 500 + Nasdaq-100)
-// วิธี: ฉันทามติหลายโมเดล (DCF Owner FCF · Earnings Power · ตัวคูณในอดีต · Justified P/B) จากงบ SEC ล่าสุด
-// คิดลด 8.5% (ADR 9.5%) · โตตามรายได้ย้อนหลัง จำกัด 25% — เป็นผลจากโมเดล ไม่ใช่คำแนะนำการลงทุน
+// วิธี: ประเมินรายตัวตามประเภทธุรกิจ (valuation v2) + v1 สำหรับการเงิน/พลิกฟื้น · อัตราคิดลด/การโตเฉพาะบริษัท จากงบ SEC ล่าสุด
+// ความน่าเชื่อ สูง/กลาง/ต่ำ ผ่าน backtest point-in-time 2013–2026 — เป็นผลจากโมเดล ไม่ใช่คำแนะนำการลงทุน
 //@version=6
 indicator("Intrinsic Value + Cycle", shorttitle = "IV + Cycle", overlay = true, max_boxes_count = 5, max_lines_count = 500, max_labels_count = 500, max_polylines_count = 100)
 
@@ -152,7 +161,8 @@ var float ivLow = na
 var float ivFair = na
 var float ivHigh = na
 var string ivGrade = ""
-var string ivModels = ""
+var string ivArche = ""
+var string ivBuy = "1"
 var string ivHistG = ""
 var string ivImplG = ""
 var bool looked = false
@@ -169,9 +179,10 @@ if barstate.islast and not looked
                     ivFair  := str.tonumber(array.get(p, 2))
                     ivHigh  := str.tonumber(array.get(p, 3))
                     ivGrade  := array.get(p, 4)
-                    ivModels := array.get(p, 5)
+                    ivArche  := array.get(p, 5)
                     ivHistG  := array.get(p, 6)
                     ivImplG  := array.get(p, 7)
+                    ivBuy    := array.size(p) > 8 ? array.get(p, 8) : "1"
                     break
             break
 
@@ -188,7 +199,7 @@ if barstate.islast and not na(ivLow)
     // เกรด C (ไม่น่าเชื่อ) วาดเป็นกล่องสีเทา จะได้ไม่เผลอใช้เหมือนกรอบปกติ
     color eCol = ivGrade == "C" ? color.gray : edgeColor
     color bCol = ivGrade == "C" ? color.new(color.gray, 88) : boxColor
-    string gTxt = ivGrade == "A" ? "" : ivGrade == "B" ? "  ⚠ ควรตรวจซ้ำ" : "  ✕ ไม่น่าเชื่อ"
+    string gTxt = ivGrade == "C" ? "  ✕ ความน่าเชื่อต่ำ" : ivBuy == "0" ? "  ⚠ ไม่ใช้เป็นสัญญาณซื้อ" : ivGrade == "B" ? "  · ความน่าเชื่อกลาง" : ""
     ivBox := box.new(left, ivHigh, right, ivLow, border_color = eCol, bgcolor = bCol,
          text = "Intrinsic Value" + gTxt, text_color = color.white, text_size = size.normal)
     if showFair
@@ -196,11 +207,23 @@ if barstate.islast and not na(ivLow)
     if showLabel
         float up = (ivFair - close) / close * 100
         // เกรด C: ป้ายเป็นสีเทาเสมอ — ไม่ให้สีเขียว/แดงชวนเข้าใจผิดว่าเป็นสัญญาณ
-        color c = ivGrade == "C" ? color.gray : close < ivLow ? color.green : close > ivHigh ? color.red : color.orange
+        color c = ivGrade == "C" or ivBuy == "0" ? color.gray : close < ivLow ? color.green : close > ivHigh ? color.red : color.orange
         string zone = close < ivLow ? "ต่ำกว่ากรอบ" : close > ivHigh ? "สูงกว่ากรอบ" : "อยู่ในกรอบ"
-        string gLine = ivGrade == "A" ? "เกรด A · " + ivModels + " โมเดลเห็นตรงกัน" :
-             ivGrade == "B" ? "เกรด B · " + ivModels + " โมเดล เห็นต่างกันพอควร" :
-             "เกรด C · โมเดลขัดกันมาก/มีโมเดลเดียว — อย่าใช้ตัวเลขนี้ตัดสินใจ"
+        string archeTh = switch ivArche
+            "fast" => "โตเร็ว"
+            "compounder" => "Compounder มั่นคง"
+            "mature" => "อิ่มตัว/โตช้า"
+            "cyclical" => "วัฏจักร"
+            "commodity" => "ผูกราคาสินค้าโภคภัณฑ์"
+            "financial" => "การเงิน"
+            "reit" => "REIT"
+            "turnaround" => "กำลังพลิกฟื้น"
+            "unprofitable" => "ยังไม่ทำกำไร"
+            => "ไม่ระบุประเภท"
+        string confTh = ivGrade == "A" ? "สูง" : ivGrade == "B" ? "กลาง" : "ต่ำ"
+        string gLine = "ประเภท: " + archeTh + " · ความน่าเชื่อ " + confTh +
+             (ivBuy == "0" ? "
+ไม่ให้สัญญาณซื้อ (ถูกแล้วมักเป็นกับดัก / ความน่าเชื่อต่ำ)" : "")
         string gText = ivImplG == "-" ? "" :
              "\\nราคาวันนี้ต้องโต " + ivImplG + "%/ปี (5 ปี)" + (ivHistG == "-" ? "" : " · อดีตโต " + ivHistG + "%")
         ivLbl := label.new(right, ivHigh,
